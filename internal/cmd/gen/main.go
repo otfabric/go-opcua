@@ -15,7 +15,9 @@
 // last, type-checks ./ua and the root package, so their generated files
 // must compile together when it runs; the files are therefore overwritten
 // in place rather than deleted first. The NodeId packages (cmd/id) are
-// generated before cmd/uafx, whose output refers to their names.
+// generated before cmd/uafx, whose output refers to their names, and
+// cmd/methods (the Method contracts of package uamethod) reads the NodeSet
+// the manifest pins.
 //
 // Invoke via: go generate ./...  (from module root)
 // Or directly: go run ./internal/cmd/gen
@@ -92,6 +94,7 @@ var generatedFiles = []string{
 	"uafx/fxdataid/id_Object_gen.go",
 	"uafx/fxdataid/id_Variable_gen.go",
 	"uafx/fxdataid/id_names_gen.go",
+	"uamethod/methods_gen.go",
 }
 
 // generators lists the generators to run, in dependency order.
@@ -104,6 +107,7 @@ var generators = [][]string{
 	{"go", "run", "./cmd/id", "-in", "schema/opc.ua.fx.ac.nodeset2.csv", "-out", "uafx/fxacid/id_*_gen.go", "-pkg", "fxacid"},
 	{"go", "run", "./cmd/id", "-in", "schema/opc.ua.fx.cm.nodeset2.csv", "-out", "uafx/fxcmid/id_*_gen.go", "-pkg", "fxcmid"},
 	{"go", "run", "./cmd/uafx"},
+	{"go", "run", "./cmd/methods"},
 	{"go", "run", "./cmd/status"},
 	{"go", "run", "./cmd/attrid"},
 	{"go", "run", "./cmd/capability"},

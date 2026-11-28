@@ -312,10 +312,10 @@ type certGroup struct {
 
 	trust      atomic.Pointer[trustList]
 	lastUpdate atomic.Int64 // UnixNano of the last change of the trust list
-	openCount  atomic.Int32
 
-	// handles are the open handles of the TrustList file; pushManager.mu.
-	handles map[uint32]*trustListHandle
+	// file are the handles of the TrustList file (Part 12 §7.8.2.1); nil
+	// until the server is built.
+	file *FileObject
 
 	// nodes are the properties that change.
 	nodes []*ua.NodeID
@@ -375,9 +375,8 @@ type pushManager struct {
 	// initial is the configuration the server started with.
 	initial identitySnapshot
 
-	mu   sync.Mutex
-	next uint32 // the last trust list file handle
-	tx   *pushTx
+	mu sync.Mutex
+	tx *pushTx
 	// csrKeys are the keys CreateSigningRequest generated, by group and
 	// certificate type, for the certificate UpdateCertificate brings.
 	csrKeys map[certKey]crypto.Signer
@@ -460,7 +459,6 @@ func newPushManager(cfg *PushManagement, sc *serverConfig) *pushManager {
 // addGroup adds a group with its initial trust list.
 func (m *pushManager) addGroup(g *certGroup) {
 	g.kind = groupKind(len(m.groups))
-	g.handles = map[uint32]*trustListHandle{}
 	tl, _ := newTrustList(g.initialTrust, m.cfg.MaxTrustListSize) // checked by the option
 	g.trust.Store(tl)
 	g.lastUpdate.Store(time.Now().UnixNano())
@@ -604,6 +602,23 @@ func (m *pushManager) txLocked(session *ua.NodeID) (*pushTx, ua.StatusCode) {
 		m.startDiagnostics()
 	}
 	return m.tx, ua.StatusOK
+}
+
+// sessionEnded cancels the transaction of a session that ended:
+// "Transactions are automatically cancelled when the Session that created it
+// is closed" (OPC 10000-12 §7.10.2) and "all pending changes are discarded"
+// (§7.10.9). The server tells it every end of a session (sessionRemoved);
+// txLocked still drops a transaction whose session is gone.
+func (m *pushManager) sessionEnded(session *ua.NodeID) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.tx != nil && m.tx.session.Equal(session) {
+		m.tx = nil
+		m.endDiagnostics(ua.StatusBadSessionClosed)
+	}
 }
 
 // otherTxLocked reports whether a session other than session, which is

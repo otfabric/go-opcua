@@ -78,7 +78,7 @@ func (s *AttributeService) Read(ctx context.Context, sc *uasc.SecureChannel, r u
 		}
 
 		dv := ns.Attribute(n.NodeID, n.AttributeID)
-		if n.AttributeID == ua.AttributeIDUserRolePermissions {
+		if s.srv.readsSessionRoles(n.NodeID, n.AttributeID) {
 			dv = forSessionRoles(dv, sess)
 		}
 
@@ -189,6 +189,18 @@ func (s *AttributeService) HistoryRead(ctx context.Context, sc *uasc.SecureChann
 		}
 	}
 
+	// "If the array of Aggregates does not match the array of NodesToRead
+	// then the Server shall return a StatusCode of
+	// Bad_AggregateListMismatch" (Part 11 §6.5.4.2): one aggregateType per
+	// node to read.
+	if d := processedDetails(details); d != nil && len(d.AggregateType) != len(req.NodesToRead) {
+		return &ua.HistoryReadResponse{
+			ResponseHeader:  responseHeader(req.RequestHeader.RequestHandle, ua.StatusBadAggregateListMismatch),
+			Results:         []*ua.HistoryReadResult{},
+			DiagnosticInfos: []*ua.DiagnosticInfo{},
+		}, nil
+	}
+
 	results := make([]*ua.HistoryReadResult, len(req.NodesToRead))
 	for i, n := range req.NodesToRead {
 		providerCP := n.ContinuationPoint
@@ -210,7 +222,7 @@ func (s *AttributeService) HistoryRead(ctx context.Context, sc *uasc.SecureChann
 		} else if st := s.srv.checkDataHistory(ctx, sc, sess, n.NodeID, false); st != ua.StatusOK {
 			result = &ua.HistoryReadResult{StatusCode: st}
 		} else {
-			result, err = s.dispatchHistoryRead(historian, details, n.NodeID, providerCP)
+			result, err = s.dispatchHistoryRead(historian, req, i, details, n.NodeID, providerCP)
 			if err != nil {
 				results[i] = &ua.HistoryReadResult{StatusCode: ua.StatusBadInternalError}
 				continue
@@ -258,7 +270,8 @@ func unsupportedHistoryRead(req *ua.HistoryReadRequest) *ua.HistoryReadResponse 
 	}
 }
 
-func (s *AttributeService) dispatchHistoryRead(h HistoryProvider, details any, nodeID *ua.NodeID, continuationPoint []byte) (*ua.HistoryReadResult, error) {
+// dispatchHistoryRead reads the history of operation i of req, nodeID.
+func (s *AttributeService) dispatchHistoryRead(h HistoryProvider, req *ua.HistoryReadRequest, i int, details any, nodeID *ua.NodeID, continuationPoint []byte) (*ua.HistoryReadResult, error) {
 	switch v := details.(type) {
 	case *ua.ReadRawModifiedDetails:
 		return readRawModified(h, v, nodeID, continuationPoint)
@@ -276,13 +289,28 @@ func (s *AttributeService) dispatchHistoryRead(h HistoryProvider, details any, n
 			return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
 		}
 		return reader.ReadAtTime(nodeID, v.ReqTimes, v.UseSimpleBounds)
-	case *ua.ReadProcessedDetails:
-		return readProcessed(h, v, nodeID)
-	case ua.ReadProcessedDetails:
-		return readProcessed(h, &v, nodeID)
+	case *ua.ReadProcessedDetails, ua.ReadProcessedDetails:
+		d := processedDetails(v)
+		if d == nil {
+			return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationInvalid}, nil
+		}
+		// HistoryRead checked that there is an aggregateType per node.
+		return readProcessed(h, d, nodeID, d.AggregateType[i], req.TimestampsToReturn)
 	default:
 		return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
 	}
+}
+
+// processedDetails returns the ReadProcessedDetails of a HistoryRead, nil
+// for other details.
+func processedDetails(details any) *ua.ReadProcessedDetails {
+	switch v := details.(type) {
+	case *ua.ReadProcessedDetails:
+		return v
+	case ua.ReadProcessedDetails:
+		return &v
+	}
+	return nil
 }
 
 func readRawModified(h HistoryProvider, details *ua.ReadRawModifiedDetails, nodeID *ua.NodeID, continuationPoint []byte) (*ua.HistoryReadResult, error) {
@@ -301,18 +329,6 @@ func readRawModified(h HistoryProvider, details *ua.ReadRawModifiedDetails, node
 		details.ReturnBounds,
 		continuationPoint,
 	)
-}
-
-func readProcessed(h HistoryProvider, details *ua.ReadProcessedDetails, nodeID *ua.NodeID) (*ua.HistoryReadResult, error) {
-	reader, ok := h.(ProcessedHistoryReader)
-	if !ok {
-		return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
-	}
-	var agg *ua.NodeID
-	if len(details.AggregateType) > 0 {
-		agg = details.AggregateType[0]
-	}
-	return reader.ReadProcessed(nodeID, details.StartTime, details.EndTime, details.ProcessingInterval, agg, details.AggregateConfiguration)
 }
 
 // Write implements the OPC UA Write service.

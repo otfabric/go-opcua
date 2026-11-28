@@ -83,26 +83,63 @@ client, which replaces the four FileType implementations (TrustList, push,
 PubSub configuration file, ConnectionManager file). Then SKS, push, GDS,
 alarms and UAFX.
 
+Progress (v1.43.0): the generator `cmd/methods` (run by `make gen`) emits
+the contracts of the Methods of the ObjectTypes `cmd/methods/config.go`
+selects into package `uamethod`: typed Input and Output structs with Pack
+and Unpack (the count, built-in type and ValueRank checks of the Call
+service), the NodeIds of the Method and its ObjectType, the clause, and a
+call function. The pilot is done: `server.FileObject` (`AddFile`,
+`ServeFile`, `NewFile`, `AddFileDirectory`) and package `filetransfer` are
+built on the FileType and FileDirectoryType contracts, and the four FileType
+implementations and the `gds` and `pubsub/remote` clients of their files use
+them. Not generated yet: the events a Method generates, mandatory children
+and state machine transitions. The next families, TrustListType
+(OpenWithMasks, CloseAndUpdate, AddCertificate, RemoveCertificate),
+PubSubConfigurationType (ReserveIds, CloseAndUpdate) and
+PubSubKeyServiceType (GetSecurityKeys, GetSecurityGroup), resolve with the
+generator as it is (`TestNextFamilies`): adding them to the config and
+moving their handlers and clients is the work. The GDS DirectoryType and
+CertificateDirectoryType need DataTypes outside namespace 0
+(ApplicationRecordDataType of the GDS NodeSet) and a contracts package per
+namespace.
+
 ## Phase 3: core symmetry
 
 | Item | Today |
 |---|---|
-| DataTypeDefinition Attribute on every DataType, imported and ns=0 | Read returns Bad_AttributeIdInvalid; the importer parses the definition and drops it |
-| Client decoding of structures it has no Go type for, from DataTypeDefinition, per session and namespace URI | one process-wide registry keyed by NodeId; unknown bodies stay raw |
-| Part 13 aggregates and AggregateFilter in monitored items | the server implements Average, Minimum, Maximum and Count; AggregateFilter is refused |
+| DataTypeDefinition Attribute on every DataType, imported and ns=0 | done in v1.43.0 |
+| Client decoding of structures it has no Go type for, from DataTypeDefinition, per session and namespace URI | done in v1.43.0, opt in (`opcua.DynamicTypeDecoding`) |
+| Part 13 aggregates and AggregateFilter in monitored items | HistoryRead processed: every standard Aggregate but AnnotationCount (`server/aggregate`, v1.43.0), for the Historian and any raw-only provider, checked against every example of Annex A; AggregateFilter of monitored items with the same calculation, at the publishing interval (v1.43.0); no ledger row (no peer of opcua-interop v0.20.0 reads processed history or aggregates monitored items) |
 | Part 5 Methods: GetMonitoredItems, ResendData, SetSubscriptionDurable, RequestServerStateChange | not implemented |
-| ModelChange and SemanticChange events | never emitted |
-| NamespaceMetadata, DefaultRolePermissions | not implemented; a node without RolePermissions is allowed |
+| ModelChange and SemanticChange events | done in v1.43.0 |
+| NamespaceMetadata, DefaultRolePermissions | done in v1.43.0 |
 | RoleSet Methods (AddRole, AddIdentity and the others) | roles only from the Go RoleMapper |
 | AuditWriteUpdate, AuditHistoryUpdate, AuditNodeManagement events | not emitted |
 | History annotations (UpdateStructureData) | not dispatched |
-| Client session keepalive while idle | only silent subscriptions are found |
+| Client session keepalive while idle | done in v1.43.0 |
 | ServerProfileArray | no value; Read returns Bad_AttributeIdInvalid |
 
 Done in v1.43.0: the DataTypeDefinition Attribute of every Structure, Union,
 Enumeration and OptionSet DataType of namespace 0 and of the imported models,
 from the NodeSet Definition with the fields of the supertypes (Part 3 §5.8.3,
-Part 6 §F.12); see docs/server-guide.md.
+Part 6 §F.12); see docs/server-guide.md. GeneralModelChangeEvents for the
+nodes that have a NodeVersion, with the NodeVersion maintained, and
+SemanticChangeEvents with the SemanticsChanged bit (Part 3 §9.32, §9.33).
+NamespaceMetadata Objects for every namespace of a NodeNameSpace, from the
+NodeSet Models, and DefaultRolePermissions and DefaultAccessRestrictions
+applied to the nodes without their own (Part 3 §5.2.9, §5.2.11; Part 5
+§6.3.13; Part 6 §F.2).
+
+Also in v1.43.0: the client decodes the Structures and Unions it has no Go
+type for from that Attribute, opt in (`opcua.DynamicTypeDecoding`), with
+the DataTypes kept by namespace URI; see docs/client-guide.md. Not done: a
+DataTypeDictionary (Part 5 Annex D), JSON-encoded bodies, and ledger rows
+against an independent server.
+
+Also in v1.43.0: the client session keep-alive. A connected client reads
+the ServerStatus State after half the revised session timeout without a
+request (`SessionKeepAlive`, Part 4 §5.7.2.1 and §6.7), and a keep-alive
+without response is a lost connection; see docs/client-guide.md.
 
 ## Phase 4: durable administration
 

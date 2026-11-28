@@ -225,7 +225,10 @@ func TestClientCovHistory(t *testing.T) {
 			return c.HistoryReadEvent(ctx, nodes, &ua.ReadEventDetails{StartTime: start, EndTime: end, Filter: filter})
 		},
 		"processed": func() (*ua.HistoryReadResponse, error) {
-			return c.HistoryReadProcessed(ctx, nodes, &ua.ReadProcessedDetails{StartTime: start, EndTime: end, ProcessingInterval: 1000})
+			return c.HistoryReadProcessed(ctx, nodes, &ua.ReadProcessedDetails{
+				StartTime: start, EndTime: end, ProcessingInterval: 1000,
+				AggregateType: []*ua.NodeID{ua.NewNumericNodeID(0, id.AggregateFunctionCount)},
+			})
 		},
 		"at time": func() (*ua.HistoryReadResponse, error) {
 			return c.HistoryReadAtTime(ctx, nodes, &ua.ReadAtTimeDetails{ReqTimes: []time.Time{base}})

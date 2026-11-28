@@ -13,8 +13,13 @@ behaviour you may notice, and the deviations of peers are in
 - A file-based certificate store for the push model: `server.CertificateStore`
   has no implementation in the library, so without one, pushed trust lists,
   certificates and keys live in memory only.
-- Dynamic decoding of custom structures from the server's DataTypeDefinition:
-  unknown structures stay ExtensionObject bodies.
+- Dynamic decoding of custom structures (`opcua.DynamicTypeDecoding`) reads
+  the DataTypeDefinition Attribute only: a server that describes its types
+  with a DataTypeDictionary (OPC 10000-5 Annex D, the 1.03 mechanism) and not
+  with the Attribute is not supported, and its structures stay
+  ExtensionObject bodies. A JSON-encoded body (the UA JSON transports) of a
+  type without a Go type is still a decoding error; binary bodies inside JSON
+  and XML are decoded.
 - OPC UA FX (UAFX, OPC 10000-81): the information model, and
   connections with PubSub (EstablishConnections and CloseConnections, served
   by `uafx/fxserver` and called by `uafx`), with ControlGroups; a
@@ -71,6 +76,45 @@ behaviour you may notice, and the deviations of peers are in
   persisted across a restart (Part 14 §9.1.2), outside the components UAFX
   persists.
 - mDNS has no probing or conflict resolution.
+- Part 13 Aggregates: the AnnotationCount Aggregate is not implemented (the
+  server keeps no Annotations, Part 11 §5.1.2). The AggregateFilter of a
+  monitored item (Part 4 §7.22.4) reads no history. A startTime in the past
+  is revised to the first boundary after the creation of the item. The
+  server does not wait for late samples before it calculates an interval
+  (Part 13 §4.3.2 allows that). An item keeps at most 65536 raw values
+  between two calculations. Beyond that the oldest are dropped.
+  A processed read returns all its intervals at once (at most
+  `aggregate.MaxIntervals`), without continuation points, and the server
+  searches bounding values one ProcessingInterval beyond the request of a
+  raw-only provider.
+- Part 20 files: the server adds no FileSystem Object of its own (the
+  application adds one with `AddFileDirectory`); a FileDirectory reads the
+  backend when it is added and follows only the changes of its Methods; the
+  generated Method contracts (`uamethod`) cover FileType and
+  FileDirectoryType, the other Method handlers and clients keep their
+  argument code. `filetransfer.Directory.Entries` recognizes the Objects
+  whose TypeDefinition is FileType or FileDirectoryType, not those of a
+  subtype. The FileType Methods are tested against go-opcua only, besides
+  the TrustList reads and writes of the interop suite.
+- The client session keep-alive (`SessionKeepAlive`) runs only for a client
+  that `Connect` connected, not for a session set up with `Dial`,
+  `CreateSession` and `ActivateSession`, and it does not act on the value of
+  the ServerStatus State it reads (a server in Shutdown or Failed is not
+  treated differently); see
+  [docs/client-guide.md](docs/client-guide.md#session-keep-alive).
+- Model change events (`server`): only nodes with a NodeVersion Property are
+  reported (Part 3 §9.32.2); the server has no View other than the default,
+  so the events go to the Server Object only. `ImportNodeSetXML` reports
+  nothing. A Value of a Property with the SemanticChange bit that a
+  `SetValueFunc` or another data source changes is not seen, only a Write or
+  `Node.SetAttribute`.
+- NamespaceMetadata (`server`): a `MapNamespace` has none; NamespaceFile and
+  ConfigurationVersion are not provided; StaticNodeIdTypes,
+  StaticNumericNodeIdRange and StaticStringNodeIdPattern promise no static
+  node. Reading the RolePermissions, UserRolePermissions or
+  AccessRestrictions Attribute of a node without its own does not answer
+  with the defaults of its namespace, which are read from the
+  NamespaceMetadata Object.
 
 ## Verification
 
@@ -112,6 +156,29 @@ behaviour you may notice, and the deviations of peers are in
   Limits) leaves the records of the AutomationComponent out of line with
   the runtime (`PersistenceStatus.Diverged`) until a later write or a
   restart replaces them; the store is not fenced.
+- Part 13 Aggregates (`server/aggregate`) follow the clauses where the
+  examples of Annex A (AggregateExamples.csv) give other results, in 64 of
+  its 1358 rows, each listed with its clause in
+  `server/aggregate/deviations_test.go`: TimeAverage and Total extrapolate
+  after the end of data (Tables 54 and 56); Total is always sloped
+  (§5.4.3.8; the file steps for a Stepped Variable); the PercentTime status
+  of four TimeAverage2/Total2 intervals is Bad at 60 % Bad data with
+  PercentDataBad 50 (§5.4.3.2.1); Maximum, MaximumActualTime and Range are
+  Uncertain when an Uncertain value exceeds the maximum (Tables 59, 61, 62);
+  MinimumActualTime and MaximumActualTime set Calculated when Uncertain
+  (Tables 60, 61); Count and NumberOfTransitions set Calculated when Bad
+  (Tables 69, 72); the first region of DurationBad/PercentBad takes the
+  status of the value at or before the start (§5.4.3.32); WorstQuality2
+  includes the start bound only and ignores TreatUncertainAsBad (§5.4.3.36).
+  Where the clauses leave room the package reads them as the file and
+  UA-.NETStandard do: a leading Bad_NoData raw value marks the start of the
+  history, an Uncertain value never counts as Good for PercentValues, an
+  all-zero aggregateConfiguration is no override, WorstQuality sets
+  MultipleValues only when the worst status is not Good, DurationInState
+  counts no region that starts with a non-Good value or bound, and the
+  end bound of MinimumActualTime2/MaximumActualTime2 is Interpolated.
+  TimestampsToReturn Both is accepted for processed reads, although Part 13
+  §5.4.3.1 names the source timestamp only.
 - ECC follows open62541, not Part 6 1.05.07, for curve25519 key material
   and ChannelThumbprint
   ([docs/interop-gaps.md](docs/interop-gaps.md)).

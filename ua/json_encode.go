@@ -463,6 +463,18 @@ func (e *jsonEncoder) extensionObject(x *ExtensionObject) error {
 		o.encodedBody(keyEnc, keyBody, body)
 		o.end()
 		return nil
+	case *DynamicStructure:
+		// A structure decoded with its DataTypeDefinition goes as a
+		// binary body, "UaEncoding" 1 (OPC 10000-6 §5.4.2.16).
+		b, err := body.Encode()
+		if err != nil {
+			return err
+		}
+		o := e.object()
+		typeID(o, wireID)
+		o.encodedBody(keyEnc, keyBody, b)
+		o.end()
+		return nil
 	}
 
 	rv := reflect.ValueOf(x.Value)

@@ -331,6 +331,9 @@ type Client struct {
 	// the client has left, although it is still the active one until the
 	// new session is set.
 
+	// dyn is the registry of DataTypes read from the server for dynamic
+	// decoding (client_datatypes.go), made once by dynamic().
+
 	// subMux guards subs and pendingAcks.
 
 	// subs is the set of active subscriptions by id.
@@ -349,6 +352,9 @@ type Client struct {
 
 	// lastPublishResponse is when the last Publish response arrived (unix
 	// nanoseconds), see markSilentSubscriptions.
+
+	// lastSessionRequest is when the client last sent a request in its
+	// session (since keepAliveEpoch), see keepAliveStep.
 
 	// pausech pauses the subscription publish loop
 
@@ -595,6 +601,14 @@ If no UserIdentityToken is given explicitly before calling CreateSesion, it auto
 
 See Part 4, 5.6.2.
 
+#### func (Client) DecodeExtensionObjects
+
+```go
+func (c *Client) DecodeExtensionObjects(ctx context.Context, v any) error
+```
+
+DecodeExtensionObjects decodes, with [Client.DynamicTypes](#func-client-dynamictypes), the ExtensionObjects of v that have no Go type and resolves their DataTypes from the server first. v is a \*ua.DataValue, \*ua.Variant, \*ua.ExtensionObject, a slice of these, a \*ua.CallMethodResult, a \*ua.HistoryData, \*ua.HistoryModifiedData, \*ua.HistoryEvent, \*ua.DataChangeNotification or \*ua.EventNotificationList; nested values (a field of a decoded Structure, a Variant in a Variant array) are decoded as well. An ExtensionObject that cannot be decoded keeps its RawBody; the error is that of the first that could not, nil when all were decoded.
+
 #### func (Client) DeleteNodes
 
 ```go
@@ -638,6 +652,20 @@ func (c *Client) DisableCondition(ctx context.Context, conditionID *ua.NodeID) e
 ```
 
 DisableCondition disables a condition (Part 9 §5.5.5).
+
+#### func (Client) DynamicTypes
+
+```go
+func (c *Client) DynamicTypes() *ua.DynamicTypes
+```
+
+DynamicTypes returns the DataTypes the client resolved so far, with the NodeIds of the namespace table of the current session. Use it to make a value of a Structure the client has no Go type for, to write it or pass it to a Method:
+
+	v, err := c.DynamicTypes().New(dataTypeID)
+	v.Set("Name", "pump")
+	c.WriteNodeValue(ctx, nodeID, ua.NewExtensionObject(v))
+
+after [Client.LoadDataTypes](#func-client-loaddatatypes) resolved dataTypeID. The set is replaced when the namespace table changes (a reconnect to a server with another table): get it again then.
 
 #### func (Client) EnableCondition
 
@@ -753,6 +781,8 @@ func (c *Client) HistoryReadEvent(ctx context.Context, nodes []*ua.HistoryReadVa
 func (c *Client) HistoryReadProcessed(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadProcessedDetails) (*ua.HistoryReadResponse, error)
 ```
 
+HistoryReadProcessed reads Aggregates of the history of nodes (Part 11 §6.5.4): details.AggregateType holds one Aggregate per node, in the order of nodes. It asks for source timestamps (Part 13 §5.4.3.1).
+
 #### func (Client) HistoryReadRawModified
 
 ```go
@@ -788,6 +818,14 @@ func (c *Client) HistoryUpdateEvents(ctx context.Context, details ...*ua.UpdateE
 HistoryUpdateEvents updates historical events for one or more nodes.
 
 Part 4, Section 5.10.5 / Part 11, Section 6.8.4.
+
+#### func (Client) LoadDataTypes
+
+```go
+func (c *Client) LoadDataTypes(ctx context.Context, dataTypeIDs ...*ua.NodeID) error
+```
+
+LoadDataTypes reads the DataTypeDefinition of the DataTypes dataTypeIDs, and of the DataTypes of their fields, from the server into [Client.DynamicTypes](#func-client-dynamictypes). A DataType without a StructureDefinition or EnumDefinition is resolved to the built-in type of its supertypes (OPC 10000-3 §5.8.2). It returns the first DataType it could not resolve; the others are added.
 
 #### func (Client) MethodArguments
 
@@ -1553,6 +1591,9 @@ type Config struct {
 	// returnDiagnostics is the ReturnDiagnostics mask of every request
 	// (ReturnDiagnostics option).
 
+	// dynamicTypes is set by DynamicTypeDecoding: the client decodes
+	// structures it has no Go type for with their DataTypeDefinition.
+
 	// reverse is set when the client waits for the server to connect
 	// (reverse connect) instead of connecting to it.
 
@@ -1570,6 +1611,9 @@ type Config struct {
 
 	// discoveredEndpoints is the list given to DiscoveredEndpoints, and
 	// skipDiscoveredEndpoints is set by InsecureSkipDiscoveredEndpointsCheck.
+
+	// keepAlive is the SessionKeepAlive interval (0: half the revised
+	// session timeout), and keepAliveOff is set by SessionKeepAlive(0).
 
 }
 ```
@@ -1668,7 +1712,7 @@ type InvalidResponseTypeError struct {
 }
 ```
 
-InvalidResponseTypeError reports that the server answered a request with a response of another service type than the request expects. Got and Want are the Go types of the received and the expected response. It matches [errors.ErrInvalidResponseType](https://pkg.go.dev/github.com/otfabric/go-opcua/errors#ErrInvalidResponseType) with errors.Is.
+InvalidResponseTypeError reports that the server answered a request with a response of another service type than the request expects. Got and Want are the Go types of the received and the expected response. It matches [errors.ErrInvalidResponseType](https://pkg.go.dev/errors#ErrInvalidResponseType) with errors.Is.
 
 #### func (InvalidResponseTypeError) Error
 
@@ -1684,7 +1728,7 @@ Error returns the message, naming both response types.
 func (e *InvalidResponseTypeError) Is(target error) bool
 ```
 
-Is reports whether target is [errors.ErrInvalidResponseType](https://pkg.go.dev/github.com/otfabric/go-opcua/errors#ErrInvalidResponseType).
+Is reports whether target is [errors.ErrInvalidResponseType](https://pkg.go.dev/errors#ErrInvalidResponseType).
 
 ### type Node
 
@@ -2081,6 +2125,16 @@ The client keeps a copy of the compared fields; endpoints that are nil are left 
 
 Without this option the client compares the list when the endpoint given to [SecurityFromEndpoint](#func-securityfromendpoint) came from [GetEndpoints](#func-getendpoints) (see there). The option takes precedence over that list.
 
+#### func DynamicTypeDecoding
+
+```go
+func DynamicTypeDecoding(enabled bool) Option
+```
+
+DynamicTypeDecoding makes the client decode ExtensionObjects of types without a registered Go type ([ua.RegisterExtensionObject](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#RegisterExtensionObject)) with the DataTypeDefinition the server gives their DataType: the values of Read (and ReadValue, ReadValues, Node.Value), the output arguments of Call and CallMethod, the values and events of HistoryReadRawModified, HistoryReadProcessed, HistoryReadAtTime and HistoryReadEvent and the data changes and events of subscriptions. A decoded body is an ExtensionObject whose Value is a [\*ua.DynamicStructure](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#DynamicStructure); a type the client cannot resolve or decode keeps its RawBody, as without the option, and never fails the call.
+
+The first value of a new type costs a Browse of its encoding and a Read and Browse per DataType it uses; the definitions are kept for the lifetime of the client, by namespace URI. Without the option the client decodes nothing it has no Go type for; [Client.LoadDataTypes](#func-client-loaddatatypes) and [Client.DecodeExtensionObjects](#func-client-decodeextensionobjects) still work.
+
 #### func ECCSignLegacyKeyLength
 
 ```go
@@ -2339,6 +2393,18 @@ func SendBufferSize(n uint32) Option
 ```
 
 SendBufferSize sets the send buffer size for the UACP handshake.
+
+#### func SessionKeepAlive
+
+```go
+func SessionKeepAlive(d time.Duration) Option
+```
+
+SessionKeepAlive sets how long the session of a connected client may go without a request before the client sends one to keep it open: a Read of the State Variable of the ServerStatus (i=2259). "Clients shall be prepared to submit requests in a timely manner to prevent the Session from closing automatically" (Part 4 §5.7.2.1), and without a Subscription "the connection can be monitored by periodically reading the State Variable" (Part 4 §6.7).
+
+By default the keep-alive is sent after half the revised session timeout without a request. A d > 0 sets that time; one at or above the revised session timeout is replaced by half of it. SessionKeepAlive(0) turns the keep-alive off. A negative d is an error.
+
+Every request of the session counts, Publish requests too, so a client that is in use sends no keep-alive. The keep-alive runs while the client is Connected, from Connect to Close. A keep-alive that gets no response within the RequestTimeout, or that the server answers with Bad\_SessionClosed, is handled as a lost connection: the client goes to Disconnected and, with AutoReconnect, recovers as after a broken connection. Any other answer of the server leaves the client as it is: the server received the request. The value read is not used.
 
 #### func SessionName
 

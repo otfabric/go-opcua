@@ -19,6 +19,7 @@
 | | HistoryRead | Via pluggable `HistoryProvider` (`SetHistorian`); default `*Historian` supports raw, modified, at-time, processed aggregates and events (`ReadEventDetails`) |
 | | HistoryUpdate | Via optional historian interfaces (`HistoryDataUpdater`, `EventHistoryUpdater`, deleters); default `*Historian` supports UpdateData, raw/at-time deletes, UpdateEventDetails and DeleteEventDetails |
 | **Method** | Call | Fully implemented |
+| **Files** (Part 20) | `AddFile`, `ServeFile`, `NewFile` (FileType), `AddFileDirectory` (FileDirectoryType) | Implemented; see [Files](#files-part-20) |
 | **Monitored Items** | CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, SetTriggering, DeleteMonitoredItems | Fully implemented (exact `QueueSize` / `DiscardOldest` / Overflow, `DataChangeFilter`, sampling interval, `IndexRange`) |
 | **Subscription** | CreateSubscription, ModifySubscription, SetPublishingMode, Publish, Republish, TransferSubscriptions, DeleteSubscriptions | Fully implemented (revise clamps, `MoreNotifications`, Publish ACK, lifetime expiry) |
 | **Query** | QueryFirst, QueryNext | Opt-in with `WithQuery(true)` (`BadServiceUnsupported` otherwise); results honour the access controller and AccessRestrictions |
@@ -607,8 +608,8 @@ answers them with `Bad_ServiceUnsupported`. Turn them on with
   (`CheckAddNodes`, `CheckDeleteNodes`, `CheckAddReferences`,
   `CheckDeleteReferences`) decides each operation; `RBACAccessController`
   does, from the AddNode, DeleteNode, AddReference and RemoveReference
-  permissions, which a node must grant explicitly (a node without
-  RolePermissions refuses node management);
+  permissions, which a node or the DefaultRolePermissions of its namespace
+  must grant explicitly (a node without either refuses node management);
 - any other controller, `DefaultAccessController` included, is asked
   `CheckWrite` for the node the operation changes (the parent of AddNodes,
   the node of DeleteNodes, the source node of the reference services), and
@@ -668,6 +669,95 @@ err := method.SetMethodArguments(
     []*ua.Argument{{Name: "result", DataType: ua.NewNumericNodeID(0, id.Double), ValueRank: -1}},
 )
 ```
+
+### Typed Method contracts
+
+Package `uamethod` has the contracts of Methods of namespace 0, generated
+from the InputArguments and OutputArguments of the NodeSet (`make gen`,
+`cmd/methods`): for each Method an Input and an Output struct with `Pack`
+and `Unpack`. `Unpack` makes the checks of the Call service (the number
+of arguments, their built-in type and ValueRank) and returns an
+`*uamethod.ArgumentError`, whose status `uamethod.StatusOf` gives:
+
+```go
+func read(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+    var in uamethod.FileTypeReadInput
+    if err := in.Unpack(args); err != nil {
+        return nil, uamethod.StatusOf(err) // Bad_ArgumentsMissing, Bad_TooManyArguments, Bad_TypeMismatch
+    }
+    return (&uamethod.FileTypeReadOutput{Data: data(in.FileHandle, in.Length)}).Pack(), ua.StatusOK
+}
+```
+
+The contracts are those of FileType and FileDirectoryType today; the
+families are chosen in `cmd/methods/config.go`.
+
+---
+
+## Files (Part 20)
+
+`AddFile` adds a FileType Object (OPC 10000-20 §4.2.1) with its Properties
+(Size, Writable, UserWritable, OpenCount, MaxByteStringLength, MimeType when
+set, LastModifiedTime when the backend knows it) and its Methods Open,
+Close, Read, Write, GetPosition and SetPosition, whose arguments are those
+of the declarations:
+
+```go
+f, err := s.AddFile(objectsFolder, ua.NewStringNodeID(ns.ID(), "log"),
+    &ua.QualifiedName{NamespaceIndex: ns.ID(), Name: "Log"},
+    server.FileConfig{
+        Backend:  server.NewOSFile("/var/log/app.log"), // or server.NewMemoryFile(data)
+        Writable: true,
+        MimeType: "text/plain",
+    })
+```
+
+The rules of Open are those of §4.2.2: the mode is a combination of the
+bits of Table 4 (Read, Write, EraseExisting only with Write, Append; the
+reserved bits zero), else `Bad_InvalidArgument`; a file opens several
+times for reading, an Open for writing beside any other handle is
+`Bad_NotWritable` and an Open for reading beside a writer
+`Bad_NotReadable`; Open with the Write bit of a file that is not
+`Writable` is `Bad_NotWritable`. A handle belongs to the session that
+opened it (another session's handle is `Bad_InvalidArgument`, as an
+unknown one) and is closed when the session ends. Read takes a positive
+length (zero or less is `Bad_InvalidArgument`) and returns at most
+`MaxByteStringLength` bytes, an empty ByteString at the end of the file;
+SetPosition past the end is the end; Read on a handle not opened for
+reading, and Write on one not opened for writing, are `Bad_InvalidState`.
+`FileConfig.Modes` narrows the modes, `MaxHandles` bounds the handles
+(`Bad_TooManyOperations`) and `Authorize` decides per caller and mode.
+
+The backends: `MemoryFile` (a writer works on a copy that becomes the
+content when its handle closes, by Close or at the end of its session),
+`OSFile` (an `*os.File` per handle, writes go to the file) and
+`SnapshotFile`, whose writes stay with the handle for a CloseAndUpdate
+Method of a subtype (`FileObject.CloseAndTake`); a backend of your own
+implements `FileBackend`. `ServeFile` serves a FileType Object of an
+imported NodeSet, and `NewFile` returns a `FileObject` whose `Method` and
+`Property` the application attaches to nodes of its own.
+
+`AddFileDirectory` adds a file system (§4.3): a FileDirectoryType Object
+(the root has the BrowseName FileSystem, §4.3.2) that Organizes the
+directories and files of a `DirectoryBackend`, with CreateDirectory,
+CreateFile, Delete and MoveOrCopy (§4.3.3 to §4.3.6) on each directory:
+
+```go
+root, err := server.NewOSDirectory("/srv/files") // os.OpenRoot: no path leaves it
+fs, err := s.AddFileDirectory(objectsFolder, ua.NewStringNodeID(ns.ID(), "fs"),
+    &ua.QualifiedName{Name: "FileSystem"},
+    server.FileDirectoryConfig{Backend: root, File: server.FileConfig{Writable: true}})
+```
+
+A name that exists is `Bad_BrowseNameDuplicated`; a file or directory the
+directory does not Organize `Bad_NotFound`; a file with an open handle, or
+a directory with one below it, cannot be deleted, moved or copied
+(`Bad_InvalidState`). A name that is empty, `.`, `..` or has `/`, `\` or
+NUL, a target that is not a directory of the file system and a directory
+moved into itself are `Bad_InvalidArgument` (library interpretation:
+Part 20 names no code for them). The children have string NodeIds
+`<root>/<path>`, so a moved object gets a new NodeId, which MoveOrCopy
+returns (§4.3.6 allows it).
 
 ---
 
@@ -816,6 +906,66 @@ err := s.EmitBaseEvent(nodeID, &server.BaseEvent{
     Severity:   500,
 })
 ```
+
+### Model change and semantic change events
+
+The server reports changes of the structure of its address space in
+GeneralModelChangeEvents (Part 3 §9.32, Part 5 §6.4.32) and changes of
+the meaning of a Variable in SemanticChangeEvents (Part 3 §9.33, Part 5
+§6.4.33). A client receives them with an event monitored item on the
+Server Object (`i=2253`, EventNotifier SubscribeToEvents), the notifier of
+the default View (§9.32.3); SourceNode is the Server Object, SourceName
+`Server` and Severity 1.
+
+"Only those Nodes of the AddressSpace having a NodeVersion shall trigger a
+ModelChangeEvent", and "every time a ModelChangeEvent is issued for a
+Node, its NodeVersion shall be changed" (Part 3 §9.32.2). A node takes
+part when it has a NodeVersion Property: from its NodeSet, from
+`NodeNameSpace.AddNodeVersion`, or from AddNodes with
+`server.WithNodeVersionOnAddNodes(true)` (off by default). For such a node
+the server reports, and increments the NodeVersion, when
+
+- it is added (`NodeAdded`) or deleted (`NodeDeleted`), by AddNodes,
+  DeleteNodes, `NodeNameSpace.AddNode` or `DeleteNode`;
+- a Reference from or to it is added (`ReferenceAdded`) or deleted
+  (`ReferenceDeleted`), by AddReferences, DeleteReferences, AddNodes,
+  DeleteNodes or `Node.AddRef`, `AddReference`, `AddObject`,
+  `AddVariable` and `RemoveRef`; a bidirectional Reference reports both
+  ends (Part 5 §12.16);
+- the DataType of a Variable or VariableType changes (`DataTypeChanged`),
+  by Write or `Node.SetAttribute`. A change of the ValueRank or
+  ArrayDimensions changes the NodeVersion too (Part 3 §5.6.2); Part 5
+  §12.16 has no verb for it, and the server reports it with a
+  BaseModelChangeEvent without Changes.
+
+```go
+folder := server.NewFolderNode(ua.NewStringNodeID(ns.ID(), "Plant"), "Plant")
+ns.AddNode(folder)
+ns.AddNodeVersion(folder) // NodeVersion "0"
+// AddRef reports ReferenceAdded for folder and NodeVersion becomes "1".
+folder.AddRef(motor, id.Organizes, true)
+```
+
+Our choices, where Part 3 §9.32.4 and §9.32.7 leave one: a service request
+is one event with each node once and its verbs ORed, and so is a call of
+the Go API; an added or deleted node keeps its NodeVersion; a NodeVersion
+is a decimal counter (a value that is not a number becomes `1`); the
+AffectedType is the TypeDefinition of an Object or Variable, otherwise
+null (Part 5 §12.16); `ImportNodeSetXML` reports nothing.
+
+When the Value of a Property with the SemanticChange bit (`0x10`) of its
+AccessLevel changes, by Write or `Node.SetAttribute`, the server emits a
+SemanticChangeEvent whose Affected is the node owning the Property (the
+source of its HasProperty Reference) and sets the SemanticsChanged bit
+(`1<<14` of the StatusCode, Part 4 §7.38.1) on the next data change
+Notification of each monitored item of that node; a Notification dropped
+from a full queue passes the bit to the one that takes its place. The
+NodeVersion does not change (Part 3 §9.33.2). The program or the NodeSet
+sets the bit; the server sets it on no Property itself.
+
+`server.WithModelChangeEvents(false)` turns all of it off: no NodeVersion
+changes, no model or semantic change events and no SemanticsChanged bit,
+as in v1.42 and earlier.
 
 ### Alarms and Conditions
 
@@ -1016,10 +1166,60 @@ h.RecordValue(nodeID, dv)
 ```
 
 Clients then call HistoryRead / HistoryUpdate against the provider. Default `*Historian`
-supports raw, modified, at-time, and processed aggregates (Average/Minimum/Maximum/Count),
-plus UpdateData and raw/at-time deletes. Continuations are session-bound (30s TTL, max 100).
+supports raw, modified, at-time, and processed reads with the Part 13 Aggregates (see
+below), plus UpdateData and raw/at-time deletes. Continuations are session-bound (30s TTL, max 100).
 `returnBounds` is accepted but bounding/interpolation is not implemented. Without
 `SetHistorian`, HistoryRead reports unsupported / non-historized.
+
+### Processed reads (Part 13 Aggregates)
+
+HistoryRead `ReadProcessedDetails` (Part 11 §6.5.4) returns one value per interval
+of every standard Aggregate of Part 13 §5.4.3 but AnnotationCount, calculated by
+the `server/aggregate` package: the intervals of Table 49 (reverse reads, a
+ProcessingInterval of 0 for one interval), Interpolated and Simple Bounding
+Values, the PercentValues and PercentTime StatusCode calculation and the
+Aggregate bits Calculated, Interpolated, Partial and MultipleValues (Part 4
+§7.38.1) with the InfoType DataValue.
+
+```go
+h := server.NewHistorian()
+h.EnableNode(nodeID, 0)
+// The AggregateConfiguration (Part 13 §4.2.1.2) and the Stepped Property
+// (Part 11 §5.2.2) of the Variable; without it aggregate.DefaultConfig().
+h.SetAggregateConfig(nodeID, aggregate.Config{
+    TreatUncertainAsBad: true, PercentDataBad: 100, PercentDataGood: 100, Stepped: true,
+})
+s.SetHistorian(h)
+```
+
+The aggregateConfiguration of a request overrides the configuration unless its
+useServerCapabilitiesDefaults is set or it is all zero (what a client that leaves
+it unset sends). The request needs one aggregateType per node to read (the service
+result is `Bad_AggregateListMismatch` otherwise) and source timestamps:
+TimestampsToReturn Server or Neither is `Bad_TimestampsToReturnInvalid`
+(Part 13 §5.4.3.1); Both is accepted.
+
+A custom `HistoryProvider` gets the Aggregates for free: when it does not implement
+`ProcessedHistoryReader`, the server reads its raw values with `ReadRaw` from one
+ProcessingInterval before the first interval to one after the last (Part 13 §3.1.8:
+the search for bounding values covers at least a ProcessingInterval), follows its
+continuation points, and calculates. Implement `AggregateConfigProvider` to give the
+configuration of each Variable. A provider that implements `ProcessedHistoryReader`
+calculates the Aggregates itself; with `AggregateFunctionLister` it lists them in
+the AggregateFunctions folder of the HistoryServerCapabilities, which otherwise
+lists `aggregate.Functions()` for a provider without `ProcessedHistoryReader` and
+nothing for one with it. The package can also be used directly:
+
+```go
+r := aggregate.Request{Aggregate: ua.NewNumericNodeID(0, id.AggregateFunctionTimeAverage),
+    Start: start, End: end, ProcessingInterval: time.Minute, Config: aggregate.DefaultConfig()}
+from, to := r.Window(0, r.Intervals()) // the raw values the intervals need
+values, status := r.Calculate(raw)
+```
+
+The last raw value read is taken as the end of the history: an interval after it is
+"After End of Data". Where the examples of Annex A conflict with a clause the
+package follows the clause; LIMITATIONS.md lists those cases.
 
 ### Historical events
 
@@ -1096,7 +1296,7 @@ Requests the server cannot honour are rejected per item:
 |---------|------------|
 | Deadband on a variable that is not a Number | `BadFilterNotAllowed` |
 | Any filter on an attribute other than Value, or an `EventFilter` on Value | `BadFilterNotAllowed` |
-| Percent deadband on a node without an `EURange` property; `AggregateFilter` | `BadMonitoredItemFilterUnsupported` |
+| Percent deadband on a node without an `EURange` property | `BadMonitoredItemFilterUnsupported` |
 | Negative deadband, percent above 100 | `BadDeadbandFilterInvalid` |
 | Unknown trigger or deadband type, or something that is not a monitoring filter | `BadMonitoredItemFilterInvalid` |
 | Malformed `IndexRange` | `BadIndexRangeInvalid` |
@@ -1140,6 +1340,42 @@ application reports a change, it does not poll.
   holds the latest value of each interval. One timer serves all items; there is
   no goroutine per monitored item.
 - Event items are not sampled; their revised interval is `0`.
+
+**AggregateFilter.** A monitored item on the Value of a Variable with an
+`AggregateFilter` (Part 4 §7.22.4) reports one processed value per interval of
+any Aggregate of `aggregate.Functions()`, all listed in the AggregateFunctions
+folder of the ServerCapabilities (Part 5 §6.3.2). The item keeps its samples, the
+values a plain item would report under the same sampling interval, as raw values.
+It calculates the intervals that have completed each time the publishing timer of
+the subscription expires: "The MonitoredItem only reports values for intervals
+that have completed when the publish timer expires". The calculation is that of a
+HistoryRead over the same raw values (Part 13 §4.3.2). An interval that holds the
+latest value is Partial. An interval after it is "After End of Data": Bad_NoData
+for the Aggregates over raw values, extrapolated and Uncertain for Interpolative,
+TimeAverage and Total. The SourceTimestamp is that of the Aggregate, and the
+ServerTimestamp is the end of the interval.
+
+| Parameter | Revision |
+|-----------|----------|
+| processingInterval | `0`, negative or not a number: the publishing interval of the subscription (Part 13 §5.4.3.1: "revised to a suitable non-zero value"). Then at least 100 ms and twice the revised sampling interval (Part 4 Table 147), at most one day |
+| startTime | The first boundary startTime + n × processingInterval at or after the creation of the item; the server reads no history for a monitored item. A future startTime is kept; without one the intervals start at the creation |
+| aggregateConfiguration | Overrides the configuration of the Variable, which is that of the history provider (`AggregateConfigProvider`, Part 13 §4.3.1) or `aggregate.DefaultConfig()` |
+
+The `AggregateFilterResult` returns the three revised values. The initial value
+of the item is its first raw value, not a notification. In Disabled mode the
+item keeps no raw values; when it is enabled again, the intervals restart at the
+next boundary. An item keeps at most 65536 raw values between two calculations.
+
+| Request | StatusCode |
+|---------|------------|
+| An attribute other than Value | `BadFilterNotAllowed` |
+| An Aggregate of no `aggregate.Functions()`, AnnotationCount among them | `BadAggregateNotSupported` |
+| An aggregateConfiguration that is not valid (Part 13 §4.2.1.2) | `BadMonitoredItemFilterInvalid` |
+| TimestampsToReturn Server or Neither (Part 13 §5.4.3.1; Both is accepted) | `BadTimestampsToReturnInvalid` |
+
+`ModifyMonitoredItems` validates a new AggregateFilter the same way. The raw values
+carry over to the intervals of the new filter. An item that changes to or from a
+DataChangeFilter starts from its current value.
 
 **IndexRange.** A monitored item with an `IndexRange` (for example `"2:4"` or
 `"1,0:1"` for a matrix) reports only that part of the array, and a change
@@ -1327,7 +1563,7 @@ srv, _ := server.New(
 |-----------|--------|
 | Validation | New channels and sessions validate the client application certificate against the trust list (Part 4 §6.1.3): a chain to a trusted certificate, issuer certificates as intermediates, CRLs of the CAs (`Bad_CertificateRevoked`, `Bad_CertificateIssuerRevoked`). It replaces `WithClientCertificateTrustList` (`New` refuses both) |
 | Trust list input | CloseAndUpdate decodes the TrustListDataType exactly; every certificate and CRL must parse, a CRL must be signed by a CA of the lists; at most 1024 entries and `MaxTrustListSize` bytes (default 1 MiB; `Bad_EncodingLimitsExceeded` beyond) |
-| Transactions | AddCertificate, RemoveCertificate, CloseAndUpdate and UpdateCertificate collect their changes in a transaction of the calling session (Part 12 §7.10.2); they take effect at ApplyChanges, CancelChanges drops them, another session gets `Bad_TransactionPending`. `ApplyImmediately` applies every change when its method returns |
+| Transactions | AddCertificate, RemoveCertificate, CloseAndUpdate and UpdateCertificate collect their changes in a transaction of the calling session (Part 12 §7.10.2); they take effect at ApplyChanges, CancelChanges drops them, another session gets `Bad_TransactionPending`. The end of the session cancels its transaction at once and discards the pending changes (§7.10.2, §7.10.9), with the handles of its TrustList files and what they hold without CloseAndUpdate. `ApplyImmediately` applies every change when its method returns |
 | UpdateCertificate | Replaces the certificate of its group and type: an application instance certificate (RSA, ECDSA on NIST and Brainpool curves, Ed25519, Ed448) or the HTTPS certificate of the DefaultHttpsGroup. The key is the one of the last CreateSigningRequest or CreateSelfSignedCertificate, the current key, or a `PEM` or `PFX` (PKCS #12, password from `PFXPassword`; a wrong one is `Bad_SecurityChecksFailed`) private key. The certificate must carry the server's ApplicationUri and be issued by one of the issuer certificates when they are given |
 | After ApplyChanges | New channels and the endpoints use the new certificate, new TLS handshakes the new HTTPS certificate; channels and connections already open keep theirs and keep working |
 | CreateSigningRequest | PKCS #10 for the current key or, with `regeneratePrivateKey`, a new key of the certificate type: RSA (2048, 3072 or 4096 bits), ECDSA P-256 / P-384, brainpoolP256r1 / brainpoolP384r1, Ed25519 or Ed448 (nonce of at least 32 bytes) |
@@ -1501,6 +1737,59 @@ s, err := server.New(
 ```
 
 The `DefaultAccessController` allows all operations.
+
+### Namespace metadata and default permissions
+
+The Namespaces Object of the Server Object (`i=11715`) holds a
+NamespaceMetadata Object (Part 5 §6.3.13) for each namespace: the one an
+imported NodeSet brings, or one the server creates for a `NodeNameSpace`
+at `Start` (and at once for one added after `Start`), with the NodeId
+`s=NamespaceMetadata` in that namespace (a numeric NodeId in the namespace
+of the session diagnostics, whose string NodeIds name sessions). It has the mandatory Properties
+NamespaceUri, NamespaceVersion and NamespacePublicationDate (from the
+`Model` of the NodeSet, null otherwise), IsNamespaceSubset (FALSE for a
+namespace of the program, TRUE for one an import added without its own
+Object), StaticNodeIdTypes, StaticNumericNodeIdRange and
+StaticStringNodeIdPattern (empty: the server promises no static node),
+and ModelVersion, DefaultRolePermissions, DefaultUserRolePermissions and
+DefaultAccessRestrictions where they have a value. A `MapNamespace` has no
+NamespaceMetadata Object ("Clients should not assume that all namespaces
+provided by a Server are present in this list", Part 5 §6.3.14).
+
+The defaults apply to the nodes of the namespace that have no
+RolePermissions or AccessRestrictions of their own (Part 3 §4.9.3,
+§5.2.9, §5.2.11): the `RBACAccessController` checks such a node against
+the DefaultRolePermissions, and every service checks it against the
+DefaultAccessRestrictions. They come from
+
+- the `RolePermissions` and `AccessRestrictions` of the `Model` of an
+  imported NodeSet, "the default RolePermissions for all Nodes in the
+  model" (Part 6 §F.2); a node with `HasNoPermissions="true"` is exempt
+  (§F.3); `server.WithModelDefaultPermissions(false)` ignores them, as
+  v1.42 and earlier did;
+- `Server.SetNamespaceDefaults`, which replaces those of a Model; a zero
+  `NamespaceDefaults` removes them.
+
+```go
+err := srv.SetNamespaceDefaults("urn:example:plant", server.NamespaceDefaults{
+    RolePermissions: []*ua.RolePermissionType{
+        {RoleID: ua.RoleOperator.NodeID(), Permissions: ua.PermissionTypeBrowse | ua.PermissionTypeRead},
+    },
+    AccessRestrictions:    ua.AccessRestrictionTypeSigningRequired,
+    HasAccessRestrictions: true,
+})
+```
+
+A namespace without defaults behaves as before: a node without
+RolePermissions is allowed. "The DefaultRolePermissions Property ...
+shall only be readable by administrators" (Part 3 §5.2.9): under the
+`RBACAccessController` only ConfigureAdmin and SecurityAdmin read it;
+DefaultUserRolePermissions is reduced to the roles of the session. The
+NamespaceMetadata Objects the server creates are not subject to the
+defaults of their namespace. Reading the RolePermissions,
+UserRolePermissions or AccessRestrictions Attribute of a node without its
+own answers as before; the defaults are read from the NamespaceMetadata
+Object.
 
 ---
 

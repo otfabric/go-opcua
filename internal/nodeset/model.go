@@ -91,8 +91,12 @@ type Model struct {
 	ModelVersion       string
 	PublicationDate    string
 	AccessRestrictions uint16
-	RolePermissions    []RolePermission
-	RequiredModels     []Model
+	// HasAccessRestrictions tells whether the document gives the
+	// AccessRestrictions of the model: the default of the nodes of the
+	// model that have none (§F.2).
+	HasAccessRestrictions bool
+	RolePermissions       []RolePermission
+	RequiredModels        []Model
 }
 
 // Alias is an entry of the Aliases table (OPC 10000-6 §F.2).
@@ -136,15 +140,19 @@ type Node struct {
 	WriteMask          uint32
 	UserWriteMask      uint32
 	AccessRestrictions uint16
-	HasNoPermissions   bool
-	ReleaseStatus      string // default Released
-	DisplayName        []LocalizedText
-	Description        []LocalizedText
-	Category           []string
-	Documentation      string
-	References         []Reference
-	RolePermissions    []RolePermission
-	Extensions         []string // the inner XML of each Extension
+	// HasAccessRestrictions tells whether the node has the
+	// AccessRestrictions attribute; without it those of the model apply
+	// (§F.3).
+	HasAccessRestrictions bool
+	HasNoPermissions      bool
+	ReleaseStatus         string // default Released
+	DisplayName           []LocalizedText
+	Description           []LocalizedText
+	Category              []string
+	Documentation         string
+	References            []Reference
+	RolePermissions       []RolePermission
+	Extensions            []string // the inner XML of each Extension
 
 	// UAInstance: Object, Variable, Method, View (§F.4).
 	ParentNodeID   string
@@ -264,7 +272,7 @@ type xmlModel struct {
 	Version            string     `xml:"Version,attr"`
 	ModelVersion       string     `xml:"ModelVersion,attr"`
 	PublicationDate    string     `xml:"PublicationDate,attr"`
-	AccessRestrictions uint16     `xml:"AccessRestrictions,attr"`
+	AccessRestrictions *uint16    `xml:"AccessRestrictions,attr"`
 	RolePermissions    []xmlPerm  `xml:"RolePermissions>RolePermission"`
 	RequiredModels     []xmlModel `xml:"RequiredModel"`
 }
@@ -307,7 +315,7 @@ type xmlNode struct {
 	SymbolicName       string     `xml:"SymbolicName,attr"`
 	WriteMask          uint32     `xml:"WriteMask,attr"`
 	UserWriteMask      uint32     `xml:"UserWriteMask,attr"`
-	AccessRestrictions uint16     `xml:"AccessRestrictions,attr"`
+	AccessRestrictions *uint16    `xml:"AccessRestrictions,attr"`
 	HasNoPermissions   bool       `xml:"HasNoPermissions,attr"`
 	ReleaseStatus      string     `xml:"ReleaseStatus,attr"`
 	DisplayName        []xmlText  `xml:"DisplayName"`
@@ -490,7 +498,10 @@ func perms(x []xmlPerm) []RolePermission {
 func (x xmlModel) model() Model {
 	m := Model{
 		ModelURI: x.ModelURI, XMLSchemaURI: x.XMLSchemaURI, Version: x.Version, ModelVersion: x.ModelVersion,
-		PublicationDate: x.PublicationDate, AccessRestrictions: x.AccessRestrictions, RolePermissions: perms(x.RolePermissions),
+		PublicationDate: x.PublicationDate, RolePermissions: perms(x.RolePermissions),
+	}
+	if x.AccessRestrictions != nil {
+		m.AccessRestrictions, m.HasAccessRestrictions = *x.AccessRestrictions, true
 	}
 	for _, r := range x.RequiredModels {
 		m.RequiredModels = append(m.RequiredModels, r.model())
@@ -525,20 +536,22 @@ const (
 
 func (x *xmlNode) node(class NodeClass) *Node {
 	n := &Node{
-		Class:              class,
-		NodeID:             x.NodeID,
-		BrowseName:         x.BrowseName,
-		SymbolicName:       x.SymbolicName,
-		WriteMask:          x.WriteMask,
-		UserWriteMask:      x.UserWriteMask,
-		AccessRestrictions: x.AccessRestrictions,
-		HasNoPermissions:   x.HasNoPermissions,
-		ReleaseStatus:      x.ReleaseStatus,
-		DisplayName:        texts(x.DisplayName),
-		Description:        texts(x.Description),
-		Category:           x.Category,
-		Documentation:      x.Documentation,
-		RolePermissions:    perms(x.RolePermissions),
+		Class:            class,
+		NodeID:           x.NodeID,
+		BrowseName:       x.BrowseName,
+		SymbolicName:     x.SymbolicName,
+		WriteMask:        x.WriteMask,
+		UserWriteMask:    x.UserWriteMask,
+		HasNoPermissions: x.HasNoPermissions,
+		ReleaseStatus:    x.ReleaseStatus,
+		DisplayName:      texts(x.DisplayName),
+		Description:      texts(x.Description),
+		Category:         x.Category,
+		Documentation:    x.Documentation,
+		RolePermissions:  perms(x.RolePermissions),
+	}
+	if x.AccessRestrictions != nil {
+		n.AccessRestrictions, n.HasAccessRestrictions = *x.AccessRestrictions, true
 	}
 	if n.ReleaseStatus == "" {
 		n.ReleaseStatus = "Released"

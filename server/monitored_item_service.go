@@ -38,6 +38,9 @@ type MonitoredItemService struct {
 	samplerAt time.Time
 	// samplerRuns is the number of sampler callbacks in flight (for tests).
 	samplerRuns atomic.Int32
+	// aggItems counts the items with an AggregateFilter, so that a
+	// publishing cycle without one does not take Mu to look for them.
+	aggItems atomic.Int64
 }
 
 // DeleteMonitoredItem removes all references to a specific monitored item by ID.
@@ -72,6 +75,9 @@ func (s *MonitoredItemService) removeItemsNeedsLock(items []*MonitoredItem) {
 		}
 		delete(s.Items, item.ID)
 		gone[item] = struct{}{}
+		if item.agg != nil {
+			s.aggItems.Add(-1)
+		}
 		s.diagnostics().untrackItem(item)
 		// A postponed sample dies with the item, and the sampler timer with
 		// the last postponed sample.
@@ -154,7 +160,11 @@ func reviseQueueSize(requested uint32) uint32 {
 // enqueue applies Part 4 MonitoringParameters queue semantics.
 // Caller must hold s.Mu.
 func (item *MonitoredItem) enqueue(n *ua.MonitoredItemNotification) {
+	item.markSemantics(n)
 	if item.queueSize <= 1 {
+		if len(item.queue) > 0 {
+			dropSemantics(item.queue[0], n)
+		}
 		item.queue = item.queue[:0]
 		item.queue = append(item.queue, n)
 		return
@@ -165,12 +175,15 @@ func (item *MonitoredItem) enqueue(n *ua.MonitoredItemNotification) {
 	}
 	// Queue full — apply discard policy and set Overflow InfoBit.
 	if item.discardOldest {
+		dropped := item.queue[0]
 		item.queue = append(item.queue[1:], n)
+		dropSemantics(dropped, item.queue[0])
 		if item.queue[0].Value != nil {
 			item.queue[0].Value.Status = item.queue[0].Value.Status.WithOverflow()
 			item.queue[0].Value.EncodingMask |= ua.DataValueStatusCode
 		}
 	} else {
+		dropSemantics(item.queue[len(item.queue)-1], n)
 		item.queue[len(item.queue)-1] = n
 		if n.Value != nil {
 			n.Value.Status = n.Value.Status.WithOverflow()
@@ -369,10 +382,17 @@ type MonitoredItem struct {
 	sampleDue        time.Time // non-zero while a postponed sample is pending
 	last             sampleState
 	hasLast          bool
+	// agg is the state of an item with an AggregateFilter, nil for any
+	// other item; see monitored_item_aggregate.go.
+	agg *aggregateItem
 	// triggers are the ids of the items this item triggers (SetTriggering,
 	// Part 4 §5.12.1.6): when this item's notifications are reported, the
 	// queued notifications of those in Sampling mode are reported with them.
 	triggers map[uint32]struct{}
+	// semanticsPending: the next data change Notification carries the
+	// SemanticsChanged bit (model_change.go). Guarded by
+	// MonitoredItemService.Mu.
+	semanticsPending bool
 }
 
 // CreateMonitoredItems implements the OPC UA CreateMonitoredItems service.
@@ -384,6 +404,9 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 	if err != nil {
 		return nil, err
 	}
+	// The aggregate configuration comes from the history provider, which
+	// is not called with Mu held.
+	cfgs := s.createAggregateConfigs(req.ItemsToCreate)
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 
@@ -491,6 +514,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 		// revise the sampling interval before anything is registered.
 		// Events are not sampled (Part 4 §5.13.1.2), their interval is 0.
 		filter := defaultDataChangeFilter()
+		var agg *aggregateItem
 		samplingMS := 0.0
 		if !isEventItem {
 			if r := itemreq.ItemToMonitor.IndexRange; r != "" {
@@ -502,16 +526,21 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 					continue
 				}
 			}
+			pubMS := float64(pubInterval) / float64(time.Millisecond)
+			samplingMS = reviseSamplingInterval(itemreq.RequestedParameters.SamplingInterval, pubMS)
 			var st ua.StatusCode
-			if filter, st = s.parseDataChangeFilter(itemreq.ItemToMonitor, itemreq.RequestedParameters.Filter); st != ua.StatusOK {
+			if af := aggregateFilterOf(itemreq.RequestedParameters.Filter); af != nil {
+				agg, st = newAggregateItem(itemreq.ItemToMonitor, af, cfgs[i], ts, samplingMS, pubMS, time.Now())
+			} else {
+				filter, st = s.parseDataChangeFilter(itemreq.ItemToMonitor, itemreq.RequestedParameters.Filter)
+			}
+			if st != ua.StatusOK {
 				res[i] = &ua.MonitoredItemCreateResult{
 					StatusCode:   st,
 					FilterResult: ua.NewExtensionObject(nil),
 				}
 				continue
 			}
-			samplingMS = reviseSamplingInterval(itemreq.RequestedParameters.SamplingInterval,
-				float64(pubInterval)/float64(time.Millisecond))
 		}
 
 		item := MonitoredItem{
@@ -527,6 +556,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 			evQueueSize:        qsize,
 			evDiscardOldest:    discardOldest,
 			filter:             filter,
+			agg:                agg,
 			indexRange:         itemreq.ItemToMonitor.IndexRange,
 			samplingInterval:   time.Duration(samplingMS * float64(time.Millisecond)),
 		}
@@ -559,6 +589,9 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 			}
 			s.SubService.srv.eventItems.register(item.ID, emi)
 			filterResult = ua.NewExtensionObject(efr)
+		} else if agg != nil {
+			filterResult = agg.filterResult()
+			s.aggItems.Add(1)
 		} else {
 			filterResult = ua.NewExtensionObject(nil)
 		}
@@ -589,7 +622,8 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 			RevisedQueueSize:        qsize,
 			FilterResult:            filterResult,
 		}
-		// A data item reports its current value first (Part 4 §5.13.1.1).
+		// A data item reports its current value first (Part 4 §5.13.1.1); an
+		// aggregate item keeps it as its first raw value.
 		if !isEventItem && item.Mode != ua.MonitoringModeDisabled {
 			s.sampleInitial(&item)
 		}
@@ -623,6 +657,7 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 		return nil, err
 	}
 
+	cfgs := s.modifyAggregateConfigs(req.ItemsToModify)
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 
@@ -645,11 +680,34 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 			continue
 		}
 
+		ts := mi.timestampsToReturn
+		if req.TimestampsToReturn != ua.TimestampsToReturnInvalid {
+			if sc := ua.ApplyTimestampsToReturn(&ua.DataValue{}, req.TimestampsToReturn); sc == ua.StatusOK {
+				ts = req.TimestampsToReturn
+			}
+		}
+		if mi.agg != nil && item.RequestedParameters == nil && ts != ua.TimestampsToReturnSource && ts != ua.TimestampsToReturnBoth {
+			// Part 13 §5.4.3.1, see newAggregateItem.
+			results[i] = &ua.MonitoredItemModifyResult{StatusCode: ua.StatusBadTimestampsToReturnInvalid, FilterResult: ua.NewExtensionObject(nil)}
+			continue
+		}
+
 		// A data item gets its new filter validated first: an item whose
 		// filter is rejected keeps all its current parameters.
 		revisedSampling := float64(mi.samplingInterval) / float64(time.Millisecond)
+		filterResult := ua.NewExtensionObject(nil)
 		if item.RequestedParameters != nil && !mi.isEvent {
-			filter, st := s.parseDataChangeFilter(mi.Req.ItemToMonitor, item.RequestedParameters.Filter)
+			pubInterval, _, _ := mi.Sub.timing()
+			pubMS := float64(pubInterval) / float64(time.Millisecond)
+			sampling := reviseSamplingInterval(item.RequestedParameters.SamplingInterval, pubMS)
+			filter := defaultDataChangeFilter()
+			var agg *aggregateItem
+			var st ua.StatusCode
+			if af := aggregateFilterOf(item.RequestedParameters.Filter); af != nil {
+				agg, st = newAggregateItem(mi.Req.ItemToMonitor, af, cfgs[mi.ID], ts, sampling, pubMS, time.Now())
+			} else {
+				filter, st = s.parseDataChangeFilter(mi.Req.ItemToMonitor, item.RequestedParameters.Filter)
+			}
 			if st != ua.StatusOK {
 				results[i] = &ua.MonitoredItemModifyResult{
 					StatusCode:   st,
@@ -660,10 +718,13 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 			// The new filter and sampling interval apply to the samples
 			// taken from now on; the last queued value stays the reference.
 			mi.filter = filter
-			pubInterval, _, _ := mi.Sub.timing()
-			revisedSampling = reviseSamplingInterval(item.RequestedParameters.SamplingInterval,
-				float64(pubInterval)/float64(time.Millisecond))
+			revisedSampling = sampling
 			mi.samplingInterval = time.Duration(revisedSampling * float64(time.Millisecond))
+			mi.timestampsToReturn = ts
+			s.setAggregate(mi, agg, time.Now())
+			if agg != nil {
+				filterResult = agg.filterResult()
+			}
 			s.diagnostics().trackItem(mi)
 			// A sample that was postponed under the old interval becomes
 			// due under the new one.
@@ -704,17 +765,13 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 				}
 			}
 		}
-		if req.TimestampsToReturn != ua.TimestampsToReturnInvalid {
-			if sc := ua.ApplyTimestampsToReturn(&ua.DataValue{}, req.TimestampsToReturn); sc == ua.StatusOK {
-				mi.timestampsToReturn = req.TimestampsToReturn
-			}
-		}
+		mi.timestampsToReturn = ts
 
 		results[i] = &ua.MonitoredItemModifyResult{
 			StatusCode:              ua.StatusOK,
 			RevisedSamplingInterval: revisedSampling,
 			RevisedQueueSize:        mi.queueSize,
-			FilterResult:            ua.NewExtensionObject(nil),
+			FilterResult:            filterResult,
 		}
 	}
 
@@ -771,12 +828,24 @@ func (s *MonitoredItemService) SetMonitoringMode(ctx context.Context, sc *uasc.S
 			item.hasLast = false
 			// A disabled item is not sampled, so nothing stays postponed.
 			s.cancelDeferredSample(item)
-		} else if prev != ua.MonitoringModeReporting && req.MonitoringMode == ua.MonitoringModeReporting {
-			// Wake Publish so already-queued Sampling samples can be delivered.
-			if len(item.queue) > 0 && item.Sub != nil {
-				select {
-				case item.Sub.NotifyChannel <- &ua.MonitoredItemNotification{}:
-				default:
+			if item.agg != nil {
+				item.agg.raw = nil
+			}
+		} else {
+			if prev == ua.MonitoringModeDisabled && item.agg != nil {
+				// The intervals start again after the time the item was
+				// not sampled, from the current value.
+				now := time.Now()
+				item.agg.restart(now)
+				s.sampleItem(item, now, true)
+			}
+			if prev != ua.MonitoringModeReporting && req.MonitoringMode == ua.MonitoringModeReporting {
+				// Wake Publish so already-queued Sampling samples can be delivered.
+				if len(item.queue) > 0 && item.Sub != nil {
+					select {
+					case item.Sub.NotifyChannel <- &ua.MonitoredItemNotification{}:
+					default:
+					}
 				}
 			}
 		}

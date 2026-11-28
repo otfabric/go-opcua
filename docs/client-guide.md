@@ -15,7 +15,8 @@
 | **Browse** | `Browse`, `BrowseNext` | Fully implemented (`ResultMask`, continuation release) |
 | **View** | `RegisterNodes`, `UnregisterNodes` | Fully implemented |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` | Fully implemented |
-| **Method** | `Call`, `CallMethod` | Fully implemented |
+| **Method** | `Call`, `CallMethod`; typed contracts of package `uamethod` | Fully implemented |
+| **Files** (Part 20, over Method + Call) | package `filetransfer`: FileType (`Open`, `Read`, `Write`, `Position`, `SetPosition`, `Close`, `ReadAll`, `WriteAll`, `Info`, `io.Reader` / `io.Writer`) and FileDirectoryType (`Entries`, `CreateDirectory`, `CreateFile`, `Delete`, `MoveOrCopy`) | Implemented; see [Files](#files-part-20) |
 | **Subscription** | `Subscribe`, `SubscriptionBuilder`, `SetPublishingMode`, `Republish`, `TransferSubscriptions` | Fully implemented; reconnect recovery via `WithSubscriptionRecoveryHandler` |
 | **Monitored Items** | `Monitor`, `ModifyMonitoredItems`, `Unmonitor`, `SetMonitoringMode`, `SetTriggering` | Fully implemented (exact queues / Overflow on go-opcua servers) |
 | **Query** | `QueryFirst`, `QueryNext` | Fully implemented (server-dependent) |
@@ -437,6 +438,7 @@ if _, err := c.Read(ctx, req); err != nil {
 | `AutoReconnect(bool)` | Enable automatic reconnection |
 | `ReconnectInterval(d)` | Time between reconnect attempts |
 | `SessionTimeout(d)` | Session timeout duration |
+| `SessionKeepAlive(d)` | Idle time after which the client sends a keep-alive Read (default: half the revised session timeout; `0` turns it off), see [Session keep-alive](#session-keep-alive) |
 | `ApplicationURI(uri)` | Application URI (auto-read from cert if provided) |
 | `ApplicationName(name)` | Application name |
 | `WithConnStateHandler(fn)` | Connection state change callback |
@@ -452,6 +454,7 @@ if _, err := c.Read(ctx, req); err != nil {
 | `TLSConfig(cfg)` | TLS of `opc.wss` / `opc.https` endpoints (trusted roots, client certificate for mutual TLS) |
 | `HTTPClient(c)` | `*http.Client` of `opc.https` endpoints |
 | `ReturnDiagnostics(mask)` | Ask the server for DiagnosticInfos on every request ([DiagnosticInfo](#diagnosticinfo)) |
+| `DynamicTypeDecoding(bool)` | Decode Structures without a Go type with the server's DataTypeDefinition ([structures without a Go type](#structures-without-a-go-type)) |
 
 ---
 
@@ -539,6 +542,56 @@ for _, result := range resp.Results {
     fmt.Println(result.Value.Value())
 }
 ```
+
+### Structures without a Go type
+
+A value of a Structure or Union is an `*ua.ExtensionObject`. Its `Value`
+is the Go type registered with `ua.RegisterExtensionObject` for its
+encoding; without one the client keeps the body in `RawBody` and Read
+reports `StatusBadDataTypeIDUnknown`. With `DynamicTypeDecoding` the client
+decodes such a body with the DataTypeDefinition Attribute the server gives
+the DataType (OPC 10000-3 §5.8.3):
+
+```go
+c, err := opcua.NewClient(endpoint, opcua.DynamicTypeDecoding(true))
+// ...
+dv, err := c.ReadValue(ctx, nodeID)
+if err != nil {
+    log.Fatal(err)
+}
+eo := dv.Value.Value().(*ua.ExtensionObject)
+if v, ok := eo.Value.(*ua.DynamicStructure); ok {
+    name, _ := v.Field("Name") // fields by name, or v.Fields in order
+    fmt.Println(v.Type.Name, name)
+}
+```
+
+The values of Read, Call, HistoryRead and subscriptions are decoded. The
+client resolves a new type once (a Browse of its encoding, a Read and a
+Browse per DataType it uses, in batches of 10) and keeps it by namespace
+URI, so the same types serve a reconnect to a server whose namespace table
+changed. A type registered in Go comes first; a value the client cannot
+decode keeps its `RawBody` and the call does not fail.
+
+To send a value, load its DataType and fill a new structure; it encodes
+itself:
+
+```go
+if err := c.LoadDataTypes(ctx, dataTypeID); err != nil {
+    log.Fatal(err)
+}
+v, err := c.DynamicTypes().New(dataTypeID)
+if err != nil {
+    log.Fatal(err)
+}
+v.Set("Name", "pump")
+v.Set("Speed", 1450.0)
+_, err = c.WriteNodeValue(ctx, nodeID, ua.NewExtensionObject(v))
+```
+
+Without the option nothing is decoded; `c.DecodeExtensionObjects(ctx, dv)`
+decodes a value on request. A DataTypeDictionary (the 1.03 mechanism) and
+JSON-encoded bodies are not supported; see LIMITATIONS.md.
 
 ---
 
@@ -1069,6 +1122,54 @@ req := &ua.CallMethodRequest{
 result, err := c.Call(ctx, req)
 ```
 
+### Typed calls
+
+Package `uamethod` has generated contracts of Methods of namespace 0
+(FileType and FileDirectoryType today): typed inputs and outputs and a
+call function that checks the outputs against the declaration. A nil
+method NodeId calls the declaration of the type, which a server maps to
+the Method of the Object (Part 4 §5.12.2.2 in 1.05.06):
+
+```go
+out, err := uamethod.CallFileTypeRead(ctx, c, fileObject, nil,
+    &uamethod.FileTypeReadInput{FileHandle: h, Length: 4096})
+// err: *uamethod.CallError for a Bad result, *uamethod.ArgumentError for outputs that do not match
+```
+
+---
+
+## Files (Part 20)
+
+Package `filetransfer` reads and writes FileType Objects (OPC 10000-20
+§4.2) and manages FileDirectoryType Objects (§4.3) of any server. The
+Methods are found by their BrowseName under the Object; without them the
+declarations of the type are called.
+
+```go
+f := filetransfer.NewObject(c, fileObject)
+data, err := f.ReadAll(ctx, 16<<20)     // Open(Read), Read to the end, Close; at most 16 MiB
+err = f.WriteAll(ctx, []byte("content")) // Open(Write|EraseExisting), Write, Close
+info, err := f.Info(ctx)                 // Size, Writable, OpenCount, MimeType, ...
+
+h, err := f.Open(ctx, ua.OpenFileModeRead)
+defer h.Close(ctx)
+_, err = io.Copy(os.Stdout, h.Reader(ctx)) // h.Writer(ctx) for a handle opened for writing
+```
+
+`Object.Chunk` is the size of each Read and Write call (64 KiB by
+default); a server returns at most its MaxByteStringLength per Read. A
+Bad result is an `*uamethod.CallError` (`errors.Is(err,
+ua.StatusBadNotWritable)` holds).
+
+```go
+d := filetransfer.NewDirectory(c, fileSystem)
+entries, err := d.Entries(ctx)                 // the directories and files it Organizes
+logs, err := d.CreateDirectory(ctx, "logs")
+obj, file, err := d.Directory(logs).CreateFile(ctx, "today", true) // opened with Read and Write
+newID, err := d.MoveOrCopy(ctx, obj.NodeID(), logs, true, "copy") // copy into logs
+err = d.Delete(ctx, logs)
+```
+
 ---
 
 ## Connection State Monitoring
@@ -1101,7 +1202,7 @@ c, _ := opcua.NewClient("opc.tcp://server:4840",
 | `Closed` | Not connected (initial state or permanently closed) |
 | `Connecting` | First connection attempt in progress |
 | `Connected` | Active session, ready for operations |
-| `Disconnected` | Lost connection (auto-reconnect will trigger) |
+| `Disconnected` | Lost connection, also a [session keep-alive](#session-keep-alive) without response (auto-reconnect will trigger) |
 | `Reconnecting` | Recovery in progress |
 
 With `AutoReconnect(true)` (default), reconnect runs Transfer → Republish → Recreate
@@ -1126,6 +1227,51 @@ tr, err := c.TransferSubscriptions(ctx, []uint32{subscriptionID}, false)
 ---
 
 ## Session Management
+
+### Session keep-alive
+
+A server terminates a session "if the Client fails to issue a Service request
+on the Session" within the revised session timeout, and "Clients shall be
+prepared to submit requests in a timely manner to prevent the Session from
+closing automatically" (Part 4 §5.7.2.1). A client that `Connect` connected
+does so by itself: when its session has had no request for half the revised
+session timeout (`Session().RevisedTimeout()`), it reads the State of the
+ServerStatus (`i=2259`), the Variable Part 4 §6.7 names for monitoring a
+connection without a Subscription. Every request of the session counts,
+Publish requests too, so a client in use or with a subscription sends none.
+
+```go
+c, _ := opcua.NewClient(endpoint,
+    opcua.SessionTimeout(10*time.Minute),
+    // keep-alive after 30 s without a request: a dead connection is
+    // noticed within 30 s plus the request timeout
+    opcua.SessionKeepAlive(30*time.Second),
+)
+```
+
+- A keep-alive that gets no response within the `RequestTimeout`
+  (`Bad_Timeout`) or that the server answers with `Bad_SessionClosed` is
+  handled as a lost connection: the state goes to `Disconnected` and, with
+  `AutoReconnect`, the client recovers as after a broken connection (new
+  secure channel, the session restored or recreated, subscriptions
+  transferred). This is how a connection that is gone without being closed,
+  a peer that vanished or a network that drops everything, is noticed while
+  the client sends nothing else.
+- Any other answer, `Bad_UserAccessDenied` for example, changes nothing: the
+  server received the request, and that is what keeps the session open. The
+  value read is not used.
+- An interval at or above the revised session timeout is replaced by half of
+  it. `SessionKeepAlive(0)` turns the keep-alive off; a negative interval is
+  an error of `NewClient`.
+- The keep-alive runs only while the client is `Connected`, from `Connect`
+  until `Close`; it sends nothing during a reconnect, after `CloseSession` or
+  for a session set up with `Dial`, `CreateSession` and `ActivateSession`.
+  It is sent once, without the `RetryPolicy`, and counted by `ClientMetrics`
+  as a `Read`.
+
+Neither clause says when a client sends such a request or what it does when
+one fails; half the revised timeout and the handling of a failure are this
+client's design.
 
 ### Session Transfer
 

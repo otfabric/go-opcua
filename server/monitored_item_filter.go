@@ -225,6 +225,8 @@ func (s *MonitoredItemService) parseDataChangeFilter(rv *ua.ReadValueID, eo *ua.
 		// An EventFilter only goes with the EventNotifier attribute.
 		return def, ua.StatusBadFilterNotAllowed
 	case *ua.AggregateFilter, ua.AggregateFilter:
+		// The services hand an AggregateFilter to newAggregateItem; this
+		// parser has no DataChangeFilter for it.
 		return def, ua.StatusBadMonitoredItemFilterUnsupported
 	default:
 		return def, ua.StatusBadMonitoredItemFilterInvalid
@@ -378,7 +380,7 @@ func (s *MonitoredItemService) readSample(item *MonitoredItem) *ua.DataValue {
 	if dv == nil {
 		return nil
 	}
-	if rv.AttributeID == ua.AttributeIDUserRolePermissions && item.Sub != nil {
+	if item.Sub != nil && s.SubService.srv.readsSessionRoles(rv.NodeID, rv.AttributeID) {
 		sess, _ := item.Sub.sessionChannel()
 		dv = forSessionRoles(dv, sess)
 	}
@@ -413,6 +415,12 @@ func (s *MonitoredItemService) sampleItem(item *MonitoredItem, now time.Time, fo
 	s.cancelDeferredSample(item)
 	item.lastSampled = now
 	dv := s.readSample(item)
+	if item.agg != nil {
+		// An aggregate item calculates from its samples instead of
+		// reporting them (monitored_item_aggregate.go).
+		item.agg.record(dv, now)
+		return
+	}
 	cur := stateOf(dv)
 	if !force && item.hasLast && !item.filter.changed(item.last, cur) {
 		return

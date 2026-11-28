@@ -3,22 +3,24 @@
 package server
 
 import (
-	"math"
+	"slices"
 	"sort"
 	"time"
 
-	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server/aggregate"
 	"github.com/otfabric/go-opcua/ua"
 )
 
 // Compile-time checks for optional history interfaces on *Historian.
 var (
-	_ HistoryDataUpdater     = (*Historian)(nil)
-	_ RawHistoryDeleter      = (*Historian)(nil)
-	_ AtTimeHistoryDeleter   = (*Historian)(nil)
-	_ AtTimeHistoryReader    = (*Historian)(nil)
-	_ ModifiedHistoryReader  = (*Historian)(nil)
-	_ ProcessedHistoryReader = (*Historian)(nil)
+	_ HistoryDataUpdater      = (*Historian)(nil)
+	_ RawHistoryDeleter       = (*Historian)(nil)
+	_ AtTimeHistoryDeleter    = (*Historian)(nil)
+	_ AtTimeHistoryReader     = (*Historian)(nil)
+	_ ModifiedHistoryReader   = (*Historian)(nil)
+	_ ProcessedHistoryReader  = (*Historian)(nil)
+	_ AggregateFunctionLister = (*Historian)(nil)
+	_ AggregateConfigProvider = (*Historian)(nil)
 )
 
 type historyModification struct {
@@ -287,80 +289,60 @@ func (h *Historian) ReadModified(nodeID *ua.NodeID, startTime, endTime time.Time
 	}, nil
 }
 
-// ReadProcessed implements ProcessedHistoryReader for Average/Minimum/Maximum/Count.
+// ReadProcessed implements ProcessedHistoryReader: it calculates every
+// Aggregate of [aggregate.Functions] over the samples of nodeID (Part 11
+// §6.5.4, Part 13 §5.4), with the configuration of [Historian.AggregateConfig]
+// overridden by aggregateConfiguration. A node without history is
+// Bad_HistoryOperationUnsupported; the other results are those of
+// [aggregate.Request.Check] and [aggregate.Request.Calculate].
 func (h *Historian) ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error) {
-	_ = aggregateConfiguration
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	nh, ok := h.stores[nodeID.String()]
 	if !ok {
+		h.mu.Unlock()
 		return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
 	}
-	if startTime.IsZero() || endTime.IsZero() || !endTime.After(startTime) {
-		return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationInvalid}, nil
-	}
-	if processingInterval <= 0 {
-		return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationInvalid}, nil
-	}
-	aggID := uint32(0)
-	if aggregateType != nil {
-		aggID = aggregateType.IntID()
-	}
-	switch aggID {
-	case id.AggregateFunctionAverage, id.AggregateFunctionMinimum, id.AggregateFunctionMaximum, id.AggregateFunctionCount:
-	default:
-		return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
-	}
+	cfg := h.aggregateConfigLocked(nodeID)
+	samples := slices.Clone(nh.samples)
+	h.mu.Unlock()
 
-	interval := time.Duration(processingInterval * float64(time.Millisecond))
-	if interval <= 0 {
-		return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationInvalid}, nil
+	r, st := processedRequest(startTime, endTime, processingInterval, aggregateType, cfg.Override(aggregateConfiguration))
+	if st != ua.StatusOK {
+		return &ua.HistoryReadResult{StatusCode: st}, nil
 	}
+	return processedResult(r, samples), nil
+}
 
-	var out []*ua.DataValue
-	for t0 := startTime; t0.Before(endTime); t0 = t0.Add(interval) {
-		t1 := t0.Add(interval)
-		if t1.After(endTime) {
-			t1 = endTime
-		}
-		var nums []float64
-		for _, s := range nh.samples {
-			ts := s.SourceTimestamp
-			if ts.Before(t0) || !ts.Before(t1) {
-				continue
-			}
-			if f, ok := asFloat64(s.Value); ok {
-				nums = append(nums, f)
-			}
-		}
-		dv := &ua.DataValue{
-			EncodingMask:    ua.DataValueValue | ua.DataValueSourceTimestamp | ua.DataValueStatusCode,
-			SourceTimestamp: t0,
-			Status:          ua.StatusOK,
-		}
-		if len(nums) == 0 {
-			dv.Status = ua.StatusBadNoData
-			dv.EncodingMask &^= ua.DataValueValue
-		} else {
-			switch aggID {
-			case id.AggregateFunctionCount:
-				dv.Value = ua.MustVariant(uint32(len(nums)))
-			case id.AggregateFunctionAverage:
-				dv.Value = ua.MustVariant(mean(nums))
-			case id.AggregateFunctionMinimum:
-				dv.Value = ua.MustVariant(minFloat(nums))
-			case id.AggregateFunctionMaximum:
-				dv.Value = ua.MustVariant(maxFloat(nums))
-			}
-		}
-		out = append(out, dv)
+// AggregateFunctions implements [AggregateFunctionLister]: the Historian
+// calculates every Aggregate of [aggregate.Functions].
+func (h *Historian) AggregateFunctions() []*ua.NodeID { return aggregate.Functions() }
+
+// SetAggregateConfig sets the configuration the Aggregates of nodeID are
+// calculated with: its AggregateConfiguration (Part 13 §4.2.1.2) and its
+// Stepped Property (Part 11 §5.2.2). Without it a node uses
+// [aggregate.DefaultConfig].
+func (h *Historian) SetAggregateConfig(nodeID *ua.NodeID, cfg aggregate.Config) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.aggConfig == nil {
+		h.aggConfig = make(map[string]aggregate.Config)
 	}
+	h.aggConfig[nodeID.String()] = cfg
+}
 
-	return &ua.HistoryReadResult{
-		StatusCode:  ua.StatusOK,
-		HistoryData: ua.NewExtensionObject(&ua.HistoryData{DataValues: out}),
-	}, nil
+// AggregateConfig implements [AggregateConfigProvider]: the configuration
+// of [Historian.SetAggregateConfig], or [aggregate.DefaultConfig].
+func (h *Historian) AggregateConfig(nodeID *ua.NodeID) aggregate.Config {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.aggregateConfigLocked(nodeID)
+}
+
+func (h *Historian) aggregateConfigLocked(nodeID *ua.NodeID) aggregate.Config {
+	if cfg, ok := h.aggConfig[nodeID.String()]; ok {
+		return cfg
+	}
+	return aggregate.DefaultConfig()
 }
 
 func findSampleIndex(samples []*ua.DataValue, ts time.Time) int {
@@ -405,50 +387,4 @@ func nearestPrevious(samples []*ua.DataValue, ts time.Time) *ua.DataValue {
 		}
 	}
 	return best
-}
-
-func asFloat64(v *ua.Variant) (float64, bool) {
-	if v == nil {
-		return 0, false
-	}
-	switch n := v.Value().(type) {
-	case float64:
-		return n, true
-	case float32:
-		return float64(n), true
-	case int32:
-		return float64(n), true
-	case int64:
-		return float64(n), true
-	case uint32:
-		return float64(n), true
-	case int:
-		return float64(n), true
-	default:
-		return 0, false
-	}
-}
-
-func mean(vals []float64) float64 {
-	var s float64
-	for _, v := range vals {
-		s += v
-	}
-	return s / float64(len(vals))
-}
-
-func minFloat(vals []float64) float64 {
-	m := vals[0]
-	for _, v := range vals[1:] {
-		m = math.Min(m, v)
-	}
-	return m
-}
-
-func maxFloat(vals []float64) float64 {
-	m := vals[0]
-	for _, v := range vals[1:] {
-		m = math.Max(m, v)
-	}
-	return m
 }

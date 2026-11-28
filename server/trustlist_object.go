@@ -56,12 +56,14 @@ type TrustListObject struct {
 	cfg TrustListConfig
 
 	lastUpdate atomic.Int64 // UnixNano
-	openCount  atomic.Int32
 
-	mu      sync.Mutex
-	handles map[uint32]*trustListHandle
-	next    uint32
-	props   []*ua.NodeID // the properties that change
+	// file are the handles of the TrustList file (Part 12 §7.8.2.1).
+	file *FileObject
+	// mu is held by Open, OpenWithMasks, CloseAndUpdate, AddCertificate
+	// and RemoveCertificate: no handle is opened while one of the last
+	// two checks that none is.
+	mu    sync.Mutex
+	props []*ua.NodeID // the properties that change
 }
 
 // ServeTrustList serves the TrustList object obj of the address space: an
@@ -85,17 +87,31 @@ func (s *Server) ServeTrustList(obj *ua.NodeID, cfg TrustListConfig) (*TrustList
 	if cfg.MaxSize == 0 {
 		cfg.MaxSize = defaultMaxTrustListSize
 	}
-	t := &TrustListObject{s: s, obj: obj, cfg: cfg, handles: map[uint32]*trustListHandle{}}
+	t := &TrustListObject{s: s, obj: obj, cfg: cfg}
 	t.lastUpdate.Store(time.Now().UnixNano())
+	t.file, _ = s.NewFile(FileConfig{ // the configuration is valid
+		Backend: &SnapshotFile{
+			Content: func(context.Context) ([]byte, error) {
+				return encodeTrustList(maskTrustList(t.load(), ua.TrustListMasksAll))
+			},
+			MaxSize:      int(cfg.MaxSize),
+			SizeExceeded: ua.StatusBadEncodingLimitsExceeded,
+		},
+		Writable:            cfg.Update != nil,
+		Modes:               trustListModes,
+		MaxByteStringLength: maxTrustListRead,
+		MaxHandles:          maxTrustListHandles,
+		OnChange:            t.notify,
+	})
 
 	methods := map[string]func(context.Context, *MethodCaller, []*ua.Variant) ([]*ua.Variant, ua.StatusCode){
 		"Open":              t.open,
 		"OpenWithMasks":     t.openWithMasks,
-		"Read":              t.read,
-		"Write":             t.write,
-		"Close":             t.closeHandle,
-		"GetPosition":       t.getPosition,
-		"SetPosition":       t.setPosition,
+		"Read":              t.fileMethod("Read"),
+		"Write":             t.fileMethod("Write"),
+		"Close":             t.fileMethod("Close"),
+		"GetPosition":       t.fileMethod("GetPosition"),
+		"SetPosition":       t.fileMethod("SetPosition"),
 		"CloseAndUpdate":    t.closeAndUpdate,
 		"AddCertificate":    t.addCertificate,
 		"RemoveCertificate": t.removeCertificate,
@@ -145,6 +161,7 @@ func (s *Server) ServeTrustList(obj *ua.NodeID, cfg TrustListConfig) (*TrustList
 	}
 	for _, m := range []string{"Open", "Read", "Close", "OpenWithMasks"} {
 		if !found[m] {
+			s.files.remove(t.file)
 			return nil, fmt.Errorf("server: ServeTrustList: %v has no method %s", obj, m)
 		}
 	}
@@ -159,7 +176,7 @@ func (t *TrustListObject) setProperty(name string, nid *ua.NodeID) {
 	case "Size":
 		v, dynamic = func() *ua.DataValue { return DataValueFromValue(uint64(t.size())) }, true
 	case "OpenCount":
-		v, dynamic = func() *ua.DataValue { return DataValueFromValue(uint16(t.openCount.Load())) }, true
+		v, dynamic = func() *ua.DataValue { return DataValueFromValue(uint16(t.file.OpenCount())) }, true
 	case "LastUpdateTime":
 		v, dynamic = func() *ua.DataValue { return DataValueFromValue(time.Unix(0, t.lastUpdate.Load()).UTC()) }, true
 	case "Writable", "UserWritable":
@@ -211,41 +228,6 @@ func (t *TrustListObject) load() *ua.TrustListDataType {
 	return d
 }
 
-// pruneLocked forgets the handles of sessions that are closed.
-func (t *TrustListObject) pruneLocked() {
-	for h, x := range t.handles {
-		if !t.s.sb.hasID(x.session) {
-			delete(t.handles, h)
-			t.openCount.Add(-1)
-		}
-	}
-}
-
-func (t *TrustListObject) addHandleLocked(x *trustListHandle) ([]*ua.Variant, ua.StatusCode) {
-	t.pruneLocked()
-	for _, h := range t.handles {
-		if x.mode&fileModeWrite != 0 {
-			return nil, ua.StatusBadNotWritable
-		}
-		if h.mode&fileModeWrite != 0 {
-			return nil, ua.StatusBadNotReadable
-		}
-	}
-	if len(t.handles) >= maxTrustListHandles {
-		return nil, ua.StatusBadTooManyOperations
-	}
-	for {
-		t.next++
-		if _, used := t.handles[t.next]; t.next != 0 && !used {
-			break
-		}
-	}
-	t.handles[t.next] = x
-	t.openCount.Add(1)
-	go t.notify()
-	return []*ua.Variant{ua.MustVariant(t.next)}, ua.StatusOK
-}
-
 func (t *TrustListObject) readContent(masks ua.TrustListMasks) ([]byte, ua.StatusCode) {
 	b, err := encodeTrustList(maskTrustList(t.load(), masks))
 	if err != nil {
@@ -255,32 +237,13 @@ func (t *TrustListObject) readContent(masks ua.TrustListMasks) ([]byte, ua.Statu
 }
 
 // open is Open: Read, or Write with EraseExisting on a writable list.
-func (t *TrustListObject) open(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	mode, ok := argValue[byte](args, 0)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
-	}
-	x := &trustListHandle{session: c.SessionID, mode: mode}
-	switch mode {
-	case fileModeRead:
-		b, sc := t.readContent(ua.TrustListMasksAll)
-		if sc != ua.StatusOK {
-			return nil, sc
-		}
-		x.buf = b
-	case fileModeWrite | fileModeEraseExisting:
-		if t.cfg.Update == nil {
-			return nil, ua.StatusBadNotWritable
-		}
-	default:
-		return nil, ua.StatusBadInvalidArgument
-	}
+func (t *TrustListObject) open(ctx context.Context, _ *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.addHandleLocked(x)
+	return t.file.Method("Open")(ctx, nil, nil, args)
 }
 
-func (t *TrustListObject) openWithMasks(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (t *TrustListObject) openWithMasks(ctx context.Context, _ *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	masks, ok := argValue[uint32](args, 0)
 	if !ok {
 		return nil, ua.StatusBadTypeMismatch
@@ -291,111 +254,19 @@ func (t *TrustListObject) openWithMasks(_ context.Context, c *MethodCaller, args
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.addHandleLocked(&trustListHandle{session: c.SessionID, mode: fileModeRead, buf: b})
-}
-
-func (t *TrustListObject) handleLocked(c *MethodCaller, args []*ua.Variant) (uint32, *trustListHandle, ua.StatusCode) {
-	h, ok := argValue[uint32](args, 0)
-	if !ok {
-		return 0, nil, ua.StatusBadTypeMismatch
-	}
-	x := t.handles[h]
-	if x == nil || !x.session.Equal(c.SessionID) {
-		return 0, nil, ua.StatusBadInvalidArgument
-	}
-	return h, x, ua.StatusOK
-}
-
-func (t *TrustListObject) closeLocked(h uint32) {
-	delete(t.handles, h)
-	t.openCount.Add(-1)
-	go t.notify()
-}
-
-func (t *TrustListObject) closeHandle(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	h, _, sc := t.handleLocked(c, args)
+	h, sc := t.file.OpenBytes(ctx, b)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	t.closeLocked(h)
-	return nil, ua.StatusOK
+	return []*ua.Variant{ua.MustVariant(h)}, ua.StatusOK
 }
 
-func (t *TrustListObject) read(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	_, x, sc := t.handleLocked(c, args)
-	if sc != ua.StatusOK {
-		return nil, sc
+// fileMethod returns a Method of FileType of the TrustList.
+func (t *TrustListObject) fileMethod(name string) func(context.Context, *MethodCaller, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+	h := t.file.Method(name)
+	return func(ctx context.Context, _ *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+		return h(ctx, nil, nil, args)
 	}
-	n, ok := argValue[int32](args, 1)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
-	}
-	if n < 0 {
-		return nil, ua.StatusBadInvalidArgument
-	}
-	if x.mode&fileModeRead == 0 {
-		return nil, ua.StatusBadInvalidState
-	}
-	end := min(x.pos+min(int(n), maxTrustListRead), len(x.buf))
-	b := append([]byte{}, x.buf[x.pos:end]...)
-	x.pos = end
-	return []*ua.Variant{ua.MustVariant(b)}, ua.StatusOK
-}
-
-func (t *TrustListObject) write(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	_, x, sc := t.handleLocked(c, args)
-	if sc != ua.StatusOK {
-		return nil, sc
-	}
-	var b []byte
-	if len(args) > 1 && args[1] != nil && args[1].Value() != nil {
-		var ok bool
-		if b, ok = args[1].Value().([]byte); !ok {
-			return nil, ua.StatusBadTypeMismatch
-		}
-	}
-	if x.mode&fileModeWrite == 0 {
-		return nil, ua.StatusBadInvalidState
-	}
-	if x.pos+len(b) > int(t.cfg.MaxSize) {
-		return nil, ua.StatusBadEncodingLimitsExceeded
-	}
-	if end := x.pos + len(b); end > len(x.buf) {
-		x.buf = append(x.buf, make([]byte, end-len(x.buf))...)
-	}
-	x.pos += copy(x.buf[x.pos:], b)
-	return nil, ua.StatusOK
-}
-
-func (t *TrustListObject) getPosition(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	_, x, sc := t.handleLocked(c, args)
-	if sc != ua.StatusOK {
-		return nil, sc
-	}
-	return []*ua.Variant{ua.MustVariant(uint64(x.pos))}, ua.StatusOK
-}
-
-func (t *TrustListObject) setPosition(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	_, x, sc := t.handleLocked(c, args)
-	if sc != ua.StatusOK {
-		return nil, sc
-	}
-	pos, ok := argValue[uint64](args, 1)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
-	}
-	x.pos = int(min(pos, uint64(len(x.buf))))
-	return nil, ua.StatusOK
 }
 
 // updateLocked validates and hands a new trust list to Update.
@@ -415,17 +286,17 @@ func (t *TrustListObject) updateLocked(ctx context.Context, c *MethodCaller, d *
 }
 
 func (t *TrustListObject) closeAndUpdate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+	h, ok := argValue[uint32](args, 0)
+	if !ok {
+		return nil, ua.StatusBadTypeMismatch
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	h, x, sc := t.handleLocked(c, args)
+	b, sc := t.file.CloseAndTake(ctx, h, nil)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	if x.mode&fileModeWrite == 0 {
-		return nil, ua.StatusBadInvalidState
-	}
-	t.closeLocked(h)
-	upd, sc := decodeTrustList(x.buf)
+	upd, sc := decodeTrustList(b)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -450,8 +321,7 @@ func (t *TrustListObject) addCertificate(ctx context.Context, c *MethodCaller, a
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.pruneLocked()
-	if len(t.handles) > 0 {
+	if t.file.OpenCount() > 0 {
 		return nil, ua.StatusBadInvalidState
 	}
 	d := cloneTrustListData(t.load())
@@ -474,8 +344,7 @@ func (t *TrustListObject) removeCertificate(ctx context.Context, c *MethodCaller
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.pruneLocked()
-	if len(t.handles) > 0 {
+	if t.file.OpenCount() > 0 {
 		return nil, ua.StatusBadInvalidState
 	}
 	d := cloneTrustListData(t.load())

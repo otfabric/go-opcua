@@ -199,7 +199,7 @@ func TestPushFileHandles(t *testing.T) {
 	out, sc := tlCall(t, s, ctx, mOpen, byte(0x01))
 	require.Equal(t, ua.StatusOK, sc)
 	h := out[0].Value().(uint32)
-	require.EqualValues(t, 1, s.push.groups[groupApplication].openCount.Load())
+	require.EqualValues(t, 1, s.push.groups[groupApplication].file.OpenCount())
 
 	// Another session cannot use the handle.
 	_, sc = tlCall(t, s, other, mRead, h, int32(10))
@@ -274,7 +274,7 @@ func TestPushFileHandles(t *testing.T) {
 	require.Equal(t, ua.StatusOK, sc)
 	_, sc = tlCall(t, s, ctx, mClose, w)
 	require.Equal(t, ua.StatusOK, sc)
-	require.EqualValues(t, 0, s.push.groups[groupApplication].openCount.Load())
+	require.EqualValues(t, 0, s.push.groups[groupApplication].file.OpenCount())
 }
 
 func TestPushFileHandleLimitAndPrune(t *testing.T) {
@@ -292,7 +292,7 @@ func TestPushFileHandleLimitAndPrune(t *testing.T) {
 	ctx2, _ := adminCtx(s)
 	_, sc = tlCall(t, s, ctx2, mOpen, byte(0x06))
 	require.Equal(t, ua.StatusOK, sc)
-	require.EqualValues(t, 1, s.push.groups[groupApplication].openCount.Load())
+	require.EqualValues(t, 1, s.push.groups[groupApplication].file.OpenCount())
 }
 
 func TestPushCloseAndUpdate(t *testing.T) {

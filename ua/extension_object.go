@@ -166,7 +166,7 @@ func (e *ExtensionObject) UpdateMask() {
 }
 
 func ExtensionObjectTypeID(v interface{}) *ExpandedNodeID {
-	switch v.(type) {
+	switch v := v.(type) {
 	case *AnonymousIdentityToken:
 		return NewFourByteExpandedNodeID(0, id.AnonymousIdentityTokenEncodingDefaultBinary)
 	case *UserNameIdentityToken:
@@ -177,6 +177,10 @@ func ExtensionObjectTypeID(v interface{}) *ExpandedNodeID {
 		return NewFourByteExpandedNodeID(0, id.IssuedIdentityTokenEncodingDefaultBinary)
 	case *ServerStatusDataType:
 		return NewFourByteExpandedNodeID(0, id.ServerStatusDataTypeEncodingDefaultBinary)
+	case *DynamicStructure:
+		// The Default Binary encoding of its DataType, on the namespace
+		// table of the set it belongs to.
+		return v.encodingID()
 	default:
 		if id := eotypes.Lookup(v); id != nil {
 			return &ExpandedNodeID{NodeID: id}

@@ -86,6 +86,9 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [ServerMetrics](#servermetrics)
   - [SessionObserver](#sessionobserver)
   - [Push certificate management (server)](#push-certificate-management-server)
+  - [Files (server)](#files-server)
+- [Package `uamethod`](#package-uamethod)
+- [Package `filetransfer`](#package-filetransfer)
 - [Package `pubsub`](#package-pubsub)
   - [Runtime](#runtime)
   - [Sub-packages](#sub-packages)
@@ -157,6 +160,7 @@ For TCP-only reachability checks (e.g. connection diagnostics or "ping" without 
 - A single `*Client` is safe for concurrent use from multiple goroutines for ordinary service calls (reads, writes, browse, method calls) once connected. Race tests cover concurrent reads and subscription create/cancel.
 - Subscription notification delivery and recovery handlers run on library goroutines; handlers must not block (see `WithSubscriptionRecoveryHandler`).
 - Auto-reconnect (default on) may recreate sessions and subscriptions after disconnect; observe `ConnState` / recovery events if your application needs to react.
+- The session keep-alive (default on, `SessionKeepAlive`) runs on a library goroutine from `Connect` to `Close`: an idle session gets a Read of the ServerStatus State after half its revised timeout, and a keep-alive without response makes the client `Disconnected`.
 
 Errors: [ERRORS.md](ERRORS.md). Observability: [OBSERVABILITY.md](OBSERVABILITY.md).
 
@@ -288,7 +292,7 @@ Path: `NodeFromPath` / `NodeFromPathInNamespace` use dot-separated browse names 
 ```go
 func (c *Client) HistoryReadEvent(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadEventDetails) (*ua.HistoryReadResponse, error)
 func (c *Client) HistoryReadRawModified(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadRawModifiedDetails) (*ua.HistoryReadResponse, error)
-func (c *Client) HistoryReadProcessed(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadProcessedDetails) (*ua.HistoryReadResponse, error)
+func (c *Client) HistoryReadProcessed(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadProcessedDetails) (*ua.HistoryReadResponse, error) // TimestampsToReturn Source
 func (c *Client) HistoryReadAtTime(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadAtTimeDetails) (*ua.HistoryReadResponse, error)
 func (c *Client) ReadHistory(ctx context.Context, nodeID *ua.NodeID, start, end time.Time, maxValues uint32) ([]*ua.DataValue, error)
 func (c *Client) ReadHistoryAll(ctx context.Context, nodeID *ua.NodeID, start, end time.Time) iter.Seq2[*ua.DataValue, error]
@@ -880,6 +884,7 @@ All option functions return `Option` and are passed to `NewClient`:
 | `InsecureSkipDiscoveredEndpointsCheck()` | Turn the comparison of the discovered endpoint list off (the behaviour of v1.32.1) |
 | `SessionName(s string)` | Session name |
 | `SessionTimeout(d time.Duration)` | Session timeout |
+| `SessionKeepAlive(d time.Duration)` | Idle time after which a connected client reads the State of the ServerStatus (`i=2259`) to keep its session open (Part 4 §5.7.2.1, §6.7). Default: half the revised session timeout; an interval at or above it is replaced by half of it; `0` turns it off; negative is an error. A keep-alive without response within the `RequestTimeout`, or answered with `Bad_SessionClosed`, is handled as a lost connection (`Disconnected`, then recovery with `AutoReconnect`); see [docs/client-guide.md](docs/client-guide.md#session-keep-alive) |
 | `SkipNamespaceUpdate()` | Skip automatic namespace table update on connect |
 | `Certificate(cert []byte)` | Client application certificate (DER) |
 | `CertificateFile(filename string)` | Load client application certificate from file |
@@ -929,7 +934,7 @@ func NewMonitoredItemCreateRequestWithDefaults(nodeID *ua.NodeID, attributeID ua
 func NewDataChangeFilter(trigger ua.DataChangeTrigger, deadbandType ua.DeadbandType, deadbandValue float64) *ua.ExtensionObject
 ```
 
-**Server data-change semantics (v1.6.0+):** the go-opcua server applies the `DataChangeFilter` of a monitored item: triggers `Status`, `StatusValue` (the default without a filter) and `StatusValueTimestamp`; `DeadbandTypeAbsolute` on numeric scalars and arrays; `DeadbandTypePercent` on variables with an `EURange` property. Unusable filters are rejected per item (`BadFilterNotAllowed`, `BadMonitoredItemFilterUnsupported`, `BadDeadbandFilterInvalid`, `BadMonitoredItemFilterInvalid`). `SamplingInterval` is revised (0 stays 0 = every change, negative = publishing interval, otherwise 1 ms – 1 h) and an item is sampled at most once per interval. `ItemToMonitor.IndexRange` restricts both what is reported and what triggers. See [docs/server-guide.md](docs/server-guide.md).
+**Server data-change semantics (v1.6.0+):** the go-opcua server applies the `DataChangeFilter` of a monitored item: triggers `Status`, `StatusValue` (the default without a filter) and `StatusValueTimestamp`; `DeadbandTypeAbsolute` on numeric scalars and arrays; `DeadbandTypePercent` on variables with an `EURange` property. Unusable filters are rejected per item (`BadFilterNotAllowed`, `BadMonitoredItemFilterUnsupported`, `BadDeadbandFilterInvalid`, `BadMonitoredItemFilterInvalid`). `SamplingInterval` is revised (0 stays 0 = every change, negative = publishing interval, otherwise 1 ms – 1 h) and an item is sampled at most once per interval. `ItemToMonitor.IndexRange` restricts both what is reported and what triggers. An `AggregateFilter` (v1.43.0) reports one processed value per completed interval of any Aggregate of `aggregate.Functions()`, calculated as a processed HistoryRead over the item's samples, with an `AggregateFilterResult`. See [docs/server-guide.md](docs/server-guide.md).
 
 ---
 
@@ -987,8 +992,9 @@ func RegisterExtensionObject(typeID *NodeID, v interface{})
 ```
 
 Call once per type (typically from `init()`), passing a zero value of the Go
-type. Unknown `ExtensionObject` bodies are preserved as opaque bytes (dynamic
-structure decoding is not implemented). See also
+type. Unknown `ExtensionObject` bodies are preserved as opaque bytes; a
+client decodes them with the DataTypeDefinition of the server with
+[`DynamicTypeDecoding`](#dynamic-structure-decoding). See also
 [Registered Custom DataTypes](#registered-custom-datatypes).
 
 ### TypeID
@@ -1697,7 +1703,27 @@ SessionId: `ua.StatusBadSessionIDInvalid`.
 func (s *Server) AddNamespace(ns NameSpace) int
 func (s *Server) Namespace(id int) (NameSpace, error)
 func (s *Server) Namespaces() []NameSpace
+func (s *Server) SetNamespaceDefaults(namespaceURI string, d NamespaceDefaults) error
+func (s *Server) NamespaceDefaults(namespaceURI string) (NamespaceDefaults, bool)
+func (as *NodeNameSpace) AddNodeVersion(n *Node) *Node
+
+type NamespaceDefaults struct {
+    RolePermissions       []*ua.RolePermissionType // DefaultRolePermissions; nil: none
+    AccessRestrictions    ua.AccessRestrictionType // DefaultAccessRestrictions,
+    HasAccessRestrictions bool                     // when this is set
+}
 ```
+
+`SetNamespaceDefaults` sets the DefaultRolePermissions,
+DefaultUserRolePermissions and DefaultAccessRestrictions of the
+NamespaceMetadata Object of a namespace (Part 5 §6.3.13), which apply to its
+nodes without RolePermissions or AccessRestrictions of their own (Part 3
+§4.9.3, §5.2.9, §5.2.11): the RolePermissions under the
+`RBACAccessController`, the AccessRestrictions under every controller. A zero
+value removes them; an unknown URI is an error. `AddNodeVersion` gives a node a
+NodeVersion Property, "0", so that the server reports its changes in
+GeneralModelChangeEvents (Part 3 §9.32.2). See the
+[server guide](docs/server-guide.md#namespace-metadata-and-default-permissions).
 
 #### Method registration
 
@@ -1806,6 +1832,9 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `WithSessionObserver(o SessionObserver)` | Told about client connections and sessions as they begin and end; see [SessionObserver](#sessionobserver) |
 | `WithAccessController(ac AccessController)` | Access controller |
 | `EnableNodeManagement()` | Serve AddNodes, AddReferences, DeleteNodes and DeleteReferences (off by default: `Bad_ServiceUnsupported`); every operation is authorized, see [AccessController](#accesscontroller) |
+| `WithModelChangeEvents(enabled bool)` | Maintain the NodeVersion of the nodes that have one and report their changes in GeneralModelChangeEvents, report SemanticChangeEvents and the SemanticsChanged bit (Part 3 §9.32, §9.33; default true); `false` restores v1.42 and earlier. See the [server guide](docs/server-guide.md#model-change-and-semantic-change-events) |
+| `WithNodeVersionOnAddNodes(enabled bool)` | Give every node AddNodes adds a NodeVersion Property, so that its changes are reported (default false) |
+| `WithModelDefaultPermissions(enabled bool)` | Apply the RolePermissions and AccessRestrictions of the Model of an imported NodeSet to its nodes without their own (Part 6 §F.2, §F.3; default true); `false` restores v1.42 and earlier |
 | `WithServerDiagnostics(enabled bool)` | Collect server diagnostics (`Server.ServerDiagnostics`, default true); see the [server guide](docs/server-guide.md#server-diagnostics) |
 | `WithRoleMapper(rm RoleMapper)` | Maps a session's identity token to its role NodeIDs (`RoleMapper func(token ua.IdentityToken) []*ua.NodeID`); used by the default access controller |
 | `ApplicationURI(uri string)` | ApplicationUri of the server; only needed without a certificate (`Certificate` sets it from the URI SAN) |
@@ -2063,8 +2092,8 @@ type NodeManagementAccessController interface {
 
 `RBACAccessController` implements it with the AddNode (on the parent),
 DeleteNode, AddReference and RemoveReference (on the source node) permissions,
-which must be granted explicitly: a node without RolePermissions refuses node
-management. Any other controller, `DefaultAccessController` included, is asked
+which must be granted explicitly: a node without RolePermissions, in a namespace
+without DefaultRolePermissions, refuses node management. Any other controller, `DefaultAccessController` included, is asked
 `CheckWrite` for the node an operation changes (the parent of AddNodes, the
 node of DeleteNodes, the source node of the reference services), and nodes of
 namespace 0 cannot be added, deleted or have their references changed.
@@ -2488,8 +2517,60 @@ an `ArrayStruct`, exercising the codec through the method call path.
 - Write of a `FlatStruct` round-trips through the server and reads back correctly.
 - Method call with `FlatStruct` input returns the expected `ArrayStruct` output.
 
-**Dynamic structure decoding** – not implemented (deferred). Unknown `ExtensionObject`
-bodies are preserved opaquely and passed through as raw bytes.
+### Dynamic structure decoding
+
+A client decodes the Structures and Unions it has no Go type for with the
+DataTypeDefinition Attribute of their DataType (OPC 10000-3 §5.8.3), opt in:
+
+```go
+func DynamicTypeDecoding(enabled bool) Option
+func (c *Client) LoadDataTypes(ctx context.Context, dataTypeIDs ...*ua.NodeID) error
+func (c *Client) DecodeExtensionObjects(ctx context.Context, v any) error
+func (c *Client) DynamicTypes() *ua.DynamicTypes
+
+func NewDynamicTypes() *DynamicTypes
+func (s *DynamicTypes) Add(t *DynamicType) error
+func (s *DynamicTypes) Type(dataTypeID *NodeID) *DynamicType
+func (s *DynamicTypes) TypeByEncoding(encodingID *NodeID) *DynamicType
+func (s *DynamicTypes) New(dataTypeID *NodeID) (*DynamicStructure, error)
+func (s *DynamicTypes) DecodeExtensionObject(eo *ExtensionObject) error
+func UndecodedBody(eo *ExtensionObject) ([]byte, bool)
+
+type DynamicType struct { DataTypeID *NodeID; Name string; Definition any; BuiltIn TypeID; IsAbstract bool }
+type DynamicStructure struct { Type *DynamicType; Fields []any; Switch uint32 }
+func (d *DynamicStructure) Field(name string) (any, bool)
+func (d *DynamicStructure) Set(name string, v any) error
+func (d *DynamicStructure) Encode() ([]byte, error)
+type DynamicMatrix struct { Dimensions []int32; Values any }
+```
+
+With `DynamicTypeDecoding(true)` the values of `Read` (and `ReadValue`,
+`ReadValues`, `Node.Value`), the output arguments of `Call` and `CallMethod`,
+the results of the four `HistoryRead*` calls and the data changes and events
+of subscriptions hold an `*ua.ExtensionObject` whose `Value` is a
+`*ua.DynamicStructure` for a type without a Go type; such a Read result keeps
+the status of the server instead of `StatusBadDataTypeIDUnknown`. The client
+browses the DataType of the encoding (inverse HasEncoding) and reads the
+DataTypeDefinition, BrowseName and IsAbstract of it and of the DataTypes of
+its fields, by namespace URI, for the lifetime of the client; the encodings
+the server cannot resolve are not asked again in that namespace table. A
+value that cannot be decoded keeps its `RawBody` and never fails the call.
+Without the option nothing changes; `LoadDataTypes` and
+`DecodeExtensionObjects` decode on request.
+
+Fields are in the order of the definition: built-in types as a Variant holds
+them, Enumerations as `int32`, Structures with a registered Go type as that
+type, others as `*ua.DynamicStructure`, fields of DataType Structure or that
+allow subtypes as `*ua.ExtensionObject`, of BaseDataType and Number as
+`*ua.Variant`, arrays as slices, matrices as `*ua.DynamicMatrix`; an absent
+optional field and the fields of a Union that `Switch` does not select are
+nil. A `*ua.DynamicStructure` encodes itself in an ExtensionObject
+(`ua.NewExtensionObject(v)`), in the binary, JSON and XML encodings, for
+Write and Method arguments. Decoding checks every length against the input
+before it allocates.
+
+Not supported: a DataTypeDictionary (OPC 10000-5 Annex D) and JSON-encoded
+bodies of the UA JSON transports.
 
 ---
 
@@ -2531,6 +2612,18 @@ type ProcessedHistoryReader interface {
     ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error)
 }
 
+// Optional: the configuration the server calculates the Aggregates of a
+// Variable with (AggregateConfiguration and Stepped Property).
+type AggregateConfigProvider interface {
+    AggregateConfig(nodeID *ua.NodeID) aggregate.Config
+}
+
+// Optional on a ProcessedHistoryReader: the Aggregates it calculates, listed
+// in the AggregateFunctions folder of the HistoryServerCapabilities.
+type AggregateFunctionLister interface {
+    AggregateFunctions() []*ua.NodeID
+}
+
 type Historian struct { /* in-memory implementation */ }
 
 func NewHistorian() *Historian
@@ -2547,6 +2640,9 @@ func (h *Historian) DeleteAtTime(nodeID *ua.NodeID, reqTimes []time.Time) *ua.Hi
 func (h *Historian) ReadAtTime(nodeID *ua.NodeID, reqTimes []time.Time, useSimpleBounds bool) (*ua.HistoryReadResult, error)
 func (h *Historian) ReadModified(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
 func (h *Historian) ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error)
+func (h *Historian) AggregateFunctions() []*ua.NodeID
+func (h *Historian) SetAggregateConfig(nodeID *ua.NodeID, cfg aggregate.Config)
+func (h *Historian) AggregateConfig(nodeID *ua.NodeID) aggregate.Config
 
 func (s *Server) SetHistorian(h HistoryProvider)
 ```
@@ -2568,7 +2664,26 @@ Supported by default `*Historian`:
 - DeleteAtTime
 - ReadAtTime (nearest previous)
 - ReadModified
-- ReadProcessed aggregates Average / Minimum / Maximum / Count
+- ReadProcessed: every standard Aggregate of Part 13 §5.4.3 but
+  AnnotationCount, calculated by `server/aggregate` with the configuration of
+  `SetAggregateConfig` (default `aggregate.DefaultConfig()`), overridden by
+  the aggregateConfiguration of the request
+
+Processed reads (Part 11 §6.5.4) through the server:
+- one aggregateType per node to read, else the service result is
+  `Bad_AggregateListMismatch`; TimestampsToReturn Server or Neither is
+  `Bad_TimestampsToReturnInvalid` per node (Part 13 §5.4.3.1; Source and
+  Both are accepted)
+- a `ProcessedHistoryReader` calculates the Aggregates itself; for any
+  other `HistoryProvider` the server reads the raw values with `ReadRaw`
+  (one ProcessingInterval beyond the request on each side, following its
+  continuation points) and calculates them with `server/aggregate`, with
+  the configuration of `AggregateConfigProvider` when the provider has it
+- the AggregateFunctions folder of the HistoryServerCapabilities (Part 11
+  §5.7.2) organizes the Aggregates of the provider: `aggregate.Functions()`
+  for a provider without ReadProcessed, those of `AggregateFunctionLister`
+  for one with it (none without the lister); each AggregateFunction Object
+  has the Description of Part 13 Table 5
 
 Limitations:
 - `returnBounds` is accepted and stored on continuation points, but interpolated /
@@ -2659,6 +2774,56 @@ Peer HistoryRead raw interoperability: all four directions verified
 open62541→Go and Milo→Go. Go↔Go covered.
 
 ---
+
+### Package `server/aggregate`
+
+```go
+type Config struct {
+    TreatUncertainAsBad    bool
+    PercentDataBad         uint8
+    PercentDataGood        uint8
+    UseSlopedExtrapolation bool
+    Stepped                bool // the Stepped Property of the Variable (Part 11 §5.2.2)
+}
+func DefaultConfig() Config // TreatUncertainAsBad, 100 %, 100 %, not sloped, not stepped
+func (c Config) Valid() bool
+func (c Config) Override(ac *ua.AggregateConfiguration) Config
+func (c Config) AggregateConfiguration() *ua.AggregateConfiguration
+
+type Request struct {
+    Aggregate          *ua.NodeID // an AggregateFunction Object of Part 13 §4.2.2
+    Start, End         time.Time  // End before Start reads backwards
+    ProcessingInterval time.Duration // 0: one interval
+    Config             Config
+}
+func (r Request) Check() ua.StatusCode
+func (r Request) Intervals() int
+func (r Request) Interval(i int) (start, end time.Time)
+func (r Request) Window(first, last int) (from, to time.Time)
+func (r Request) Calculate(raw []*ua.DataValue) ([]*ua.DataValue, ua.StatusCode)
+func (r Request) CalculateIntervals(raw []*ua.DataValue, first, last int) ([]*ua.DataValue, ua.StatusCode)
+
+const MaxIntervals = 1 << 20
+const Resolution = time.Millisecond
+
+func Supported(aggregateType *ua.NodeID) bool
+func Functions() []*ua.NodeID
+func Name(aggregateType *ua.NodeID) string
+func Description(aggregateType *ua.NodeID) string
+```
+
+The 36 standard Aggregates of Part 13 §5.4.3 but AnnotationCount, with the
+intervals of §5.4.2.2 (Table 49), Interpolated and Simple Bounding Values
+(§3.1.8, §3.1.9), the PercentValues and PercentTime StatusCode calculation
+(§5.4.3.2) and the Aggregate bits of Part 4 §7.38.1 (`ua.StatusCodeHistorianBits` and the constants it masks,
+with `ua.StatusCodeInfoTypeDataValue`). `Check` returns
+`Bad_AggregateNotSupported`, `Bad_InvalidArgument` (no start or end time,
+Start = End, a negative ProcessingInterval, more than `MaxIntervals`
+intervals) or `Bad_AggregateInvalidInputs` (a Config that is not `Valid`).
+Arrays are `Bad_NotSupported` for the Aggregates that calculate with numbers
+(Part 11 §6.5.4.2). Evidence: every example of Annex A
+(`server/aggregate/testdata/AggregateExamples.csv`), with the rows where the
+package follows a clause instead listed in `deviations_test.go`.
 
 ### ServerMetrics
 
@@ -2783,6 +2948,152 @@ func (s *Server) VerifyGroupCertificate(certificateGroup *ua.NodeID, chain []byt
 ```
 
 See [docs/server-guide.md](docs/server-guide.md#certificate-management-push-model).
+
+### Files (server)
+
+FileType and FileDirectoryType of OPC 10000-20 §4.2 and §4.3. The
+TrustList objects, the PubSubConfiguration file and the UAFX
+ConnectionManagerConfiguration are files of `FileObject` with Methods of
+their own.
+
+```go
+type FileConfig struct {
+    Backend             FileBackend       // required
+    Writable            bool              // Writable and UserWritable; Open with Write otherwise Bad_NotWritable
+    Modes               []ua.OpenFileMode // nil: every mode of §4.2.2 Table 4
+    MaxByteStringLength uint32            // most bytes of one Read; 0: DefaultFileMaxByteStringLength (1 MiB)
+    MimeType            string            // "": no MimeType Property
+    MaxHandles          int               // 0: 32; beyond it Bad_TooManyOperations
+    Authorize           func(ctx context.Context, caller *MethodCaller, mode ua.OpenFileMode) ua.StatusCode
+    OnChange            func()            // after OpenCount, Size or LastModifiedTime may have changed
+}
+type FileBackend interface {
+    Open(ctx context.Context, mode ua.OpenFileMode) (FileContent, error)
+    Size() (uint64, error)
+}
+type FileModTimer interface{ ModTime() (time.Time, error) } // LastModifiedTime
+type FileContent interface {
+    io.ReaderAt
+    io.WriterAt
+    Size() (int64, error)
+    Close() error
+}
+func NewMemoryFile(data []byte) *MemoryFile // writes replace the content when the handle closes
+func NewOSFile(path string) *OSFile          // writes go to the file
+type SnapshotFile struct {                   // a handle's writes stay with it (CloseAndUpdate)
+    Content      func(ctx context.Context) ([]byte, error)
+    MaxSize      int
+    SizeExceeded ua.StatusCode
+}
+
+func (s *Server) AddFile(parent, nodeID *ua.NodeID, name *ua.QualifiedName, cfg FileConfig) (*FileObject, error)
+func (s *Server) ServeFile(obj *ua.NodeID, cfg FileConfig) (*FileObject, error) // an Object of an imported NodeSet
+func (s *Server) NewFile(cfg FileConfig) (*FileObject, error)                  // not in the address space
+func (f *FileObject) Method(name string) MethodHandler // Open, Close, Read, Write, GetPosition, SetPosition
+func (f *FileObject) Property(name string) ValueFunc   // Size, Writable, UserWritable, OpenCount, MaxByteStringLength, MimeType, LastModifiedTime
+func (f *FileObject) Open(ctx context.Context, mode ua.OpenFileMode) (uint32, ua.StatusCode)
+func (f *FileObject) OpenBytes(ctx context.Context, data []byte) (uint32, ua.StatusCode) // OpenWithMasks of a subtype
+func (f *FileObject) Close(ctx context.Context, h uint32) ua.StatusCode
+func (f *FileObject) CloseAndTake(ctx context.Context, h uint32, check func(data []byte) ua.StatusCode) ([]byte, ua.StatusCode)
+func (f *FileObject) Read(ctx context.Context, h uint32, length int32) ([]byte, ua.StatusCode)
+func (f *FileObject) Write(ctx context.Context, h uint32, data []byte) ua.StatusCode
+func (f *FileObject) GetPosition(ctx context.Context, h uint32) (uint64, ua.StatusCode)
+func (f *FileObject) SetPosition(ctx context.Context, h uint32, pos uint64) ua.StatusCode
+func (f *FileObject) OpenCount() int
+func (f *FileObject) CloseAll()
+func (f *FileObject) Changed() // the backend changed outside the Methods
+
+type FileDirectoryConfig struct {
+    Backend   DirectoryBackend
+    File      FileConfig // of every file; its Backend is ignored
+    Authorize func(ctx context.Context, caller *MethodCaller, op, path string) ua.StatusCode
+}
+type DirectoryBackend interface {
+    ReadDir(path string) ([]DirEntry, error)
+    Mkdir(path string) error
+    CreateFile(path string) error
+    File(path string) FileBackend
+    Remove(path string) error
+    Rename(from, to string) error
+    Copy(from, to string) error
+}
+func NewMemoryDirectory() *MemoryDirectory
+func NewOSDirectory(dir string) (*OSDirectory, error) // os.OpenRoot: no path leaves dir
+func (s *Server) AddFileDirectory(parent, nodeID *ua.NodeID, name *ua.QualifiedName, cfg FileDirectoryConfig) (*FileDirectory, error)
+func (d *FileDirectory) NodeID() *ua.NodeID
+func (d *FileDirectory) Lookup(path string) (*ua.NodeID, *FileObject, bool)
+```
+
+See [docs/server-guide.md](docs/server-guide.md#files-part-20).
+
+---
+
+## Package `uamethod`
+
+The contracts of Methods of namespace 0, generated by `cmd/methods` from the
+InputArguments and OutputArguments of the NodeSet: FileType and
+FileDirectoryType (OPC 10000-20 §4.2, §4.3).
+
+```go
+type Method struct {
+    Name, ObjectType, Namespace string
+    ID, ObjectTypeID            uint32
+    Clause                      string // "OPC 10000-20 §4.2.2"
+    Mandatory                   bool
+}
+func (m *Method) NodeID(ns uint16) *ua.NodeID
+func (m *Method) ObjectTypeNodeID(ns uint16) *ua.NodeID
+func (m *Method) InputArguments() []*ua.Argument
+func (m *Method) OutputArguments() []*ua.Argument
+func (m *Method) Call(ctx context.Context, c Caller, obj, method *ua.NodeID, in []*ua.Variant) ([]*ua.Variant, error)
+type Caller interface {
+    Call(ctx context.Context, req *ua.CallMethodRequest) (*ua.CallMethodResult, error) // *opcua.Client
+}
+type ArgumentError struct { Method string; Output bool; Index int; Name string; Status ua.StatusCode; Detail string }
+type CallError struct { Method string; Status ua.StatusCode; InputArgumentResults []ua.StatusCode }
+func StatusOf(err error) ua.StatusCode
+
+// Generated, for each Method, for example FileType.Read:
+var FileTypeRead *Method
+type FileTypeReadInput struct { FileHandle uint32; Length int32 }
+type FileTypeReadOutput struct { Data []byte }
+func (x *FileTypeReadInput) Pack() []*ua.Variant
+func (x *FileTypeReadInput) Unpack(args []*ua.Variant) error // count, built-in type, ValueRank
+func CallFileTypeRead(ctx context.Context, c Caller, obj, method *ua.NodeID, in *FileTypeReadInput) (*FileTypeReadOutput, error)
+```
+
+---
+
+## Package `filetransfer`
+
+The client of FileType and FileDirectoryType (OPC 10000-20 §4.2, §4.3).
+
+```go
+const DefaultChunk = 64 << 10
+func NewObject(c *opcua.Client, obj *ua.NodeID) *Object // Object.Chunk: the size of Read and Write calls
+func ObjectFunc(call CallFunc) *Object                  // Methods called by the caller (a TrustList of package gds)
+func (o *Object) Open(ctx context.Context, mode ua.OpenFileMode) (*File, error)
+func (o *Object) Attach(handle uint32, mode ua.OpenFileMode) *File
+func (o *Object) ReadAll(ctx context.Context, limit int) ([]byte, error)
+func (o *Object) WriteAll(ctx context.Context, data []byte) error
+func (o *Object) Info(ctx context.Context) (*Info, error) // Size, Writable, UserWritable, OpenCount, MimeType, MaxByteStringLength, LastModifiedTime
+func (f *File) Read(ctx context.Context, length int32) ([]byte, error) // io.EOF at the end
+func (f *File) ReadAllAndClose(ctx context.Context, limit int) ([]byte, error)
+func (f *File) Write(ctx context.Context, data []byte) error
+func (f *File) Position(ctx context.Context) (uint64, error)
+func (f *File) SetPosition(ctx context.Context, pos uint64) error
+func (f *File) Close(ctx context.Context) error
+func (f *File) Reader(ctx context.Context) io.Reader
+func (f *File) Writer(ctx context.Context) io.Writer
+func NewDirectory(c *opcua.Client, obj *ua.NodeID) *Directory
+func (d *Directory) Entries(ctx context.Context) ([]Entry, error)
+func (d *Directory) CreateDirectory(ctx context.Context, name string) (*ua.NodeID, error)
+func (d *Directory) CreateFile(ctx context.Context, name string, open bool) (*Object, *File, error)
+func (d *Directory) Delete(ctx context.Context, obj *ua.NodeID) error
+func (d *Directory) MoveOrCopy(ctx context.Context, obj, target *ua.NodeID, createCopy bool, newName string) (*ua.NodeID, error)
+```
+
+See [docs/client-guide.md](docs/client-guide.md#files-part-20).
 
 ---
 

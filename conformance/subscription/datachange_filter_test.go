@@ -403,10 +403,12 @@ func TestDataChange_FilterErrors(t *testing.T) {
 		{"invalid trigger", itemSpec{node: f.Double, filter: raw(ua.DataChangeTrigger(7), 0, 0)}, ua.StatusBadMonitoredItemFilterInvalid},
 		{"invalid deadband type", itemSpec{node: f.Double, filter: raw(ua.DataChangeTriggerStatusValue, 9, 1)}, ua.StatusBadMonitoredItemFilterInvalid},
 		{"EventFilter on Value", itemSpec{node: f.Double, filter: eventFilter([]string{"Message"})}, ua.StatusBadFilterNotAllowed},
-		{"AggregateFilter", itemSpec{node: f.Double, filter: ua.NewExtensionObject(&ua.AggregateFilter{
+		// An AggregateFilter needs source timestamps (Part 13 §5.4.3.1); see
+		// aggregate_filter_test.go.
+		{"AggregateFilter without source timestamps", itemSpec{node: f.Double, filter: ua.NewExtensionObject(&ua.AggregateFilter{
 			StartTime: ts0, AggregateType: ua.NewNumericNodeID(0, 2342), ProcessingInterval: 1000,
 			AggregateConfiguration: &ua.AggregateConfiguration{},
-		})}, ua.StatusBadMonitoredItemFilterUnsupported},
+		})}, ua.StatusBadTimestampsToReturnInvalid},
 		{"not a filter", itemSpec{node: f.Double, filter: ua.NewExtensionObject(&ua.Range{Low: 1, High: 2})}, ua.StatusBadMonitoredItemFilterInvalid},
 		{"no filter on DisplayName", itemSpec{node: f.Double, attr: ua.AttributeIDDisplayName}, ua.StatusOK},
 	}

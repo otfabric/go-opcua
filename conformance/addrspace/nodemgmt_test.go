@@ -3,9 +3,11 @@
 package addrspace
 
 import (
+	"context"
 	"testing"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -115,4 +117,53 @@ func TestNodeMgmt_Errors(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, ua.StatusBadNodeIDUnknown, resp.Results[0].StatusCode)
+}
+
+// TestNodeMgmt_NodeVersion: a node AddNodes adds has a NodeVersion
+// Property (WithNodeVersionOnAddNodes), which changes with each
+// ModelChangeEvent issued for the node: AddReferences adds a Reference of
+// it (Part 3 §9.32.2, §5.5.1).
+func TestNodeMgmt_NodeVersion(t *testing.T) {
+	c, f, _, _ := setupWith(t, nil,
+		server.EnableNodeManagement(),
+		server.WithNodeVersionOnAddNodes(true),
+		server.WithModelChangeEvents(true),
+		server.WithModelDefaultPermissions(true))
+	ctx := context.Background()
+	newID := ua.NewStringNodeID(f.NSIndex, "Versioned")
+	addResp, err := c.AddNodes(ctx, &ua.AddNodesRequest{NodesToAdd: []*ua.AddNodesItem{{
+		ParentNodeID:       ua.NewExpandedNodeID(f.MethodObject, "", 0),
+		ReferenceTypeID:    ua.NewNumericNodeID(0, id.Organizes),
+		RequestedNewNodeID: ua.NewExpandedNodeID(newID, "", 0),
+		BrowseName:         &ua.QualifiedName{NamespaceIndex: f.NSIndex, Name: "Versioned"},
+		NodeClass:          ua.NodeClassObject,
+		TypeDefinition:     ua.NewNumericExpandedNodeID(0, id.FolderType),
+	}}})
+	require.NoError(t, err)
+	require.Equal(t, ua.StatusOK, addResp.Results[0].StatusCode)
+
+	br, err := c.Browse(ctx, &ua.BrowseRequest{NodesToBrowse: []*ua.BrowseDescription{{
+		NodeID: newID, BrowseDirection: ua.BrowseDirectionForward,
+		ReferenceTypeID: ua.NewNumericNodeID(0, id.HasProperty), ResultMask: uint32(ua.BrowseResultMaskAll),
+	}}})
+	require.NoError(t, err)
+	require.Len(t, br.Results[0].References, 1)
+	require.Equal(t, "NodeVersion", br.Results[0].References[0].BrowseName.Name)
+	versionID := br.Results[0].References[0].NodeID.NodeID
+	version := func() string {
+		t.Helper()
+		dv, err := c.ReadValue(ctx, versionID)
+		require.NoError(t, err)
+		require.Equal(t, ua.StatusOK, dv.Status)
+		return dv.Value.Value().(string)
+	}
+	require.Equal(t, "0", version())
+
+	ar, err := c.AddReferences(ctx, &ua.AddReferencesRequest{ReferencesToAdd: []*ua.AddReferencesItem{{
+		SourceNodeID: newID, ReferenceTypeID: ua.NewNumericNodeID(0, id.Organizes), IsForward: true,
+		TargetNodeID: ua.NewExpandedNodeID(f.MethodObject, "", 0), TargetNodeClass: ua.NodeClassObject,
+	}}})
+	require.NoError(t, err)
+	require.Equal(t, ua.StatusOK, ar.Results[0])
+	require.Equal(t, "1", version())
 }

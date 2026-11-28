@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/otfabric/go-opcua/filetransfer"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 )
 
 // fileChunk is the size of the Read and Write calls on the TrustList file.
@@ -16,11 +18,6 @@ const fileChunk = 64 << 10
 
 // maxTrustListFile bounds what ReadTrustList reads from a server.
 const maxTrustListFile = 64 << 20
-
-// The modes of FileType.Open used on the TrustList (Part 20 §4.2.1).
-const (
-	openWriteErase byte = 0x06
-)
 
 // EncodeTrustList returns the content of a TrustList file: the
 // TrustListDataType in the OPC UA Binary encoding (Part 12 §7.8.2.1).
@@ -56,9 +53,26 @@ func handleOut(name string, v *ua.Variant) (uint32, error) {
 	return h, nil
 }
 
-func (g *Client) closeFile(ctx context.Context, h uint32) error {
-	_, err := g.fileCall(ctx, "Close", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListClose, 0, ua.MustVariant(h))
-	return err
+// trustListMethodIDs are the Methods of the TrustList file of the
+// DefaultApplicationGroup, the fallback when browsing g.TrustList fails.
+var trustListMethodIDs = map[string]uint32{
+	"Open":        id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListOpen,
+	"Close":       id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListClose,
+	"Read":        id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListRead,
+	"Write":       id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListWrite,
+	"GetPosition": id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListGetPosition,
+	"SetPosition": id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListSetPosition,
+}
+
+// trustListFile returns the TrustList as a FileType Object (OPC 10000-20
+// §4.2) whose Methods are called like the other Methods of g, so a failing
+// call is an *Error.
+func (g *Client) trustListFile() *filetransfer.Object {
+	o := filetransfer.ObjectFunc(func(ctx context.Context, m *uamethod.Method, in []*ua.Variant) ([]*ua.Variant, error) {
+		return g.fileCall(ctx, m.Name, trustListMethodIDs[m.Name], 0, in...)
+	})
+	o.Chunk = fileChunk
+	return o
 }
 
 // ReadTrustList reads the lists of the trust list masks selects
@@ -72,22 +86,8 @@ func (g *Client) ReadTrustList(ctx context.Context, masks ua.TrustListMasks) (*u
 	if err != nil {
 		return nil, err
 	}
-	var b []byte
-	for {
-		out, err := g.fileCall(ctx, "Read", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListRead, 1, ua.MustVariant(h), ua.MustVariant(int32(fileChunk)))
-		if err != nil {
-			return nil, errors.Join(err, g.closeFile(ctx, h))
-		}
-		chunk, _ := out[0].Value().([]byte)
-		if len(chunk) == 0 {
-			break
-		}
-		if len(b)+len(chunk) > maxTrustListFile {
-			return nil, errors.Join(fmt.Errorf("gds: the TrustList file exceeds %d bytes", maxTrustListFile), g.closeFile(ctx, h))
-		}
-		b = append(b, chunk...)
-	}
-	if err := g.closeFile(ctx, h); err != nil {
+	b, err := g.trustListFile().Attach(h, ua.OpenFileModeRead).ReadAllAndClose(ctx, maxTrustListFile)
+	if err != nil {
 		return nil, err
 	}
 	return DecodeTrustList(b)
@@ -102,22 +102,14 @@ func (g *Client) WriteTrustList(ctx context.Context, tl *ua.TrustListDataType) (
 	if err != nil {
 		return false, err
 	}
-	out, err := g.fileCall(ctx, "Open", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListOpen, 1, ua.MustVariant(openWriteErase))
+	f, err := g.trustListFile().Open(ctx, ua.OpenFileModeWrite|ua.OpenFileModeEraseExisting)
 	if err != nil {
 		return false, err
 	}
-	h, err := handleOut("Open", out[0])
-	if err != nil {
-		return false, err
+	if err := f.Write(ctx, b); err != nil {
+		return false, errors.Join(err, f.Close(ctx))
 	}
-	for len(b) > 0 {
-		n := min(len(b), fileChunk)
-		if _, err := g.fileCall(ctx, "Write", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListWrite, 0, ua.MustVariant(h), ua.MustVariant(b[:n])); err != nil {
-			return false, errors.Join(err, g.closeFile(ctx, h))
-		}
-		b = b[n:]
-	}
-	out, err = g.fileCall(ctx, "CloseAndUpdate", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListCloseAndUpdate, 1, ua.MustVariant(h))
+	out, err := g.fileCall(ctx, "CloseAndUpdate", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListCloseAndUpdate, 1, ua.MustVariant(f.Handle()))
 	if err != nil {
 		return false, err
 	}

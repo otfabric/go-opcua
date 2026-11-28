@@ -85,7 +85,26 @@ type Node struct {
 	typeDef      *ua.ExpandedNodeID
 	typeDefKnown bool
 
+	// nodeVersion caches the NodeVersion Property of the node (nil when
+	// it has none); valid only while nodeVersionKnown is set, kept like
+	// typeDef. Guarded by mu.
+	nodeVersion      *ua.NodeID
+	nodeVersionKnown bool
+
 	rolePermissions []*ua.RolePermissionType
+	// noDefaultPermissions marks a node imported with HasNoPermissions:
+	// the default RolePermissions of its namespace do not apply to it
+	// (Part 6 §F.3). inheritRestrictions marks a node imported without
+	// AccessRestrictions: those it has are the UANodeSet.xsd default,
+	// and the DefaultAccessRestrictions of its namespace apply
+	// (namespace_metadata.go). Set before the node is added.
+	noDefaultPermissions bool
+	inheritRestrictions  bool
+	// sessionRoles marks a Property whose Value is a list of
+	// RolePermissions that Read reduces to the roles of the session
+	// (DefaultUserRolePermissions, Part 3 §5.2.9). Set before the node
+	// is added.
+	sessionRoles bool
 
 	// writer takes clients' Writes of the Value instead of the node
 	// (SetValueWriter). Guarded by mu.
@@ -264,8 +283,19 @@ func (n *Node) Attribute(id ua.AttributeID) (*AttrValue, error) {
 // apply the AccessLevel or WriteMask rules, which govern client access
 // (the Write service and NodeNameSpace.SetAttribute check them).
 func (n *Node) SetAttribute(id ua.AttributeID, val *ua.DataValue) error {
+	change, err := n.setAttribute(id, val)
+	if err == nil && change != nil {
+		change.report()
+	}
+	return err
+}
+
+// setAttribute is SetAttribute without the model and semantic change
+// reports, which it returns for the caller to make once mu is released.
+func (n *Node) setAttribute(id ua.AttributeID, val *ua.DataValue) (*attributeChange, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	change := n.attributeChange(id, val)
 	switch id {
 	case ua.AttributeIDValue:
 		// AccessLevel and UserAccessLevel say how clients may access the
@@ -285,7 +315,7 @@ func (n *Node) SetAttribute(id ua.AttributeID, val *ua.DataValue) error {
 				newVal := val.Value.Value()
 				if oldVal != nil && newVal != nil {
 					if fmt.Sprintf("%T", oldVal) != fmt.Sprintf("%T", newVal) {
-						return ua.StatusBadTypeMismatch
+						return nil, ua.StatusBadTypeMismatch
 					}
 				}
 			}
@@ -295,10 +325,10 @@ func (n *Node) SetAttribute(id ua.AttributeID, val *ua.DataValue) error {
 			return val
 		}
 
-		return nil
+		return change, nil
 	default:
 		n.attr[id] = val
-		return nil
+		return change, nil
 	}
 }
 
@@ -415,6 +445,9 @@ func (n *Node) invalidateTypeDef() { n.typeDefKnown = false }
 // appended to refs: an append can only supply the first type definition, never
 // change an existing one. mu must be held.
 func (n *Node) noteRefAppended(ref *ua.ReferenceDescription) {
+	if n.nodeVersionKnown && n.nodeVersion == nil && isNodeVersionRef(ref) {
+		n.nodeVersion = ref.NodeID.NodeID
+	}
 	if !n.typeDefKnown || n.typeDef != nil {
 		return
 	}
@@ -459,6 +492,7 @@ func (n *Node) AddObject(o *Node) *Node {
 	n.refs = append(n.refs, ref)
 	n.noteRefAppended(ref)
 	n.mu.Unlock()
+	n.reportModelChange(ua.ModelChangeStructureVerbMaskReferenceAdded, n)
 	return n.ns.AddNode(nn)
 }
 
@@ -478,6 +512,7 @@ func (n *Node) AddVariable(o *Node) *Node {
 	n.refs = append(n.refs, ref)
 	n.noteRefAppended(ref)
 	n.mu.Unlock()
+	n.reportModelChange(ua.ModelChangeStructureVerbMaskReferenceAdded, n)
 	return n.ns.AddNode(nn)
 }
 
@@ -495,14 +530,22 @@ const (
 // Adding a reference both ends already hold (also from the other end, as
 // parent.AddRef(child, rt, true) followed by child.AddRef(parent, rt, false))
 // does not add it again.
+//
+// A node at either end that has a NodeVersion Property gets a new
+// NodeVersion and a GeneralModelChangeEvent reports the reference
+// (Part 3 §9.32; see [WithModelChangeEvents]).
 func (n *Node) AddRef(o *Node, rt RefType, forward bool) {
-	n.addRef(o, ua.NewNumericNodeID(0, uint32(rt)), forward)
+	if n.addRef(o, ua.NewNumericNodeID(0, uint32(rt)), forward) {
+		n.reportModelChange(ua.ModelChangeStructureVerbMaskReferenceAdded, n, o)
+	}
 }
 
 // AddReference adds a reference of the ReferenceType refType, of any
 // namespace, between n and o as AddRef does.
 func (n *Node) AddReference(o *Node, refType *ua.NodeID, forward bool) {
-	n.addRef(o, refType, forward)
+	if n.addRef(o, refType, forward) {
+		n.reportModelChange(ua.ModelChangeStructureVerbMaskReferenceAdded, n, o)
+	}
 }
 
 // addRef is AddRef for a ReferenceType of any namespace. It reports whether
@@ -596,9 +639,21 @@ func (n *Node) refsSnapshot() References {
 // as AddRef records it on both. It reports whether either end held it. The
 // other end is found through the server of n's namespace; a node that was
 // not added to a namespace, or a target on another server, loses this end
-// only.
+// only. An end that has a NodeVersion Property gets a new NodeVersion and a
+// GeneralModelChangeEvent reports the change (see [WithModelChangeEvents]).
 func (n *Node) RemoveRef(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, forward bool) bool {
+	mc := n.server().modelChanges()
+	removed := n.removeRef(targetID, refTypeID, forward, mc)
+	mc.flush()
+	return removed
+}
+
+// removeRef is RemoveRef; it notes the ends it changes in mc.
+func (n *Node) removeRef(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, forward bool, mc *modelChanges) bool {
 	removed := n.removeRefEnd(targetID, refTypeID, forward)
+	if removed {
+		mc.note(n, ua.ModelChangeStructureVerbMaskReferenceDeleted)
+	}
 	if targetID == nil || targetID.NodeID == nil || targetID.ServerIndex != 0 {
 		return removed
 	}
@@ -611,6 +666,7 @@ func (n *Node) RemoveRef(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, forw
 	// A reference of n to itself has both directions on n.
 	if t.removeRefEnd(ua.NewExpandedNodeID(n.ID(), "", 0), refTypeID, !forward) {
 		removed = true
+		mc.note(t, ua.ModelChangeStructureVerbMaskReferenceDeleted)
 	}
 	return removed
 }
@@ -635,6 +691,7 @@ func (n *Node) removeRefEnd(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, f
 		n.refs[i] = n.refs[len(n.refs)-1]
 		n.refs = n.refs[:len(n.refs)-1]
 		n.invalidateTypeDef()
+		n.nodeVersionKnown = false
 		return true
 	}
 	return false

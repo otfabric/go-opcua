@@ -99,7 +99,10 @@ Things worth knowing:
 - **Unknown structure types.** An ExtensionObject whose `UaTypeId` is not
   registered is an error if its body is a JSON object (there is nothing to
   decode it into). A binary or XML body of an unknown type is kept as
-  `[]byte` / `*ua.XMLElement` and written back unchanged.
+  `[]byte` / `*ua.XMLElement` and written back unchanged; a client with
+  `opcua.DynamicTypeDecoding` decodes such a binary body with the
+  DataTypeDefinition of the server, and a `*ua.DynamicStructure` is written
+  as a binary body.
 - **Masks.** `DataValue` and `DiagnosticInfo` members are written according
   to their `EncodingMask`, and the mask is rebuilt from the members present
   when decoding. Call `UpdateMask()` on values you build by hand.

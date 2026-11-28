@@ -842,10 +842,7 @@ func (m *pushManager) resetToServerDefaults(ctx context.Context, c *MethodCaller
 		g := m.groups[k]
 		g.trust.Store(tl)
 		g.lastUpdate.Store(now)
-		for h := range g.handles {
-			delete(g.handles, h)
-			g.openCount.Add(-1)
-		}
+		g.file.CloseAll()
 	}
 	clear(m.csrKeys)
 	m.s.cfg.restoreIdentities(m.initial)

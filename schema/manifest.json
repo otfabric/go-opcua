@@ -229,6 +229,12 @@
       "upstream": "UAFX/opc.ua.fx.cm.nodeset2.bsd",
       "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
       "sha256": "04f78bb06021de37665151395adff471bd0774f845d47fea521d56c5a2983de6"
+    },
+    {
+      "path": "server/aggregate/testdata/AggregateExamples.csv",
+      "upstream": "Schema/AggregateExamples.csv",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "917a8d6a6565586765548be21f80f37ed6acad47e86aed2763754c7b4aca2c3d"
     }
   ]
 }

@@ -87,6 +87,8 @@ type Server struct {
 
 	// methods stores registered server-side method handlers keyed by "objectID\x00methodID".
 	methods map[string]MethodHandler
+	// files are the FileObjects, whose handles end with their session.
+	files fileRegistry
 	// guards are the Guards of AddGuard: a slice AddGuard replaces, never
 	// changes in place, so that requests read it without a lock.
 	guards  atomic.Pointer[[]Guard]
@@ -138,6 +140,8 @@ type Server struct {
 
 	// ps is the PubSub runtime and its information model (pubsub.go).
 	ps pubsubState
+	// nsMeta: NamespaceMetadata Objects and namespace defaults.
+	nsMeta namespaceMeta
 
 	// diag holds the server diagnostics (diagnostics.go).
 	diag *serverDiagnostics
@@ -147,6 +151,7 @@ type Server struct {
 }
 
 type serverConfig struct {
+	addrSpace addressSpaceConfig // model change and namespace defaults
 	// idMu guards privateKey, certificate and identities, which push
 	// certificate management replaces at run time (push_methods.go).
 	idMu           sync.RWMutex
@@ -375,6 +380,7 @@ func New(opts ...Option) (*Server, error) {
 	s.registerAlarmMethods()
 	if push != nil {
 		push.s = s
+		push.initFiles()
 		s.push = push
 	}
 
@@ -431,6 +437,7 @@ func New(opts ...Option) (*Server, error) {
 	}
 	s.bindAuditing()
 	s.bindHistoryCapabilities()
+	s.bindAggregateFunctions()
 	s.bindSessionCapabilities()
 	s.bindMonitoredItemCapabilities()
 	s.bindContinuationPointCapabilities()
@@ -704,6 +711,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Register all service handlers
 	s.initHandlers()
+	s.startNamespaceMetadata()
 
 	if s.url == "" {
 		s.url = defaultListenAddr
@@ -844,6 +852,10 @@ func (s *Server) sessionRemoved(sess *session, reason SessionCloseReason) {
 	}
 	s.diag.sessionRemoved(sess, reason == SessionTimedOut)
 	s.observeSessionClosed(sess, reason)
+	// OPC 10000-20 §4.2.2: a fileHandle is valid in its session only.
+	s.files.sessionEnded(sess.ID)
+	// OPC 10000-12 §7.10.2: so is the push transaction of the session.
+	s.push.sessionEnded(sess.ID)
 	s.guardSessionEnded(sess)
 	s.auditSessionEnd(sess, reason)
 }

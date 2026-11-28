@@ -30,5 +30,6 @@ jobs:
       # server, uafx/fxcm and uafx/fxserver run in the server job of CI
       # (5 min race): beside the others each goes over the 120 s timeout
       # this workflow gives a package (the v1.39.1 release run failed so).
-      test-exclude-regex: "(/examples($|/)|/cmd($|/)|/chaos($|/)|/server$|/uafx/fxcm$|/uafx/fxserver$)"
+      # cmd/ is tested, as in ci.yml (CI-005).
+      test-exclude-regex: "(/examples($|/)|/chaos($|/)|/server$|/uafx/fxcm$|/uafx/fxserver$)"
     secrets: inherit

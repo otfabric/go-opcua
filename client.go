@@ -139,6 +139,11 @@ type Client struct {
 	// new session is set.
 	leaving atomic.Pointer[Session]
 
+	// dyn is the registry of DataTypes read from the server for dynamic
+	// decoding (client_datatypes.go), made once by dynamic().
+	dynOnce sync.Once
+	dyn     *dynamicTypes
+
 	// subMux guards subs and pendingAcks.
 	subMux sync.RWMutex
 
@@ -164,6 +169,10 @@ type Client struct {
 	// lastPublishResponse is when the last Publish response arrived (unix
 	// nanoseconds), see markSilentSubscriptions.
 	lastPublishResponse atomic.Int64
+
+	// lastSessionRequest is when the client last sent a request in its
+	// session (since keepAliveEpoch), see keepAliveStep.
+	lastSessionRequest atomic.Int64
 
 	// pausech pauses the subscription publish loop
 	pausech chan struct{}
@@ -402,6 +411,8 @@ func (c *Client) monitor(ctx context.Context) {
 			c.setSecureChannel(nil)
 		}
 	}()
+	// The session keep-alive stops first, before the monitor is done.
+	defer c.startKeepAlive(ctx)()
 
 	// retryBroken fires when subscriptions that could not be recreated are
 	// to be tried again. A recreation can fail although the connection is
@@ -1941,6 +1952,7 @@ func (c *Client) sendWithTimeout(ctx context.Context, req ua.Request, timeout ti
 	var authToken *ua.NodeID
 	if s := c.Session(); s != nil {
 		authToken = s.resp.AuthenticationToken
+		c.noteSessionRequest()
 	}
 	return sc.SendRequestWithTimeout(ctx, req, authToken, timeout, h)
 }
@@ -2122,6 +2134,9 @@ func (c *Client) Read(ctx context.Context, req *ua.ReadRequest) (*ua.ReadRespons
 	req = cloneReadRequest(req)
 
 	var res *ua.ReadResponse
+	// The status of each value the client may still decode with the
+	// DynamicTypeDecoding option.
+	var undecoded map[int]ua.StatusCode
 	err := c.Send(ctx, req, func(v ua.Response) error {
 		if err := assign(v, &res); err != nil {
 			return err
@@ -2132,18 +2147,34 @@ func (c *Client) Read(ctx context.Context, req *ua.ReadRequest) (*ua.ReadRespons
 		// server the StatusCode for that data value will be OK. We
 		// therefore check for extension objects with nil values and set
 		// the status code to StatusBadDataTypeIDUnknown.
-		for _, dv := range res.Results {
+		for i, dv := range res.Results {
 			if dv.Value == nil {
 				continue
 			}
 			val := dv.Value.Value()
 			if eo, ok := val.(*ua.ExtensionObject); ok && eo.Value == nil {
+				if c.cfg.dynamicTypes {
+					if undecoded == nil {
+						undecoded = map[int]ua.StatusCode{}
+					}
+					undecoded[i] = dv.Status
+				}
 				dv.Status = ua.StatusBadDataTypeIDUnknown
 			}
 		}
 		return nil
 	})
-	return res, err
+	if err != nil || res == nil {
+		return res, err
+	}
+	// The decoding runs after Send: it may send requests itself.
+	c.decodeResponse(ctx, res.Results, true)
+	for i, status := range undecoded {
+		if eo, ok := res.Results[i].Value.Value().(*ua.ExtensionObject); ok && eo.Value != nil {
+			res.Results[i].Status = status
+		}
+	}
+	return res, nil
 }
 
 // Write executes a synchronous write request.
@@ -2205,6 +2236,7 @@ func (c *Client) Call(ctx context.Context, req *ua.CallMethodRequest) (*ua.CallM
 	if len(res.Results) != 1 {
 		return nil, ua.StatusBadUnknownResponse
 	}
+	c.decodeResponse(ctx, res.Results[0], true)
 	return res.Results[0], nil
 }
 
@@ -2321,7 +2353,7 @@ func (c *Client) HistoryReadEvent(ctx context.Context, nodes []*ua.HistoryReadVa
 		},
 	}
 
-	return send[ua.HistoryReadResponse](ctx, c, req)
+	return c.historyRead(ctx, req)
 }
 
 func (c *Client) HistoryReadRawModified(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadRawModifiedDetails) (*ua.HistoryReadResponse, error) {
@@ -2340,16 +2372,22 @@ func (c *Client) HistoryReadRawModified(ctx context.Context, nodes []*ua.History
 		},
 	}
 
-	return send[ua.HistoryReadResponse](ctx, c, req)
+	return c.historyRead(ctx, req)
 }
 
+// HistoryReadProcessed reads Aggregates of the history of nodes (Part 11
+// §6.5.4): details.AggregateType holds one Aggregate per node, in the order
+// of nodes. It asks for source timestamps (Part 13 §5.4.3.1).
 func (c *Client) HistoryReadProcessed(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadProcessedDetails) (*ua.HistoryReadResponse, error) {
 	stats.Client().Add("HistoryReadProcessed", 1)
 	stats.Client().Add("HistoryReadValueID", int64(len(nodes)))
 
-	// Part 4, 5.10.3 HistoryRead
+	// Part 4, 5.10.3 HistoryRead. Processed values have source timestamps
+	// only: "If a requested timestamp is set to anything but the source
+	// timestamp the operation shall return the Bad_TimestampToReturnInvalid
+	// StatusCode" (Part 13 §5.4.3.1).
 	req := &ua.HistoryReadRequest{
-		TimestampsToReturn: ua.TimestampsToReturnBoth,
+		TimestampsToReturn: ua.TimestampsToReturnSource,
 		NodesToRead:        nodes,
 		// Part 11, 6.4 HistoryReadDetails parameters
 		HistoryReadDetails: &ua.ExtensionObject{
@@ -2359,7 +2397,7 @@ func (c *Client) HistoryReadProcessed(ctx context.Context, nodes []*ua.HistoryRe
 		},
 	}
 
-	return send[ua.HistoryReadResponse](ctx, c, req)
+	return c.historyRead(ctx, req)
 }
 
 func (c *Client) HistoryReadAtTime(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadAtTimeDetails) (*ua.HistoryReadResponse, error) {
@@ -2378,7 +2416,22 @@ func (c *Client) HistoryReadAtTime(ctx context.Context, nodes []*ua.HistoryReadV
 		},
 	}
 
-	return send[ua.HistoryReadResponse](ctx, c, req)
+	return c.historyRead(ctx, req)
+}
+
+// historyRead sends a HistoryRead request and decodes, with the
+// DynamicTypeDecoding option, the values and events of its results.
+func (c *Client) historyRead(ctx context.Context, req *ua.HistoryReadRequest) (*ua.HistoryReadResponse, error) {
+	res, err := send[ua.HistoryReadResponse](ctx, c, req)
+	if err != nil || res == nil {
+		return res, err
+	}
+	for _, r := range res.Results {
+		if r != nil {
+			c.decodeResponse(ctx, r.HistoryData, true)
+		}
+	}
+	return res, nil
 }
 
 // HistoryUpdateData updates historical data values for one or more nodes.

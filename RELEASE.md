@@ -5,7 +5,13 @@
 **Date:** 2026-11-28
 **Previous release:** v1.42.1
 
-The first item of phase 3 of docs/roadmap.md: the server gives every Structure, Union, Enumeration and OptionSet DataType its DataTypeDefinition Attribute, from the Definition of the NodeSet it imports.
+Phase 2 of docs/roadmap.md and items of phase 3.
+
+- Generated Method contracts, with their pilot, Part 20 files. A generator emits typed contracts of Methods from the NodeSet; a public FileType and FileDirectoryType on the server and in a new client package `filetransfer` are built on them, and the four FileType implementations of the library (the TrustLists of push management and `ServeTrustList`, the PubSubConfiguration file, the UAFX ConnectionManagerConfiguration) and the clients of their files now share them.
+- The server gives every Structure, Union, Enumeration and OptionSet DataType its DataTypeDefinition Attribute, from the Definition of the NodeSet it imports. A client decodes the Structures and Unions it has no Go type for with that Attribute, opt in (`opcua.DynamicTypeDecoding`).
+- HistoryRead processed with the Part 13 Aggregates: the new package `server/aggregate` calculates every standard Aggregate of OPC 10000-13 §5.4.3 but AnnotationCount, for the built-in `*Historian` and for any `HistoryProvider` that has raw reads only. Its evidence is Annex A: the tests calculate all 1358 rows of the 159 example tables of AggregateExamples.csv (pinned in `schema/manifest.json`); 1294 match the file in value, timestamp and StatusCode, and the 64 others are rows where the file conflicts with a clause and the package follows the clause, each listed with it. A monitored item with an AggregateFilter (Part 4 §7.22.4) calculates the same Aggregates the same way, once per publishing interval.
+- The client session keep-alive while idle: a connected client keeps its session open when it sends nothing, and notices a connection that is gone without being closed (on by default, `SessionKeepAlive(0)` turns it off).
+- The server reports changes of its address space in GeneralModelChangeEvents and SemanticChangeEvents and maintains the NodeVersion of its nodes, and it has a NamespaceMetadata Object for each namespace, whose DefaultRolePermissions and DefaultAccessRestrictions apply to the nodes without their own.
 
 ### Added
 
@@ -13,17 +19,180 @@ The first item of phase 3 of docs/roadmap.md: the server gives every Structure, 
   - StructureDefinition: BaseDataType is the direct supertype; DefaultEncodingId the DataTypeEncoding with the BrowseName `0:Default Binary` (Part 3 §5.8.3), null for an abstract DataType ("If the DataType is abstract the DefaultEncodingId shall be null", §8.48) and for one without that encoding; StructureType from IsUnion, IsOptional and AllowSubTypes by OPC 10000-6 §F.12 Table F.13, over the inherited fields as well, as "the subtypes extend the EncodingMask defined for the parent" (Part 6 §5.2.7); a StructureField per field with its Name, Description, DataType (an alias resolved, BaseDataType when absent), ValueRank, ArrayDimensions (one 0, "unknown", per dimension when the NodeSet gives none; null for a scalar, Part 3 §8.51), MaxStringLength and IsOptional, which is the field's IsOptional in a StructureWithOptionalFields, its AllowSubTypes in a StructureWithSubtypedValues or UnionWithSubtypedValues and false otherwise (§8.51). Union (`i=12756`) and its subtypes are unions.
   - EnumDefinition: an EnumField per field with its Name, Value, DisplayName and Description (Part 3 §8.50, §8.52); for an OptionSet the Value is the number of the bit, as the NodeSet writes it. A subtype of an Enumeration without a Definition of its own has the fields of its supertype.
   - A Definition that cannot be mapped is logged at Warn and the DataType has no Attribute; the import goes on. These are a combination of flags Table F.13 does not have ("Any combination of flags that does not have a mapping is invalid and an error should be raised"), a field DataType that is no NodeId or alias, a ValueRank that is neither -1 nor ≥ 1 ("It shall be Scalar (-1) or a fixed rank Array (>=1)", §8.51), ArrayDimensions with another number of dimensions than the ValueRank or that are not UInt32s, a Definition with fields on a DataType that is no Structure, Enumeration or OptionSet (Part 6 §F.11) and a Structure whose supertype has no StructureDefinition.
+- `server/aggregate`: `Request` (Aggregate, Start, End, ProcessingInterval, `Config`) with `Check`, `Intervals`, `Interval`, `Window`, `Calculate` and `CalculateIntervals`; `Config` with `DefaultConfig`, `Valid`, `Override` and `AggregateConfiguration`; `Supported`, `Functions`, `Name` and `Description`. It implements the intervals of Part 13 §5.4.2.2 (Table 49, reverse reads, ProcessingInterval 0), Interpolated and Simple Bounding Values (§3.1.8, §3.1.9) with sloped and stepped interpolation and extrapolation, the PercentValues and PercentTime StatusCode calculation (§5.4.3.2), the Partial bit (§5.3.3.2), the EffectiveEndTime of a 1 ms resolution (§5.4.2.4) and the result types of Table 50.
+- `ua`: the HistorianBits of Part 4 §7.38.1, Table 177: `StatusCodeHistorianCalculated`, `StatusCodeHistorianInterpolated`, `StatusCodeHistorianDataLocation`, `StatusCodeHistorianPartial`, `StatusCodeHistorianExtraData`, `StatusCodeHistorianMultiValue` and `StatusCodeHistorianBits`.
+- server: `AggregateConfigProvider` (the configuration of a Variable's Aggregates) and `AggregateFunctionLister` (the Aggregates of a `ProcessedHistoryReader`); `Historian.SetAggregateConfig`, `Historian.AggregateConfig` and `Historian.AggregateFunctions`.
+- server: the AggregateFunctions folder of the HistoryServerCapabilities organizes the Aggregates of the history provider (Part 11 §5.7.2) and follows `SetHistorian`; the AggregateFunction Objects have the Description of Part 13 Table 5 (mandatory, §4.2.2.2).
+- server: the AggregateFilter of a data monitored item (Part 4 §7.22.4). The item keeps its samples as raw values. When the publishing timer expires it queues one value per completed interval: "The MonitoredItem only reports values for intervals that have completed when the publish timer expires". The value is calculated as a HistoryRead over the same raw values would calculate it ("in the same manner as a historical read with the Partial Bit set", Part 13 §4.3.2). Its ServerTimestamp is the end of the interval. The `AggregateFilterResult` returns the revised startTime, processingInterval and aggregateConfiguration:
+  - a processingInterval of 0 becomes the publishing interval (Part 13 §5.4.3.1), at least 100 ms and twice the revised sampling interval (Part 4 Table 147), at most a day;
+  - the startTime becomes the first boundary startTime + n × processingInterval after the creation;
+  - the configuration of the Variable comes from the history provider (Part 13 §4.3.1).
+- server: the AggregateFunctions folder of the ServerCapabilities (Part 5 §6.3.2) organizes the 36 Aggregates a monitored item can use.
+- `cmd/methods` (run by `make gen`, checked by `make check-gen`): emits the
+  contracts of the Methods of the ObjectTypes `cmd/methods/config.go`
+  selects, from the InputArguments and OutputArguments of the pinned
+  NodeSet, into `uamethod/methods_gen.go`.
+- Package `uamethod`: for FileType and FileDirectoryType (OPC 10000-20
+  §4.2, §4.3), a `Method` value per Method (NodeIds of the Method and its
+  ObjectType, clause, Mandatory, `InputArguments` / `OutputArguments`),
+  Input and Output structs with `Pack` and `Unpack` (the argument count,
+  built-in type and ValueRank checks of the Call service, as
+  `*ArgumentError` with `Bad_ArgumentsMissing`, `Bad_TooManyArguments` or
+  `Bad_TypeMismatch`), and `Call<Type><Method>` functions for a client
+  (`*CallError` for a Bad result).
+- `server`: `AddFile`, `ServeFile` and `NewFile` serve a FileType Object
+  (`FileObject`): per-session handles closed at the end of the session,
+  the Open rules of §4.2.2 (Table 4 modes, several readers, one writer,
+  `Bad_NotWritable` / `Bad_NotReadable`), Read, Write, GetPosition,
+  SetPosition, the Properties Size, Writable, UserWritable, OpenCount,
+  MaxByteStringLength, MimeType and LastModifiedTime; `FileConfig` with
+  Modes, MaxHandles, Authorize and OnChange; backends `MemoryFile`,
+  `OSFile`, `SnapshotFile` or your own `FileBackend`; `OpenBytes` and
+  `CloseAndTake` for subtypes with Methods of their own.
+- `server`: `AddFileDirectory` serves a file system of FileDirectoryType
+  Objects (§4.3) with CreateDirectory, CreateFile, Delete and MoveOrCopy,
+  on a `MemoryDirectory`, an `OSDirectory` (`os.OpenRoot`) or your own
+  `DirectoryBackend`, with an Authorize hook per operation and path.
+- Package `filetransfer`: the client of FileType (`NewObject`, `Open`,
+  `Read`, `Write`, `Position`, `SetPosition`, `Close`, `ReadAll`,
+  `WriteAll`, `Info`, `io.Reader` and `io.Writer` adapters, `Attach` for a
+  handle of OpenWithMasks or CreateFile, `ObjectFunc` for an own call path)
+  and of FileDirectoryType (`NewDirectory`, `Entries`, `CreateDirectory`,
+  `CreateFile`, `Delete`, `MoveOrCopy`).
+
+### Changed
+
+- server: a HistoryRead `ReadProcessedDetails` reads `aggregateType[i]` for node `i` (Part 11 §6.5.4.2); it read the first Aggregate for every node.
+- server: for a provider without `ProcessedHistoryReader` the server calculates the Aggregates from `ReadRaw`, over one ProcessingInterval beyond the request on each side, following the provider's continuation points.
+- client: `HistoryReadProcessed` asks for source timestamps (TimestampsToReturn Source, Part 13 §5.4.3.1); it asked for Both.
+- The TrustList objects of push management and `ServeTrustList`, the
+  PubSubConfiguration file and `fxserver`'s ConnectionManagerConfiguration
+  use `server.FileObject` for their FileType Methods; `gds.ReadTrustList`,
+  `gds.WriteTrustList`, `remote.ReadConfiguration` and
+  `remote.UpdateConfiguration` use `filetransfer` (their errors stay
+  `*gds.Error` and `*remote.Error`).
+- `opcua.DynamicTypeDecoding(true)`: the values of `Read` (`ReadValue`, `ReadValues`, `Node.Value`), the output arguments of `Call` and `CallMethod`, the results of `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime` and `HistoryReadEvent` and the data changes and events of subscriptions hold, for a binary ExtensionObject of a type without a registered Go type, a `*ua.DynamicStructure` decoded with the StructureDefinition of its DataType (OPC 10000-3 §5.8.3, §8.48 to §8.52). The client finds the DataType of the encoding by its inverse HasEncoding Reference and reads the DataTypeDefinition, BrowseName and IsAbstract of it and of the DataTypes of its fields, and the supertypes of the DataTypes without a StructureDefinition to find their built-in type (Part 3 §5.8.2), in Reads of 30 operations and Browses of 10 nodes (below MaxNodesPerRead and MaxNodesPerBrowse, Part 5 §6.3.11, of the go-opcua server). The DataTypes are kept by namespace URI for the lifetime of the client, and given the indexes of the current namespace table; "the content of this Attribute shall not be changed once it had been provided to Clients" (§5.8.4). An encoding the server cannot resolve is not asked again until the namespace table changes; a failed request is tried again with the next value. A registered Go type comes first, also for a field. A value that cannot be decoded keeps its `RawBody`, and the call does not fail; a Read result that is decoded keeps the status of the server instead of `StatusBadDataTypeIDUnknown`.
+- `Client.LoadDataTypes`, `Client.DecodeExtensionObjects` and `Client.DynamicTypes`: resolve DataTypes, decode values on request (also without the option), and make values to write or pass to a Method (`DynamicTypes().New(dataTypeID)`, `Set`, `ua.NewExtensionObject(v)`).
+- `ua.DynamicTypes`, `ua.DynamicType`, `ua.DynamicStructure`, `ua.DynamicMatrix` and `ua.UndecodedBody`: the OPC UA Binary codec of a StructureDefinition, for use without a client. Structures (OPC 10000-6 §5.2.6, a nil field is its default value), optional fields with the UInt32 EncodingMask (§5.2.7; bits of no optional field are an error), Unions with the UInt32 SwitchField (§5.2.8; a value beyond the fields is an error), the subtyped values of Table F.13 (a Structure in an ExtensionObject, any other DataType in a Variant), arrays and inline matrices (§5.2.5, Table 28), Enumerations as Int32 (§5.2.4), OptionSets of a UInteger and of the OptionSet Structure, simple DataTypes as their built-in type, Number, Integer, UInteger and BaseDataType in a Variant (§5.1.6), Structure and Decimal in an ExtensionObject (§5.1.7, §5.1.10), nested ExtensionObjects of the set. Every array length is checked against the remaining input before the slice is allocated, nesting is bounded by `ua.MaxBinaryNestingDepth`, and a body must be consumed to its end. An ExtensionObject in a field that nothing decodes keeps its body as a `[]byte` Value, so that the Structure encodes back unchanged.
+- The JSON and XML encoders write a `*ua.DynamicStructure` as a binary body (OPC 10000-6 §5.4.2.16, §5.3.1.16), and `ua.ExtensionObjectTypeID` gives its DefaultEncodingId.
+- Not supported by the dynamic decoding: a DataTypeDictionary (OPC 10000-5 Annex D) and JSON-encoded bodies of the UA JSON transports (the JSON decoder fails on an ExtensionObject of an unknown type with a JSON body, as before). Both are in LIMITATIONS.md.
+
+- client: `SessionKeepAlive(d)`, the session keep-alive. When the session of a client that `Connect` connected has had no request for half the revised session timeout, or for `d` when that is shorter, the client reads the State of the ServerStatus (`i=2259`). "Clients shall be prepared to submit requests in a timely manner to prevent the Session from closing automatically" (OPC 10000-4 §5.7.2.1), and without a Subscription "the connection can be monitored by periodically reading the State Variable" (Part 4 §6.7). Every request of the session counts, Publish requests too. A keep-alive without response within the `RequestTimeout` (`Bad_Timeout`), or answered with `Bad_SessionClosed`, which a server returns to the outstanding requests of a session it terminates (§5.7.2.1), is handled as a lost connection: `Disconnected`, then with `AutoReconnect` the recovery of a broken connection. Any other answer changes nothing. `SessionKeepAlive(0)` turns it off, a negative interval is an error, and an interval at or above the revised session timeout is replaced by half of it. Neither clause says when to send the request or what to do when it fails; that is this client's design (docs/client-guide.md, Session keep-alive).
+- server: GeneralModelChangeEvents (Part 3 §9.32, Part 5 §6.4.32) for the AddNodes, DeleteNodes, AddReferences and DeleteReferences services and for the Go API (`NodeNameSpace.AddNode`, `DeleteNode`, `Node.AddRef`, `AddReference`, `AddObject`, `AddVariable`, `RemoveRef`), and for a change of the DataType of a Variable or VariableType by Write or `Node.SetAttribute`. "Only those Nodes of the AddressSpace having a NodeVersion shall trigger a ModelChangeEvent", and "every time a ModelChangeEvent is issued for a Node, its NodeVersion shall be changed" (Part 3 §9.32.2): the server increments the NodeVersion Property of each node it reports (Part 3 §5.5.1, §5.6.2) and reports no node without one. Each change is a ModelChangeStructureDataType with the verbs NodeAdded, NodeDeleted, ReferenceAdded, ReferenceDeleted and DataTypeChanged, both ends of a bidirectional Reference (Part 5 §12.16). The events go to the Server Object, with SourceName `Server` and Severity 1 (Part 3 §9.32.3, Part 5 §6.4.31). Our choices: a service request, or a call of the Go API, is one event with each node once and its verbs ORed (the compression of Part 3 §9.32.4, §9.32.7); a node added or deleted keeps its NodeVersion; a NodeVersion is a decimal counter; a change of the ValueRank or ArrayDimensions of a Variable, which changes its NodeVersion (Part 3 §5.6.2) but has no verb, is a BaseModelChangeEvent without Changes; an import reports nothing.
+- server: `NodeNameSpace.AddNodeVersion(n)` gives a node a NodeVersion Property, "0"; `WithNodeVersionOnAddNodes(true)` gives one to every node AddNodes adds (off by default), and DeleteNodes deletes it with its node.
+- server: SemanticChangeEvents (Part 3 §9.33, Part 5 §6.4.33, §12.17): when the Value of a Property whose AccessLevel has the SemanticChange bit changes, by Write or `Node.SetAttribute`, the server reports the node owning the Property and sets the SemanticsChanged bit of the next data change Notification of each monitored item of that node (Part 3 §5.6.2, Part 4 §7.38.1); a Notification a full queue drops passes the bit on. The NodeVersion does not change (Part 3 §9.33.2).
+- server: a NamespaceMetadata Object (Part 5 §6.3.13) in the Namespaces Object of the Server for every namespace of a `NodeNameSpace` that has none from its NodeSet, created at `Start` or, for a namespace added later, at once, with the NodeId `s=NamespaceMetadata` (numeric in the namespace of the session diagnostics, whose string NodeIds name sessions). It has the mandatory Properties, NamespaceVersion, NamespacePublicationDate and ModelVersion from the `Model` of the imported NodeSet (null without one), IsNamespaceSubset FALSE for a namespace of the program and TRUE for one an import added ("If the completeness is unknown, this Property shall be set to TRUE"), and the static NodeId Properties empty; the server fills the missing Properties of a NodeSet's own Object the same way.
+- server: `Server.SetNamespaceDefaults(uri, NamespaceDefaults)` and `Server.NamespaceDefaults(uri)`: the DefaultRolePermissions, DefaultUserRolePermissions and DefaultAccessRestrictions of a namespace, published in its NamespaceMetadata Object and applied to its nodes without RolePermissions or AccessRestrictions of their own (Part 3 §4.9.3, §5.2.9 to §5.2.11): the RolePermissions under the `RBACAccessController`, the AccessRestrictions under every controller. "The DefaultRolePermissions Property ... shall only be readable by administrators" (Part 3 §5.2.9): ConfigureAdmin and SecurityAdmin; DefaultUserRolePermissions is reduced to the roles of the session. A node imported with `HasNoPermissions` is exempt (Part 6 §F.3).
 
 ### Behaviour changes
 
 - server: Read of the DataTypeDefinition Attribute of a Structure, Union, Enumeration or OptionSet DataType returns its StructureDefinition or EnumDefinition, where it returned `Bad_AttributeIdInvalid` for every DataType; 250 DataTypes of namespace 0 have it, and every DataType of the GDS, DI and UAFX models. Read of it on BaseDataType, Structure, Enumeration, Number and the other abstract, built-in and simple DataTypes still returns `Bad_AttributeIdInvalid`: the Attribute is optional for them (Part 3 §5.8.3) and the NodeSet has no fields for them. A value written to the Attribute, or set with `Node.SetAttribute`, replaces the imported one as before. A new server builds the definitions of namespace 0 at start (about 2 % more allocations in `BenchmarkNewServer`).
+- `Historian.ReadProcessed` calculates all 36 Aggregates with the rules of Part 13: `Count` is an Int32 (Table 69), not a UInt32; StatusCodes carry the Aggregate bits and the InfoType DataValue (Calculated, Interpolated, Partial, MultipleValues), so a processed value is no longer exactly `Good`; Bad and Uncertain raw values change the status as the PercentDataBad and PercentDataGood of the configuration say; an interval after the end of data is Bad_NoData (or extrapolated, for Interpolative and TimeAverage and Total).
+- Processed reads: an unsupported Aggregate is `Bad_AggregateNotSupported` (was `Bad_HistoryOperationUnsupported`); startTime equal to endTime, a missing time and a negative ProcessingInterval are `Bad_InvalidArgument` (were `Bad_HistoryOperationInvalid`); an endTime before the startTime reads backwards and a ProcessingInterval of 0 gives one interval (both were refused); an invalid aggregateConfiguration is `Bad_AggregateInvalidInputs`.
+- HistoryRead: a `ReadProcessedDetails` whose aggregateType does not have one entry per node to read is the service result `Bad_AggregateListMismatch`; TimestampsToReturn Server or Neither is `Bad_TimestampsToReturnInvalid` per node.
+- A custom provider with `ReadRaw` only now answers processed reads instead of `Bad_HistoryOperationUnsupported`, and the AggregateFunctions folder lists the Aggregates for it.
+- A monitored item with an AggregateFilter is created where it was refused with `Bad_MonitoredItemFilterUnsupported`. An Aggregate the server does not calculate is `Bad_AggregateNotSupported`, an attribute other than Value `Bad_FilterNotAllowed`, and an invalid aggregateConfiguration `Bad_MonitoredItemFilterInvalid`. TimestampsToReturn Server or Neither is `Bad_TimestampsToReturnInvalid` for the item (Part 13 §5.4.3.1); Both is accepted.
+- The Description of the AggregateFunction Objects in namespace 0 is set, and the AggregateFunctions folder of the ServerCapabilities organizes them. `server/testdata/nodeset_golden.txt` is rewritten for both: the digests of those 37 nodes change, with 72 more References of namespace 0, and nothing else.
+- Read with a length of zero is `Bad_InvalidArgument` on every file
+  (OPC 10000-20 §4.2.4, Table 6: "Only positive values are allowed"); the
+  TrustList, PubSubConfiguration and ConnectionManagerConfiguration files
+  returned an empty ByteString.
+  A client that wants the old result treats `Bad_InvalidArgument` of a Read
+  of length 0 as an empty read.
+- ConnectionManagerConfiguration: an Open for writing beside another handle
+  is `Bad_NotWritable` and an Open for reading beside a writer
+  `Bad_NotReadable` (§4.2.2), not `Bad_InvalidState`; a negative Read
+  length is `Bad_InvalidArgument` (§4.2.4), not `Bad_InvalidState`; an Open
+  outside a session is `Bad_SessionIdInvalid`. A client that matched
+  `Bad_InvalidState` matches the new codes.
+- Specification and resource-lifecycle fix, with no option to restore the
+  old behaviour: the end of a session closes its file handles and cancels
+  its push transaction at once. "When a client opens a file it gets a file
+  handle that is valid while the session is open" (OPC 10000-20 §4.2.2),
+  and OpenCount is "the number of currently valid file handles" (§4.2.1);
+  "Transactions are automatically cancelled when the Session that created
+  it is closed" (OPC 10000-12 §7.10.2), and "all pending changes are
+  discarded" (§7.10.9). The TrustList, push and PubSubConfiguration files
+  kept the handles of an ended session, with their buffers and the lock of
+  a writer, until the next Open or OpenCount found them; a push transaction
+  of an ended session stayed in the TransactionDiagnostics until another
+  session started one. Neither was ever applied. Now a CloseSession, a
+  session timeout, `Server.CloseSession`, a session the server reclaims and
+  the shutdown of the server release the handles, buffers and locks of
+  every FileType object of the server (TrustLists, push certificate groups,
+  PubSubConfiguration, ConnectionManagerConfiguration, `AddFile`,
+  `AddFileDirectory`), discard what was written without CloseAndUpdate,
+  and end the push transaction with `Bad_SessionClosed`. A renewed
+  SecureChannel and a broken connection after which the client activates
+  the session again keep its handles.
+- The `gds` and `pubsub/remote` clients check the output arguments of the
+  FileType Methods against their declarations: an Open whose FileHandle is
+  not a UInt32, or a Read whose Data is not a ByteString, is an
+  `*uamethod.ArgumentError` (`Bad_TypeMismatch`); a Read result of another
+  type was taken as the end of the file. `gds.ReadTrustList` beyond 64 MiB
+  says `filetransfer: the file exceeds 67108864 bytes`.
+- client, with `opcua.DynamicTypeDecoding` only (nothing changes without it): a Read result of a type that is decoded has the status of the server, not `StatusBadDataTypeIDUnknown`, and the first value of a new type costs a Browse, and a Read and a Browse per batch of DataTypes, during the call (in the publish loop for a subscription; while a reconnect recovers the subscriptions only the types resolved before are used, and a value is left undecoded rather than wait for a resolution in progress).
+
+- client: a client that `Connect` connected sends a Read of the ServerStatus State when its session has been idle for half the revised session timeout (10 minutes with the default `SessionTimeout` of 20 minutes, if the server keeps it), where its session used to time out on the server; a connection that is gone without being closed now ends in `Disconnected` (and a reconnect with `AutoReconnect`) at the next keep-alive, where it was noticed at the next request of the application only. `SessionKeepAlive(0)` restores the behaviour of v1.42.1. `ClientMetrics` counts the keep-alive as a `Read`.
+- server: model change events are on (Part 3 §9.32.2 "shall"): a node with a NodeVersion Property, from its NodeSet or `AddNodeVersion`, gets a new NodeVersion with each change of its References, and a GeneralModelChangeEvent goes to the Server Object; a Property with the SemanticChange bit gives SemanticChangeEvents and the SemanticsChanged bit. A server without such nodes sees no difference. `WithModelChangeEvents(false)` restores the behaviour of v1.42.
+- server: the RolePermissions and AccessRestrictions of the `Model` of an imported NodeSet are the defaults of the nodes of its model ("The list of default RolePermissions for all Nodes in the model", Part 6 §F.2 Table F.1), where they were ignored: under the `RBACAccessController` a node without RolePermissions is checked against them, and every service applies the AccessRestrictions to a node without its own. None of the NodeSets the library ships (namespace 0, GDS, DI, UAFX) has them. `WithModelDefaultPermissions(false)` restores the behaviour of v1.42. A namespace without defaults behaves as before.
+- server: Browse of the Namespaces Object (`i=11715`) of a started server lists a NamespaceMetadata Object for every `NodeNameSpace` of the program and of the imports, where it listed only those of the NodeSets.
+### Fixed
+- server: `NodeNameSpace.GetNextNodeID` set the start of its sequence with a plain store, a data race with concurrent callers (AddNodes requests of two sessions); it is a compare-and-swap.
 
 ### Tests
 
 - `TestDataTypeDefinition_Namespace0` (`server`): BuildInfo, EUInformation, NodeClass, AccessLevelType, OptionSet, Union, UserIdentityToken and its subtypes, LogRecord (optional fields) and PublishedDataSetDataType (subtyped values) against their NodeSet definitions; every subtype of Structure and Enumeration has the Attribute; BaseDataType, Structure, Enumeration, Number, Int32, String, Duration, UtcTime and Image have none. `TestDataTypeDefinition_Read`: the same over the wire with the go-opcua client.
 - `TestDataTypeDefinition_CompanionModels`: the GDS, DI and UAFX models imported at the namespace indexes of the server (the field DataTypes, supertypes and encodings in the server's namespaces), a union, a union with subtyped values, optional fields, and the Attribute on every DataType of the models.
 - `TestDataTypeDefinition_Import`, `TestDataTypeDefinition_Invalid`, `TestDataTypeDefinition_SupertypeOfAnotherImport`, `TestDataTypeDefinition_Cycle` and `TestDataTypeDefinition_Guards`: a NodeSet imported at its own and at another namespace index, inherited fields over two levels, arrays with and without ArrayDimensions, a matrix, a field without DataType, an enumeration and its subtype, an OptionSet of a UInt32, abstract types and a type without encoding, a supertype of another import and of the program, and every Definition that cannot be mapped.
-- `TestImportedAddressSpaceGolden`: `testdata/nodeset_golden.txt` is rewritten for the Attribute; the dumps of the address space differ from those of v1.42.0 by the added Attribute 23 of 250 nodes of namespace 0 and of 84 nodes of the GDS, DI and UAFX models, and in nothing else.
+- `TestImportedAddressSpaceGolden`: `testdata/nodeset_golden.txt` is rewritten for the Attribute; the dumps of the address space differ from those of v1.42.0 by the added Attribute 23 of 250 nodes of namespace 0 and of 84 nodes of the GDS, DI and UAFX models, and by the Description of the 36 AggregateFunction Objects of namespace 0 and the 36 Organizes References of the AggregateFunctions folder of the ServerCapabilities to them (see the Aggregates above), and in nothing else.
+- `TestAnnexExamples` (`server/aggregate`): every processed table of Annex A from its raw data set and configuration; `deviations_test.go` holds the 64 rows that follow a clause, with the clause, and the test fails on a deviation that matches no row.
+- `TestIntervals`, `TestWindow`, `TestReverse` (the same values backwards and forwards, §5.4.2.2), `TestNoData`, `TestGaps`, `TestInvalidInputs`, `TestBounds`, `TestBoundsReverse`, `TestActualTimeReverse`, `TestCheck`, `TestConfig`, `TestNumberAndCast`, `TestCalculateIntervals`, `TestFunctions`, and the fuzz target `FuzzCalculate` (`server/aggregate`, 100 % statement coverage).
+- `TestHistoryReadProcessed`, `TestProcessedRequest` and `TestHistoryAggregateFunctions` (`server`): one Aggregate per node, the list mismatch, timestamps, raw reads in pages, the provider's configuration and its override, errors, and the AggregateFunctions folder through `SetHistorian`.
+- `TestHistory_ReadProcessed` and `TestHistory_CustomProvider` (`conformance/history`): seven Aggregates with their status bits, reverse reads, one interval, invalid arguments, the list mismatch and the AggregateFunctions folder over the wire; processed reads of a provider with raw reads only.
+- `TestAggregateFilter_SameAsHistoryRead` (`server`): eleven Aggregates of each kind, over Good, Uncertain and Bad values in two calculations. Each value of a monitored item equals the value of a HistoryRead of the Historian over the same raw values, in Status, SourceTimestamp and Value, and its ServerTimestamp is the end of the interval. `TestAggregateFilter_Services`, `TestAggregateFilter_ProviderConfig`, `TestNewAggregateItem`, `TestReviseProcessingInterval`, `TestReviseAggregateStart`, `TestAggregateItemRecord`, `TestAggregateItemPrune`, `TestAggregateFilter_NotCalculated`, `TestAggregateFilter_SkipsUnreachableIntervals` and `TestAggregateFilter_SourceTimestamps` cover the revisions, every error, Modify to and from a DataChangeFilter, SetMonitoringMode, the configuration of the provider, arrays and the bounds.
+- `TestAggregateFilter_Wire` and `TestAggregateFilter_Errors` (`conformance/subscription`): the AggregateFilterResult and Count values over the wire, with their timestamps and bits, until every write is counted; the ServerCapabilities AggregateFunctions folder; the operation results. `TestDataChange_FilterErrors` expects `Bad_TimestampsToReturnInvalid` for its AggregateFilter with TimestampsToReturn Neither.
+- `uamethod`: round trips of every contract; wrong count, type, ValueRank
+  and null for each argument; the helpers of every ValueRank of Part 3
+  §5.6.2 and of structures; the call functions against a fake caller;
+  `FuzzUnpack`.
+- `server`: FileType conformance (`TestFileOpenModes`, `TestFileHandles`,
+  `TestFileReadWritePosition`, `TestFileSessionEnd`, `TestFileOpenRace`,
+  `TestFileBackendErrors`, `TestFileCloseAndTake`, `TestFileProperties`,
+  `TestFileMethodHandlers`, `TestOSFile`), `TestAddFile`, and
+  FileDirectoryType (`TestFileDirectory`, `TestFileDirectoryBackendErrors`,
+  `TestMemoryDirectory`, `TestOSDirectory`).
+- `filetransfer`: the client against a server (`TestFile`,
+  `TestFileOfType`, `TestDirectory`) and `TestObjectFunc`.
+- The end of a session (`server`): `TestFileSessionEndPaths` and
+  `TestPushSessionEndCancelsTransaction` run each end (CloseSession,
+  timeout, `Server.CloseSession`, reclaim, shutdown) and check the handles,
+  the count, the lock of a writer and the push transaction right after it,
+  without another Open, and that nothing written without CloseAndUpdate is
+  applied; `TestFileSessionEndConcurrent` ends sessions concurrently with
+  CloseAll, Close and Open of other sessions (`-race`).
+  `TestFileHandleSurvivesChannel` (`filetransfer`): handles stay valid
+  across a token renewal and a dropped connection the client recovers
+  from, and the writer keeps its lock.
+- `cmd/methods`: the committed output, the next families
+  (`TestNextFamilies`), load errors and clauses. CI and the release
+  workflow run the tests of `cmd/` (policy CI-005); they excluded it.
+- No interop ledger rows: the FileType Methods are tested against go-opcua
+  only; the interop suite reads TrustLists of the peers through the
+  migrated `gds` client.
+- `TestDynamicTypeDecoding_Read`, `_Off`, `_Namespaces`, `_Call`, `_History` and `_Subscription` (package `opcua`, against the go-opcua server with a NodeSet of its own): a Structure with nested, array, matrix, Union, optional-field, Enumeration, Variant and EUInformation (Go type) fields; arrays of ExtensionObjects; a field that allows subtypes holding a subtype resolved in a second round; simple DataTypes, an OptionSet of a UInt32 and a subtype of OptionSet; a malformed body and an unknown encoding that keep their RawBody; a registered Go type next to the dynamic ones; the option off; the namespace table reordered and a second server with the namespace at another index; a Method that receives and returns a dynamic structure; HistoryRead; a subscription.
+- `TestDynamicTypes_Supertypes`, `_Unusable`, `_Faults`, `_ResolveLimits`, `_Busy`, `_NamespaceTable` and `_Collect` (a server that answers from tables): chains, cycles and missing supertypes, definitions the client cannot use, failed and short Reads and Browses, the limit of resolutions per value and of DataTypes per resolution.
+- `TestDynamicTypes_Add`, `TestDynamicStructure_RoundTrip`, `_Defaults`, `_Part6Samples` (the encodings of OPC 10000-6 Table 32 and Table 33, byte for byte), `_SubtypedValues`, `TestDynamicTypes_DecodeErrors`, `_NestingDepth`, `_HostileLengths` (a 46340 × 46340 matrix and an array of MaxInt32 GUIDs in a few bytes allocate less than 1 MiB), `TestDynamicStructure_EncodeErrors`, `_EncodeArrayTooLarge` (an array of MaxInt32 + 1 Booleans is refused before it is encoded), `_TypeID`, `_JSONAndXML`, `TestUndecodedBody` and `TestDynamicTypes_CodecOf` (package `ua`).
+- `FuzzDynamicTypes` (package `ua`): untrusted bodies of nine DataTypes; what decodes encodes and decodes again.
+- `TestDynamicTypes_GoToGo` (`conformance`): a value made from the DataTypeDefinition, read with the option and decoded on request without it.
+
+- `TestSessionKeepAliveKeepsIdleSessionOpen`, `TestSessionKeepAliveOnlyWhenIdle`, `TestSessionKeepAliveDeadConnection`, `TestSessionKeepAliveDeadConnectionNoReconnect`, `TestSessionKeepAliveSessionClosed`, `TestSessionKeepAliveServerAnswers`, `TestSessionKeepAliveWithoutSession` and `TestSessionKeepAliveCloseRace` (root package, against the in-process server): an idle client keeps its session past two session timeouts and one with the keep-alive off loses it, a client in use sends none, a connection that drops everything is noticed and recovered with the same session (and without AutoReconnect ends Disconnected), `Bad_SessionClosed` makes the client recover, another fault changes nothing, nothing is sent after `CloseSession`, and Close from several goroutines during keep-alives and requests (race detector, goroutine leak check). `TestKeepAliveStep`, `TestKeepAliveFailed`, `TestKeepAliveInterval`, `TestSessionKeepAliveOption`, `TestStartKeepAliveOff` and `TestStartKeepAliveStops`: the interval, the states in which nothing is sent, which failures reach the connection monitor (not those of a replaced session or secure channel, or during a recovery; a pending error is not blocked on), and the option.
+- `TestSession_TimeoutEnforced` (`conformance/session`): the idle client turns the keep-alive off, as its session is to time out.
+- `TestModelChangeEventsOverTheWire` (`server`): a go-opcua client with an event monitored item on the Server Object receives the GeneralModelChangeEvent of each of AddNodes, AddReferences, DeleteReferences and DeleteNodes and of `RemoveRef`, with the verbs per node, and reads the NodeVersion going from "0" to "5"; `TestSemanticChangeOverTheWire`: the SemanticChangeEvent of a Write of an EngineeringUnits Property with the SemanticChange bit and the SemanticsChanged bit on the data change Notification of its Variable; `TestModelChangeRestoreOverTheWire`: no event with `WithModelChangeEvents(false)`.
+- `TestModelChangeGoAPI`, `TestModelChangeAttributes`, `TestModelChangeNodeManagementBatch`, `TestModelChangeAddNodesWithoutNodeVersion`, `TestModelChangeImportReportsNothing`, `TestModelChangeDisabled`, `TestSemanticChange`, `TestSemanticsChangedOverflow`, `TestNodeVersionHelpers` and `TestModelChangeConcurrent` (under `-race`): every Go API call and service, one event per request, nodes without NodeVersion not reported, DataType, ValueRank and ArrayDimensions changes, a NodeVersion that is not a number, an unchanged value, the SemanticsChanged bit through both queue discard policies and a queue of one, and a request that changes nothing, which reports nothing.
+- `TestNamespaceDefaultsOverTheWire`: the NamespaceMetadata Object of a namespace of the program over the wire, a Read denied and allowed by the DefaultRolePermissions under the `RBACAccessController`, DefaultRolePermissions denied to an anonymous session, DefaultUserRolePermissions reduced to its roles, DefaultAccessRestrictions refusing a channel without security, and the defaults removed; `TestNamespaceMetadataBrowsable`: an anonymous session browses the NamespaceMetadata Object of every namespace, the diagnostics namespace included, and reads its Properties; `TestNodeMgmt_NodeVersion` (`conformance/addrspace`): the NodeVersion of a node AddNodes adds, changed by AddReferences; `TestModelDefaultsRestoreOverTheWire`: the defaults of a NodeSet Model applied, and not with `WithModelDefaultPermissions(false)`.
+- `TestNamespaceMetadataCreated`, `TestNamespaceMetadataTakenNodeID`, `TestSetNamespaceDefaults`, `TestNamespaceDefaultRolePermissions`, `TestNamespaceDefaultAccessRestrictions`, `TestModelDefaultsFromImport`, `TestModelDefaultsFromImportOff`, `TestModelDefaultsEdgeCases` and `TestNamespaceDefaultsConcurrent` (under `-race`): the Objects of namespaces added before and after Start, a taken NodeId, an unknown URI, `HasNoPermissions`, a node with its own permissions, empty defaults, a role of a Model that is no NodeId and no well-known role, a NodeSet's own NamespaceMetadata Object without its mandatory Properties, an invalid PublicationDate, and `SetNamespaceDefaults` over a Model's.
+- `TestImportedAddressSpaceGolden`: `testdata/nodeset_golden.txt` is unchanged. The NodeSets it imports carry their own NamespaceMetadata Objects with every mandatory Property and no Model defaults, and its servers are not started, so the server adds no node.
 
 ---
 ## v1.42.1

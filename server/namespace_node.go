@@ -26,13 +26,31 @@ type NodeNameSpace struct {
 }
 
 func (as *NodeNameSpace) GetNextNodeID() uint32 {
-	if as.nodeidSequence < 100 {
-		as.nodeidSequence = 100
+	// The sequence starts at 101. A compare-and-swap, not a plain store,
+	// so that concurrent callers (AddNodes requests, AddNodeVersion) do not
+	// race on it.
+	for {
+		cur := atomic.LoadUint32(&as.nodeidSequence)
+		if cur >= 100 || atomic.CompareAndSwapUint32(&as.nodeidSequence, cur, 100) {
+			break
+		}
 	}
 	return atomic.AddUint32(&(as.nodeidSequence), 1)
 }
 
+// NewNodeNameSpace creates a namespace named name (its URI) on srv, with
+// an Objects folder. Once srv has started, the namespace gets its
+// NamespaceMetadata Object under Server.Namespaces (Part 5 §6.3.13);
+// before, Start gives it one.
 func NewNodeNameSpace(srv *Server, name string) *NodeNameSpace {
+	ns := newNodeNameSpace(srv, name)
+	srv.namespaceAdded(ns.ID())
+	return ns
+}
+
+// newNodeNameSpace is NewNodeNameSpace without the NamespaceMetadata
+// Object, for an import, which brings or adds its own.
+func newNodeNameSpace(srv *Server, name string) *NodeNameSpace {
 	ns := &NodeNameSpace{
 		srv:                  srv,
 		name:                 name,
@@ -85,7 +103,20 @@ func NewNameSpace(name string) *NodeNameSpace {
 	return &NodeNameSpace{name: name, m: map[string]*Node{}}
 }
 
+// AddNode adds n to the namespace, in place of a node with the same NodeId.
+// When n has a NodeVersion Property, a GeneralModelChangeEvent reports it
+// (Part 3 §9.32; see [WithModelChangeEvents]).
 func (as *NodeNameSpace) AddNode(n *Node) *Node {
+	as.addNode(n)
+	if mc := as.srv.modelChanges(); mc != nil {
+		mc.noteAdded(n)
+		mc.flush()
+	}
+	return n
+}
+
+// addNode is AddNode without the model change report.
+func (as *NodeNameSpace) addNode(n *Node) *Node {
 	as.mu.Lock()
 	defer as.mu.Unlock()
 
@@ -112,7 +143,18 @@ func (as *NodeNameSpace) AddNode(n *Node) *Node {
 // also from the targets that hold their inverse direction (Part 4 §5.7.4:
 // deleting a Node deletes its References; AddRef records both ends). The
 // references of which it is the target stay with their source nodes.
+//
+// The node, and the targets whose references go, report the change when
+// they have a NodeVersion Property (see [WithModelChangeEvents]).
 func (as *NodeNameSpace) DeleteNode(nid *ua.NodeID) ua.StatusCode {
+	mc := as.srv.modelChanges()
+	st := as.deleteNode(nid, mc)
+	mc.flush()
+	return st
+}
+
+// deleteNode is DeleteNode; it notes the changes in mc.
+func (as *NodeNameSpace) deleteNode(nid *ua.NodeID, mc *modelChanges) ua.StatusCode {
 	as.mu.Lock()
 	k := nid.String()
 	n, ok := as.m[k]
@@ -131,14 +173,15 @@ func (as *NodeNameSpace) DeleteNode(nid *ua.NodeID) ua.StatusCode {
 	}
 	as.mu.Unlock()
 
+	mc.note(n, ua.ModelChangeStructureVerbMaskNodeDeleted)
 	// Without as.mu: the targets may be nodes of this namespace.
-	as.unlinkTargets(n)
+	as.unlinkTargets(n, mc)
 	return ua.StatusGood
 }
 
 // unlinkTargets removes the inverse direction of the forward references of
 // the deleted node n from their targets.
-func (as *NodeNameSpace) unlinkTargets(n *Node) {
+func (as *NodeNameSpace) unlinkTargets(n *Node, mc *modelChanges) {
 	if as.srv == nil {
 		return
 	}
@@ -148,7 +191,9 @@ func (as *NodeNameSpace) unlinkTargets(n *Node) {
 			continue
 		}
 		if t := as.srv.Node(r.NodeID.NodeID); t != nil && t != n {
-			t.removeRefEnd(self, r.ReferenceTypeID, false)
+			if t.removeRefEnd(self, r.ReferenceTypeID, false) {
+				mc.note(t, ua.ModelChangeStructureVerbMaskReferenceDeleted)
+			}
 		}
 	}
 }
