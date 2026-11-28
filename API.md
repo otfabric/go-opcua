@@ -1703,7 +1703,27 @@ SessionId: `ua.StatusBadSessionIDInvalid`.
 func (s *Server) AddNamespace(ns NameSpace) int
 func (s *Server) Namespace(id int) (NameSpace, error)
 func (s *Server) Namespaces() []NameSpace
+func (s *Server) SetNamespaceDefaults(namespaceURI string, d NamespaceDefaults) error
+func (s *Server) NamespaceDefaults(namespaceURI string) (NamespaceDefaults, bool)
+func (as *NodeNameSpace) AddNodeVersion(n *Node) *Node
+
+type NamespaceDefaults struct {
+    RolePermissions       []*ua.RolePermissionType // DefaultRolePermissions; nil: none
+    AccessRestrictions    ua.AccessRestrictionType // DefaultAccessRestrictions,
+    HasAccessRestrictions bool                     // when this is set
+}
 ```
+
+`SetNamespaceDefaults` sets the DefaultRolePermissions,
+DefaultUserRolePermissions and DefaultAccessRestrictions of the
+NamespaceMetadata Object of a namespace (Part 5 §6.3.13), which apply to its
+nodes without RolePermissions or AccessRestrictions of their own (Part 3
+§4.9.3, §5.2.9, §5.2.11): the RolePermissions under the
+`RBACAccessController`, the AccessRestrictions under every controller. A zero
+value removes them; an unknown URI is an error. `AddNodeVersion` gives a node a
+NodeVersion Property, "0", so that the server reports its changes in
+GeneralModelChangeEvents (Part 3 §9.32.2). See the
+[server guide](docs/server-guide.md#namespace-metadata-and-default-permissions).
 
 #### Method registration
 
@@ -1812,6 +1832,9 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `WithSessionObserver(o SessionObserver)` | Told about client connections and sessions as they begin and end; see [SessionObserver](#sessionobserver) |
 | `WithAccessController(ac AccessController)` | Access controller |
 | `EnableNodeManagement()` | Serve AddNodes, AddReferences, DeleteNodes and DeleteReferences (off by default: `Bad_ServiceUnsupported`); every operation is authorized, see [AccessController](#accesscontroller) |
+| `WithModelChangeEvents(enabled bool)` | Maintain the NodeVersion of the nodes that have one and report their changes in GeneralModelChangeEvents, report SemanticChangeEvents and the SemanticsChanged bit (Part 3 §9.32, §9.33; default true); `false` restores v1.42 and earlier. See the [server guide](docs/server-guide.md#model-change-and-semantic-change-events) |
+| `WithNodeVersionOnAddNodes(enabled bool)` | Give every node AddNodes adds a NodeVersion Property, so that its changes are reported (default false) |
+| `WithModelDefaultPermissions(enabled bool)` | Apply the RolePermissions and AccessRestrictions of the Model of an imported NodeSet to its nodes without their own (Part 6 §F.2, §F.3; default true); `false` restores v1.42 and earlier |
 | `WithServerDiagnostics(enabled bool)` | Collect server diagnostics (`Server.ServerDiagnostics`, default true); see the [server guide](docs/server-guide.md#server-diagnostics) |
 | `WithRoleMapper(rm RoleMapper)` | Maps a session's identity token to its role NodeIDs (`RoleMapper func(token ua.IdentityToken) []*ua.NodeID`); used by the default access controller |
 | `ApplicationURI(uri string)` | ApplicationUri of the server; only needed without a certificate (`Certificate` sets it from the URI SAN) |
@@ -2069,8 +2092,8 @@ type NodeManagementAccessController interface {
 
 `RBACAccessController` implements it with the AddNode (on the parent),
 DeleteNode, AddReference and RemoveReference (on the source node) permissions,
-which must be granted explicitly: a node without RolePermissions refuses node
-management. Any other controller, `DefaultAccessController` included, is asked
+which must be granted explicitly: a node without RolePermissions, in a namespace
+without DefaultRolePermissions, refuses node management. Any other controller, `DefaultAccessController` included, is asked
 `CheckWrite` for the node an operation changes (the parent of AddNodes, the
 node of DeleteNodes, the source node of the reference services), and nodes of
 namespace 0 cannot be added, deleted or have their references changed.

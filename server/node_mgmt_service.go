@@ -132,6 +132,10 @@ func (s *NodeManagementService) AddNodes(ctx context.Context, sc *uasc.SecureCha
 	}
 	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
 
+	// The request is one update: one GeneralModelChangeEvent reports the
+	// nodes it adds (model_change.go).
+	mc := s.srv.modelChanges()
+	defer mc.flush()
 	results := make([]*ua.AddNodesResult, len(req.NodesToAdd))
 	for i, item := range req.NodesToAdd {
 		if item == nil {
@@ -149,7 +153,7 @@ func (s *NodeManagementService) AddNodes(ctx context.Context, sc *uasc.SecureCha
 			results[i] = &ua.AddNodesResult{StatusCode: st}
 			continue
 		}
-		results[i] = s.addNode(item)
+		results[i] = s.addNode(item, mc)
 	}
 
 	return &ua.AddNodesResponse{
@@ -166,7 +170,7 @@ func (s *NodeManagementService) AddNodes(ctx context.Context, sc *uasc.SecureCha
 	}, nil
 }
 
-func (s *NodeManagementService) addNode(item *ua.AddNodesItem) *ua.AddNodesResult {
+func (s *NodeManagementService) addNode(item *ua.AddNodesItem, mc *modelChanges) *ua.AddNodesResult {
 	if item.RequestedNewNodeID == nil || item.RequestedNewNodeID.NodeID == nil {
 		return &ua.AddNodesResult{StatusCode: ua.StatusBadNodeIDInvalid}
 	}
@@ -204,13 +208,23 @@ func (s *NodeManagementService) addNode(item *ua.AddNodesItem) *ua.AddNodesResul
 		// The BrowseName the client asked for, in its namespace.
 		n.attr[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: item.BrowseName.NamespaceIndex, Name: item.BrowseName.Name})
 	}
-	ns.AddNode(n)
+	nns, isNodeNS := ns.(*NodeNameSpace)
+	if isNodeNS {
+		if s.srv.cfg.addrSpace.nodeVersionOnAdd && mc != nil {
+			nns.AddNodeVersion(n)
+		}
+		nns.addNode(n)
+	} else {
+		ns.AddNode(n)
+	}
+	mc.noteAdded(n)
 
 	// Add reference from parent if specified.
 	if item.ParentNodeID != nil && item.ParentNodeID.NodeID != nil && item.ReferenceTypeID != nil {
 		parent := s.srv.Node(item.ParentNodeID.NodeID)
-		if parent != nil {
-			parent.AddRef(n, RefType(item.ReferenceTypeID.IntID()), true)
+		if parent != nil && parent.addRef(n, ua.NewNumericNodeID(0, item.ReferenceTypeID.IntID()), true) {
+			mc.note(parent, ua.ModelChangeStructureVerbMaskReferenceAdded)
+			mc.note(n, ua.ModelChangeStructureVerbMaskReferenceAdded)
 		}
 	}
 
@@ -291,6 +305,8 @@ func (s *NodeManagementService) AddReferences(ctx context.Context, sc *uasc.Secu
 	}
 	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
 
+	mc := s.srv.modelChanges()
+	defer mc.flush()
 	results := make([]ua.StatusCode, len(req.ReferencesToAdd))
 	for i, item := range req.ReferencesToAdd {
 		if item == nil || item.SourceNodeID == nil {
@@ -337,6 +353,10 @@ func (s *NodeManagementService) AddReferences(ctx context.Context, sc *uasc.Secu
 			results[i] = ua.StatusBadDuplicateReferenceNotAllowed
 			continue
 		}
+		// Both ends record the reference: "an added bidirectional
+		// Reference is reflected by two changes" (Part 5 §12.16).
+		mc.note(sourceNode, ua.ModelChangeStructureVerbMaskReferenceAdded)
+		mc.note(targetNode, ua.ModelChangeStructureVerbMaskReferenceAdded)
 		results[i] = ua.StatusOK
 	}
 
@@ -368,6 +388,8 @@ func (s *NodeManagementService) DeleteNodes(ctx context.Context, sc *uasc.Secure
 	}
 	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
 
+	mc := s.srv.modelChanges()
+	defer mc.flush()
 	results := make([]ua.StatusCode, len(req.NodesToDelete))
 	for i, item := range req.NodesToDelete {
 		if item == nil || item.NodeID == nil {
@@ -392,19 +414,20 @@ func (s *NodeManagementService) DeleteNodes(ctx context.Context, sc *uasc.Secure
 		// deleteTargetReferences: the references of which the node is the
 		// target go from their source nodes too (Part 4 §5.7.4). Those of
 		// which it is the source always go, with DeleteNode.
+		n := s.srv.Node(item.NodeID)
 		var sources []*ua.ReferenceDescription
-		if n := s.srv.Node(item.NodeID); n != nil && item.DeleteTargetReferences {
+		if n != nil && item.DeleteTargetReferences {
 			sources = n.refsSnapshot()
 		}
-		results[i] = ns.DeleteNode(item.NodeID)
+		results[i] = s.deleteNode(ns, n, item.NodeID, mc)
 		if results[i] == ua.StatusGood {
 			self := ua.NewExpandedNodeID(item.NodeID, "", 0)
 			for _, r := range sources {
 				if r == nil || r.IsForward || r.NodeID == nil || r.NodeID.NodeID == nil {
 					continue
 				}
-				if src := s.srv.Node(r.NodeID.NodeID); src != nil {
-					src.removeRefEnd(self, r.ReferenceTypeID, true)
+				if src := s.srv.Node(r.NodeID.NodeID); src != nil && src.removeRefEnd(self, r.ReferenceTypeID, true) {
+					mc.note(src, ua.ModelChangeStructureVerbMaskReferenceDeleted)
 				}
 			}
 		}
@@ -424,6 +447,26 @@ func (s *NodeManagementService) DeleteNodes(ctx context.Context, sc *uasc.Secure
 	}, nil
 }
 
+// deleteNode deletes the node nid, n (nil if unknown), of the namespace ns
+// and notes the change in mc. A NodeVersion Property that n has, which
+// WithNodeVersionOnAddNodes may have given it, is deleted with it.
+func (s *NodeManagementService) deleteNode(ns NameSpace, n *Node, nid *ua.NodeID, mc *modelChanges) ua.StatusCode {
+	nns, ok := ns.(*NodeNameSpace)
+	if !ok {
+		return ns.DeleteNode(nid)
+	}
+	st := nns.deleteNode(nid, mc)
+	if st != ua.StatusGood || n == nil {
+		return st
+	}
+	if vid := n.nodeVersionID(); vid != nil {
+		if vns, ok := s.srv.Node(vid).nodeNamespace(); ok {
+			_ = vns.deleteNode(vid, nil)
+		}
+	}
+	return st
+}
+
 // DeleteReferences implements the OPC UA DeleteReferences service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.5
 func (s *NodeManagementService) DeleteReferences(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
@@ -438,6 +481,8 @@ func (s *NodeManagementService) DeleteReferences(ctx context.Context, sc *uasc.S
 	}
 	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
 
+	mc := s.srv.modelChanges()
+	defer mc.flush()
 	results := make([]ua.StatusCode, len(req.ReferencesToDelete))
 	for i, item := range req.ReferencesToDelete {
 		if item == nil || item.SourceNodeID == nil {
@@ -474,10 +519,13 @@ func (s *NodeManagementService) DeleteReferences(ctx context.Context, sc *uasc.S
 			results[i] = ua.StatusBadNotFound
 			continue
 		}
+		mc.note(sourceNode, ua.ModelChangeStructureVerbMaskReferenceDeleted)
 		if item.DeleteBidirectional {
 			if targetNode := s.srv.Node(item.TargetNodeID.NodeID); targetNode != nil {
 				inverseTarget := ua.NewExpandedNodeID(item.SourceNodeID, "", 0)
-				targetNode.removeRefEnd(inverseTarget, item.ReferenceTypeID, !item.IsForward)
+				if targetNode.removeRefEnd(inverseTarget, item.ReferenceTypeID, !item.IsForward) {
+					mc.note(targetNode, ua.ModelChangeStructureVerbMaskReferenceDeleted)
+				}
 			}
 		}
 

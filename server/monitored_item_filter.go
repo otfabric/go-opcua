@@ -380,7 +380,7 @@ func (s *MonitoredItemService) readSample(item *MonitoredItem) *ua.DataValue {
 	if dv == nil {
 		return nil
 	}
-	if rv.AttributeID == ua.AttributeIDUserRolePermissions && item.Sub != nil {
+	if item.Sub != nil && s.SubService.srv.readsSessionRoles(rv.NodeID, rv.AttributeID) {
 		sess, _ := item.Sub.sessionChannel()
 		dv = forSessionRoles(dv, sess)
 	}

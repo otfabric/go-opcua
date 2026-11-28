@@ -2469,6 +2469,10 @@ type MonitoredItem struct {
 	// Part 4 §5.12.1.6): when this item's notifications are reported, the
 	// queued notifications of those in Sampling mode are reported with them.
 
+	// semanticsPending: the next data change Notification carries the
+	// SemanticsChanged bit (model_change.go). Guarded by
+	// MonitoredItemService.Mu.
+
 }
 ```
 
@@ -2706,6 +2710,24 @@ Two implementations are provided:
 
 Custom implementations can be registered with [Server.AddNamespace](#func-server-addnamespace).
 
+### type NamespaceDefaults
+
+```go
+type NamespaceDefaults struct {
+	// RolePermissions are the DefaultRolePermissions. nil means the
+	// namespace has none, and the RBACAccessController allows a node
+	// without RolePermissions; a non-nil empty slice grants no role any
+	// permission.
+	RolePermissions []*ua.RolePermissionType
+	// AccessRestrictions are the DefaultAccessRestrictions when
+	// HasAccessRestrictions is set.
+	AccessRestrictions    ua.AccessRestrictionType
+	HasAccessRestrictions bool
+}
+```
+
+NamespaceDefaults are the default permissions of the nodes of a namespace that have none of their own: the DefaultRolePermissions, DefaultUserRolePermissions and DefaultAccessRestrictions of its NamespaceMetadata Object (Part 3 §5.2.9 to §5.2.11, Part 5 §6.3.13).
+
 ### type Node
 
 ```go
@@ -2715,6 +2737,22 @@ type Node struct {
 	// reference (nil when there is none); valid only while typeDefKnown is
 	// set. Appends to refs call noteRefAppended, every other change calls
 	// invalidateTypeDef. Guarded by mu.
+
+	// nodeVersion caches the NodeVersion Property of the node (nil when
+	// it has none); valid only while nodeVersionKnown is set, kept like
+	// typeDef. Guarded by mu.
+
+	// noDefaultPermissions marks a node imported with HasNoPermissions:
+	// the default RolePermissions of its namespace do not apply to it
+	// (Part 6 §F.3). inheritRestrictions marks a node imported without
+	// AccessRestrictions: those it has are the UANodeSet.xsd default,
+	// and the DefaultAccessRestrictions of its namespace apply
+	// (namespace_metadata.go). Set before the node is added.
+
+	// sessionRoles marks a Property whose Value is a list of
+	// RolePermissions that Read reduces to the roles of the session
+	// (DefaultUserRolePermissions, Part 3 §5.2.9). Set before the node
+	// is added.
 
 	// writer takes clients' Writes of the Value instead of the node
 	// (SetValueWriter). Guarded by mu.
@@ -2808,6 +2846,8 @@ func (n *Node) AddRef(o *Node, rt RefType, forward bool)
 
 AddRef adds a reference of type rt between n and o: n -rt-> o when forward, o -rt-> n otherwise. A Reference has a forward and an inverse direction and Browse returns either (Part 3 §7.1, Part 4 §5.8.2), so both ends record it: n gets the reference to o and o the opposite direction to n. Adding a reference both ends already hold (also from the other end, as parent.AddRef(child, rt, true) followed by child.AddRef(parent, rt, false)) does not add it again.
 
+A node at either end that has a NodeVersion Property gets a new NodeVersion and a GeneralModelChangeEvent reports the reference (Part 3 §9.32; see [WithModelChangeEvents](#func-withmodelchangeevents)).
+
 #### func (Node) AddReference
 
 ```go
@@ -2870,7 +2910,7 @@ func (n *Node) NodeClass() ua.NodeClass
 func (n *Node) RemoveRef(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, forward bool) bool
 ```
 
-RemoveRef removes the reference of type refTypeID between n and the node targetID (n -> target when forward, target -> n otherwise) from both ends, as AddRef records it on both. It reports whether either end held it. The other end is found through the server of n's namespace; a node that was not added to a namespace, or a target on another server, loses this end only.
+RemoveRef removes the reference of type refTypeID between n and the node targetID (n -> target when forward, target -> n otherwise) from both ends, as AddRef records it on both. It reports whether either end held it. The other end is found through the server of n's namespace; a node that was not added to a namespace, or a target on another server, loses this end only. An end that has a NodeVersion Property gets a new NodeVersion and a GeneralModelChangeEvent reports the change (see [WithModelChangeEvents](#func-withmodelchangeevents)).
 
 #### func (Node) SetAttribute
 
@@ -3028,6 +3068,8 @@ NewNameSpace creates a bare NodeNameSpace with no server back-reference. It is i
 func NewNodeNameSpace(srv *Server, name string) *NodeNameSpace
 ```
 
+NewNodeNameSpace creates a namespace named name (its URI) on srv, with an Objects folder. Once srv has started, the namespace gets its NamespaceMetadata Object under Server.Namespaces (Part 5 §6.3.13); before, Start gives it one.
+
 #### func (NodeNameSpace) AddNewVariableNode
 
 ```go
@@ -3045,6 +3087,16 @@ func (as *NodeNameSpace) AddNewVariableStringNode(name string, value any) *Node
 ```go
 func (as *NodeNameSpace) AddNode(n *Node) *Node
 ```
+
+AddNode adds n to the namespace, in place of a node with the same NodeId. When n has a NodeVersion Property, a GeneralModelChangeEvent reports it (Part 3 §9.32; see [WithModelChangeEvents](#func-withmodelchangeevents)).
+
+#### func (NodeNameSpace) AddNodeVersion
+
+```go
+func (as *NodeNameSpace) AddNodeVersion(n *Node) *Node
+```
+
+AddNodeVersion gives n a NodeVersion Property in the namespace as, if it has none, and returns the Property. From then on the server changes the NodeVersion and reports a GeneralModelChangeEvent each time a reference of n is added or deleted, n is deleted or, for a Variable, its DataType changes (Part 3 §9.32.2; see [WithModelChangeEvents](#func-withmodelchangeevents)). The NodeVersion is a String, "0" at first; its creation is not reported. Call it once n is in the address space or before: n need not be in as.
 
 #### func (NodeNameSpace) Attribute
 
@@ -3073,6 +3125,8 @@ func (as *NodeNameSpace) DeleteNode(nid *ua.NodeID) ua.StatusCode
 ```
 
 DeleteNode removes the node nid and the references it is the source of, also from the targets that hold their inverse direction (Part 4 §5.7.4: deleting a Node deletes its References; AddRef records both ends). The references of which it is the target stay with their source nodes.
+
+The node, and the targets whose references go, report the change when they have a NodeVersion Property (see [WithModelChangeEvents](#func-withmodelchangeevents)).
 
 #### func (NodeNameSpace) GetNextNodeID
 
@@ -3708,6 +3762,22 @@ func WithMetrics(m ServerMetrics) Option
 
 WithMetrics sets a metrics callback handler for the server. All methods are called synchronously; implementations must be non-blocking.
 
+#### func WithModelChangeEvents
+
+```go
+func WithModelChangeEvents(enabled bool) Option
+```
+
+WithModelChangeEvents sets whether the server maintains the NodeVersion Property of the nodes that have one and reports their changes in GeneralModelChangeEvents, and whether it reports SemanticChangeEvents and the SemanticsChanged bit of data change Notifications (Part 3 §9.32, §9.33, §5.6.2). It is on by default. WithModelChangeEvents(false) restores the behaviour of v1.42 and earlier: no NodeVersion changes, no GeneralModelChangeEvent, no SemanticChangeEvent and no SemanticsChanged bit. A server whose address space has no NodeVersion Property and no Property with the SemanticChange bit behaves the same either way.
+
+#### func WithModelDefaultPermissions
+
+```go
+func WithModelDefaultPermissions(enabled bool) Option
+```
+
+WithModelDefaultPermissions sets whether the RolePermissions and the AccessRestrictions of the Model of an imported NodeSet become the DefaultRolePermissions and DefaultAccessRestrictions of its namespace (Part 6 §F.2, §F.3), which apply to its nodes without their own. It is on by default. WithModelDefaultPermissions(false) restores the behaviour of v1.42 and earlier, which ignored them; the defaults set with [Server.SetNamespaceDefaults](#func-server-setnamespacedefaults) apply either way.
+
 #### func WithMulticastDiscovery
 
 ```go
@@ -3719,6 +3789,14 @@ WithMulticastDiscovery enables multicast discovery (the multicast extension of O
 The mDNS implementation is built in and needs no system service. It uses UDP port 5353 on every multicast capable interface (see [MulticastInterfaces](#func-multicastinterfaces)) and shares the port with a system responder such as Avahi or Bonjour. [Server.Start](#func-server-start) fails if no interface can be used.
 
 Multicast discovery tells everybody on the local network segment that the server exists, where it is and what it can do, and it trusts what others announce: see docs/security.md.
+
+#### func WithNodeVersionOnAddNodes
+
+```go
+func WithNodeVersionOnAddNodes(enabled bool) Option
+```
+
+WithNodeVersionOnAddNodes sets whether every node the AddNodes service adds gets a NodeVersion Property, so that the changes of the nodes that clients add are reported in GeneralModelChangeEvents (see [WithModelChangeEvents](#func-withmodelchangeevents)); DeleteNodes deletes the Property with its node. It is off by default: AddNodes adds the node the client asked for and no other.
 
 #### func WithOperationLimits
 
@@ -4158,7 +4236,7 @@ type RBACAccessController struct {
 
 RBACAccessController enforces OPC UA role-based access control by checking the node's RolePermissions against the session's assigned roles.
 
-For each operation, it looks up the target node, retrieves its rolePermissions, and verifies that at least one of the session's roles has the required permission. If the node has no rolePermissions defined, the operation is allowed.
+For each operation, it looks up the target node, retrieves its rolePermissions, and verifies that at least one of the session's roles has the required permission. A node without RolePermissions is checked against the DefaultRolePermissions of its namespace (Part 3 §4.9.3, §5.2.9; see [Server.SetNamespaceDefaults](#func-server-setnamespacedefaults)). If neither is defined, the operation is allowed.
 
 #### func NewRBACAccessController
 
@@ -4669,6 +4747,8 @@ type Server struct {
 
 	// ps is the PubSub runtime and its information model (pubsub.go).
 
+	// nsMeta: NamespaceMetadata Objects and namespace defaults.
+
 	// diag holds the server diagnostics (diagnostics.go).
 
 	// push is the push certificate management (push.go), nil without
@@ -4984,6 +5064,14 @@ This is the primary public API for loading custom NodeSet data. Users do not nee
 func (s *Server) Namespace(id int) (NameSpace, error)
 ```
 
+#### func (Server) NamespaceDefaults
+
+```go
+func (s *Server) NamespaceDefaults(namespaceURI string) (NamespaceDefaults, bool)
+```
+
+NamespaceDefaults returns the default permissions of the namespace with the URI namespaceURI, false when it has none.
+
 #### func (Server) Namespaces
 
 ```go
@@ -5197,6 +5285,14 @@ func (s *Server) SetHistorian(h HistoryProvider)
 ```
 
 SetHistorian attaches a HistoryProvider for HistoryRead support. Pass nil to disable historical access (HistoryRead returns BadHistoryOperationUnsupported). A provider that also implements [EventHistoryProvider](#type-eventhistoryprovider) keeps the event history of the HistoricalEventNodes ([Server.EnableEventHistory](#func-server-enableeventhistory)). The HistoryServerCapabilities report what the provider supports; their AggregateFunctions folder organizes the Aggregates of its processed reads (see [AggregateFunctionLister](#type-aggregatefunctionlister)).
+
+#### func (Server) SetNamespaceDefaults
+
+```go
+func (s *Server) SetNamespaceDefaults(namespaceURI string, d NamespaceDefaults) error
+```
+
+SetNamespaceDefaults sets the default permissions of the namespace with the URI namespaceURI: the DefaultRolePermissions, DefaultUserRolePermissions and DefaultAccessRestrictions Properties of its NamespaceMetadata Object, which apply to the nodes of the namespace that have no RolePermissions or AccessRestrictions of their own (Part 3 §4.9.3, §5.2.9, §5.2.11). The RolePermissions take effect under the [RBACAccessController](#type-rbacaccesscontroller); the AccessRestrictions under every AccessController. A zero NamespaceDefaults removes the defaults. It replaces the defaults of an imported NodeSet Model. It returns an error when the server has no such namespace.
 
 #### func (Server) SetPubSubConfigurationHook
 

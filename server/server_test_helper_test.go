@@ -160,5 +160,9 @@ func cloneTestNode(n *Node, ns NameSpace) *Node {
 		typeDefKnown:    n.typeDefKnown,
 		rolePermissions: n.rolePermissions,
 		ns:              ns,
+
+		noDefaultPermissions: n.noDefaultPermissions,
+		inheritRestrictions:  n.inheritRestrictions,
+		sessionRoles:         n.sessionRoles,
 	}
 }

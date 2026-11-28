@@ -23,6 +23,25 @@ func sessionRoles(sess *session) []*ua.NodeID {
 	return roles
 }
 
+// readsSessionRoles reports whether Read reduces the attribute attr of the
+// node nid to the roles of the session: UserRolePermissions, and the Value
+// of a DefaultUserRolePermissions Property (namespace_metadata.go).
+func (s *Server) readsSessionRoles(nid *ua.NodeID, attr ua.AttributeID) bool {
+	if attr == ua.AttributeIDUserRolePermissions {
+		return true
+	}
+	if attr != ua.AttributeIDValue || nid == nil {
+		return false
+	}
+	n := s.Node(nid)
+	if n == nil {
+		return false
+	}
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.sessionRoles
+}
+
 // forSessionRoles reduces dv, the value of a UserRolePermissions Attribute
 // as a namespace returns it (the RolePermissions of the node), to the
 // entries for the roles granted to sess: the Attribute "specifies the
