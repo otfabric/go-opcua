@@ -117,7 +117,7 @@ namespace.
 | AuditWriteUpdate, AuditHistoryUpdate, AuditNodeManagement events | done in v1.43.0, with auditing on (`server.WithChangeAuditing(false)` turns them off); no ledger row |
 | History annotations (UpdateStructureData) | done in v1.43.0: UpdateStructureDataDetails, ReadAnnotationDataDetails, the Annotations Property (`EnableAnnotations`), `AnnotationHistoryProvider`, client helpers; no ledger row |
 | Client session keepalive while idle | done in v1.43.0 |
-| ServerProfileArray | no value; Read returns Bad_AttributeIdInvalid |
+| ServerProfileArray | done in v1.43.0: every Mandatory ServerCapabilities Property has a value (Part 5 §6.3.2); ServerProfileArray from `WithServerProfiles`, empty by default, until phase 5 computes it |
 
 Done in v1.43.0: the DataTypeDefinition Attribute of every Structure, Union,
 Enumeration and OptionSet DataType of namespace 0 and of the imported models,

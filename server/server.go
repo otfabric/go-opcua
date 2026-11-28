@@ -268,6 +268,10 @@ type serverConfig struct {
 	// stateChange carries out RequestServerStateChange
 	// (WithServerStateChange); nil refuses it.
 	stateChange ServerStateChangeFunc
+	// serverProfiles is the ServerProfileArray (WithServerProfiles).
+	serverProfiles []string
+	// localeIDs is the LocaleIdArray (WithLocaleIDs); empty: ["en"].
+	localeIDs []string
 }
 
 var capabilities = ServerCapabilities{
@@ -459,6 +463,7 @@ func New(opts ...Option) (*Server, error) {
 	s.bindMonitoredItemCapabilities()
 	s.bindContinuationPointCapabilities()
 	s.bindEstimatedReturnTime()
+	s.bindServerCapabilities()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()
