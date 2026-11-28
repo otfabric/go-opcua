@@ -110,7 +110,7 @@ namespace.
 | DataTypeDefinition Attribute on every DataType, imported and ns=0 | done in v1.43.0 |
 | Client decoding of structures it has no Go type for, from DataTypeDefinition, per session and namespace URI | done in v1.43.0, opt in (`opcua.DynamicTypeDecoding`) |
 | Part 13 aggregates and AggregateFilter in monitored items | HistoryRead processed: every standard Aggregate but AnnotationCount (`server/aggregate`, v1.43.0), for the Historian and any raw-only provider, checked against every example of Annex A; AggregateFilter of monitored items with the same calculation, at the publishing interval (v1.43.0); no ledger row (no peer of opcua-interop v0.20.0 reads processed history or aggregates monitored items) |
-| Part 5 Methods: GetMonitoredItems, ResendData, SetSubscriptionDurable, RequestServerStateChange | not implemented |
+| Part 5 Methods: GetMonitoredItems, ResendData, SetSubscriptionDurable, RequestServerStateChange | done in v1.43.0 (Part 5 §9.1–§9.4), with typed client calls; durable subscriptions in memory only (LIMITATIONS.md); no ledger row (not tested against an independent stack) |
 | ModelChange and SemanticChange events | done in v1.43.0 |
 | NamespaceMetadata, DefaultRolePermissions | done in v1.43.0 |
 | RoleSet Methods (AddRole, AddIdentity and the others) | roles only from the Go RoleMapper |

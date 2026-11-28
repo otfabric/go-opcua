@@ -196,10 +196,11 @@ func typeName(t ua.TypeID) string { return strings.TrimPrefix(t.String(), "TypeI
 // shape checks the built-in type and the ValueRank of argument i. A nil
 // Variant is the null Variant.
 func (m *Method) shape(output bool, args []*ua.Variant, i int) error {
-	a := m.in[i]
+	as := m.in
 	if output {
-		a = m.out[i]
+		as = m.out
 	}
+	a := as[i]
 	v := args[i]
 	typ, array, dims := ua.TypeIDNull, false, 0
 	if v != nil {
@@ -344,6 +345,15 @@ func nodeID(n *ua.NodeID) *ua.NodeID {
 		return ua.NewTwoByteNodeID(0)
 	}
 	return n
+}
+
+// localizedText returns t, or the null LocalizedText for nil (Part 6
+// §5.2.2.14: neither a locale nor a text).
+func localizedText(t *ua.LocalizedText) *ua.LocalizedText {
+	if t == nil {
+		return &ua.LocalizedText{}
+	}
+	return t
 }
 
 // Caller calls Methods: *opcua.Client is one.
