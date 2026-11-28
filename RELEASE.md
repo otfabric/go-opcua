@@ -5,7 +5,7 @@
 **Date:** 2026-11-28
 **Previous release:** v1.42.1
 
-Phase 2 of docs/roadmap.md and items of phase 3.
+Phase 2 of docs/roadmap.md and the items of phase 3.
 
 - Generated Method contracts, with their pilot, Part 20 files. A generator emits typed contracts of Methods from the NodeSet; a public FileType and FileDirectoryType on the server and in a new client package `filetransfer` are built on them, and the four FileType implementations of the library (the TrustLists of push management and `ServeTrustList`, the PubSubConfiguration file, the UAFX ConnectionManagerConfiguration) and the clients of their files now share them.
 - The server gives every Structure, Union, Enumeration and OptionSet DataType its DataTypeDefinition Attribute, from the Definition of the NodeSet it imports. A client decodes the Structures and Unions it has no Go type for with that Attribute, opt in (`opcua.DynamicTypeDecoding`).
