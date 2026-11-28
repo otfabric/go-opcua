@@ -96,6 +96,12 @@ behaviour you may notice, and the deviations of peers are in
   whose TypeDefinition is FileType or FileDirectoryType, not those of a
   subtype. The FileType Methods are tested against go-opcua only, besides
   the TrustList reads and writes of the interop suite.
+- The client session keep-alive (`SessionKeepAlive`) runs only for a client
+  that `Connect` connected, not for a session set up with `Dial`,
+  `CreateSession` and `ActivateSession`, and it does not act on the value of
+  the ServerStatus State it reads (a server in Shutdown or Failed is not
+  treated differently); see
+  [docs/client-guide.md](docs/client-guide.md#session-keep-alive).
 
 ## Verification
 

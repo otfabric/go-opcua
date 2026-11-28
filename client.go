@@ -170,6 +170,10 @@ type Client struct {
 	// nanoseconds), see markSilentSubscriptions.
 	lastPublishResponse atomic.Int64
 
+	// lastSessionRequest is when the client last sent a request in its
+	// session (since keepAliveEpoch), see keepAliveStep.
+	lastSessionRequest atomic.Int64
+
 	// pausech pauses the subscription publish loop
 	pausech chan struct{}
 
@@ -407,6 +411,8 @@ func (c *Client) monitor(ctx context.Context) {
 			c.setSecureChannel(nil)
 		}
 	}()
+	// The session keep-alive stops first, before the monitor is done.
+	defer c.startKeepAlive(ctx)()
 
 	// retryBroken fires when subscriptions that could not be recreated are
 	// to be tried again. A recreation can fail although the connection is
@@ -1946,6 +1952,7 @@ func (c *Client) sendWithTimeout(ctx context.Context, req ua.Request, timeout ti
 	var authToken *ua.NodeID
 	if s := c.Session(); s != nil {
 		authToken = s.resp.AuthenticationToken
+		c.noteSessionRequest()
 	}
 	return sc.SendRequestWithTimeout(ctx, req, authToken, timeout, h)
 }

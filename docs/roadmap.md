@@ -116,7 +116,7 @@ namespace.
 | RoleSet Methods (AddRole, AddIdentity and the others) | roles only from the Go RoleMapper |
 | AuditWriteUpdate, AuditHistoryUpdate, AuditNodeManagement events | not emitted |
 | History annotations (UpdateStructureData) | not dispatched |
-| Client session keepalive while idle | only silent subscriptions are found |
+| Client session keepalive while idle | done in v1.43.0 |
 | ServerProfileArray | no value; Read returns Bad_AttributeIdInvalid |
 
 Done in v1.43.0: the DataTypeDefinition Attribute of every Structure, Union,
@@ -129,6 +129,11 @@ type for from that Attribute, opt in (`opcua.DynamicTypeDecoding`), with
 the DataTypes kept by namespace URI; see docs/client-guide.md. Not done: a
 DataTypeDictionary (Part 5 Annex D), JSON-encoded bodies, and ledger rows
 against an independent server.
+
+Also in v1.43.0: the client session keep-alive. A connected client reads
+the ServerStatus State after half the revised session timeout without a
+request (`SessionKeepAlive`, Part 4 §5.7.2.1 and §6.7), and a keep-alive
+without response is a lost connection; see docs/client-guide.md.
 
 ## Phase 4: durable administration
 
