@@ -24,11 +24,8 @@ type family struct {
 // an ObjectType whose Methods use a DataType the generator does not know
 // fails the generator (builtinTypes in model.go), which is where to add it.
 //
-// Next: TrustListType (OPC 10000-12 §7.8.2), PubSubConfigurationType
-// (Part 14 §9.1.3.7) and PubSubKeyServiceType of Part 14, which resolve
-// as they are (TestNextFamilies); the GDS DirectoryType and
-// CertificateDirectoryType need DataTypes outside namespace 0 and a package
-// of their own (gds/gdsmethod).
+// Next: the GDS DirectoryType and CertificateDirectoryType, which need
+// DataTypes outside namespace 0 and a package of their own (gds/gdsmethod).
 var families = []family{
 	{
 		NodeSet: "internal/schema/Opc.Ua.NodeSet2.xml",
@@ -42,5 +39,21 @@ var families = []family{
 		Package: "uamethod",
 		Out:     "uamethod/roles_gen.go",
 		Types:   []string{"RoleSetType", "RoleType"},
+	},
+	// The TrustList Methods of OPC 10000-12 §7.8.2 (the FileType Methods
+	// of a TrustList are those of FileType).
+	{
+		NodeSet: "internal/schema/Opc.Ua.NodeSet2.xml",
+		Package: "uamethod",
+		Out:     "uamethod/trustlist_gen.go",
+		Types:   []string{"TrustListType"},
+	},
+	// The PubSub configuration file (OPC 10000-14 §9.1.3.7) and the
+	// Security Key Service (§8.4) Methods of Part 14.
+	{
+		NodeSet: "internal/schema/Opc.Ua.NodeSet2.xml",
+		Package: "uamethod",
+		Out:     "uamethod/pubsub_gen.go",
+		Types:   []string{"PubSubConfigurationType", "PubSubKeyServiceType"},
 	},
 }

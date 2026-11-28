@@ -92,16 +92,22 @@ call function. The pilot is done: `server.FileObject` (`AddFile`,
 `ServeFile`, `NewFile`, `AddFileDirectory`) and package `filetransfer` are
 built on the FileType and FileDirectoryType contracts, and the four FileType
 implementations and the `gds` and `pubsub/remote` clients of their files use
-them. Not generated yet: the events a Method generates, mandatory children
-and state machine transitions. The next families, TrustListType
-(OpenWithMasks, CloseAndUpdate, AddCertificate, RemoveCertificate),
-PubSubConfigurationType (ReserveIds, CloseAndUpdate) and
-PubSubKeyServiceType (GetSecurityKeys, GetSecurityGroup), resolve with the
-generator as it is (`TestNextFamilies`): adding them to the config and
-moving their handlers and clients is the work. The GDS DirectoryType and
-CertificateDirectoryType need DataTypes outside namespace 0
-(ApplicationRecordDataType of the GDS NodeSet) and a contracts package per
-namespace.
+them. The second families are done too: TrustListType (OpenWithMasks,
+CloseAndUpdate, AddCertificate, RemoveCertificate) for `ServeTrustList`,
+push certificate management and the `gds` client;
+PubSubConfigurationType (ReserveIds, CloseAndUpdate) for the
+PubSubConfiguration file and `pubsub/remote`; PubSubKeyServiceType
+(GetSecurityKeys, GetSecurityGroup) for the SKS and `pubsub/sks`. The
+RoleSet, Role and ServerType Methods are generated as well. What remains:
+the GDS DirectoryType and CertificateDirectoryType, whose arguments are
+DataTypes outside namespace 0 (ApplicationRecordDataType of the GDS
+NodeSet) or subtypes of built-in types the GDS NodeSet alone does not
+resolve (`TestNextFamilies`), need the generator to read a NodeSet with
+the one of namespace 0 and a contracts package per namespace; the
+Methods of ServerConfigurationType, SecurityGroupFolderType and
+PubSubKeyPushTargetType, still written by hand, and those of alarms and
+UAFX; and the events a Method generates, mandatory children and state
+machine transitions, which are not generated.
 
 ## Phase 3: core symmetry
 

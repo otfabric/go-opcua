@@ -18,6 +18,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 )
 
 // Result is the result of GetSecurityKeys.
@@ -40,7 +41,12 @@ var ErrBadResponse = errors.New("pubsub/sks: malformed GetSecurityKeys response"
 // The SKS only answers over a SignAndEncrypt session. A Bad method result
 // is returned as an error wrapping the ua.StatusCode.
 func GetSecurityKeys(ctx context.Context, c *opcua.Client, securityGroupID string, startingTokenID, requestedKeyCount uint32) (*Result, error) {
-	res, err := c.CallMethod(ctx, publishSubscribe, getSecurityKeys, securityGroupID, startingTokenID, requestedKeyCount)
+	in := uamethod.PubSubKeyServiceTypeGetSecurityKeysInput{
+		SecurityGroupID:   securityGroupID,
+		StartingTokenID:   startingTokenID,
+		RequestedKeyCount: requestedKeyCount,
+	}
+	res, err := c.Call(ctx, &ua.CallMethodRequest{ObjectID: publishSubscribe, MethodID: getSecurityKeys, InputArguments: in.Pack()})
 	if err != nil {
 		return nil, fmt.Errorf("pubsub/sks: GetSecurityKeys: %w", err)
 	}
@@ -51,28 +57,23 @@ func GetSecurityKeys(ctx context.Context, c *opcua.Client, securityGroupID strin
 }
 
 // parseResult decodes the output arguments SecurityPolicyUri,
-// FirstTokenId, Keys, TimeToNextKey and KeyLifetime.
+// FirstTokenId, Keys, TimeToNextKey and KeyLifetime (Part 14 §8.3.2).
+// Outputs that do not match the declaration are an ErrBadResponse that
+// wraps the *uamethod.ArgumentError.
 func parseResult(out []*ua.Variant) (*Result, error) {
-	if len(out) < 5 {
-		return nil, fmt.Errorf("%w: %d output arguments", ErrBadResponse, len(out))
+	var r uamethod.PubSubKeyServiceTypeGetSecurityKeysOutput
+	if err := r.Unpack(out); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrBadResponse, err)
 	}
-	uri, ok1 := out[0].Value().(string)
-	first, ok2 := out[1].Value().(uint32)
-	keys, ok3 := out[2].Value().([][]byte)
-	ttnk, ok4 := out[3].Value().(float64)
-	life, ok5 := out[4].Value().(float64)
-	if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 {
-		return nil, fmt.Errorf("%w: argument types", ErrBadResponse)
-	}
-	if len(keys) == 0 {
+	if len(r.Keys) == 0 {
 		return nil, fmt.Errorf("%w: no keys", ErrBadResponse)
 	}
 	return &Result{
-		SecurityPolicyURI: uri,
-		FirstTokenID:      first,
-		Keys:              keys,
-		TimeToNextKey:     msDuration(ttnk),
-		KeyLifetime:       msDuration(life),
+		SecurityPolicyURI: r.SecurityPolicyURI,
+		FirstTokenID:      r.FirstTokenID,
+		Keys:              r.Keys,
+		TimeToNextKey:     msDuration(r.TimeToNextKey),
+		KeyLifetime:       msDuration(r.KeyLifetime),
 	}, nil
 }
 

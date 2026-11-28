@@ -45,14 +45,6 @@ func (g *Client) fileCall(ctx context.Context, name string, method uint32, outpu
 	return g.call(ctx, g.TrustList, name, g.trustListFallback(name, method), outputs, args...)
 }
 
-func handleOut(name string, v *ua.Variant) (uint32, error) {
-	h, ok := v.Value().(uint32)
-	if !ok {
-		return 0, fmt.Errorf("gds: %s returned %T, want a UInt32", name, v.Value())
-	}
-	return h, nil
-}
-
 // trustListMethodIDs are the Methods of the TrustList file of the
 // DefaultApplicationGroup, the fallback when browsing g.TrustList fails.
 var trustListMethodIDs = map[string]uint32{
@@ -78,15 +70,16 @@ func (g *Client) trustListFile() *filetransfer.Object {
 // ReadTrustList reads the lists of the trust list masks selects
 // (ua.TrustListMasksAll for all of them) with OpenWithMasks.
 func (g *Client) ReadTrustList(ctx context.Context, masks ua.TrustListMasks) (*ua.TrustListDataType, error) {
-	out, err := g.fileCall(ctx, "OpenWithMasks", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListOpenWithMasks, 1, ua.MustVariant(uint32(masks)))
+	in := uamethod.TrustListTypeOpenWithMasksInput{Masks: uint32(masks)}
+	out, err := g.fileCall(ctx, "OpenWithMasks", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListOpenWithMasks, 0, in.Pack()...)
 	if err != nil {
 		return nil, err
 	}
-	h, err := handleOut("OpenWithMasks", out[0])
-	if err != nil {
-		return nil, err
+	var o uamethod.TrustListTypeOpenWithMasksOutput
+	if err := o.Unpack(out); err != nil {
+		return nil, fmt.Errorf("gds: %w", err)
 	}
-	b, err := g.trustListFile().Attach(h, ua.OpenFileModeRead).ReadAllAndClose(ctx, maxTrustListFile)
+	b, err := g.trustListFile().Attach(o.FileHandle, ua.OpenFileModeRead).ReadAllAndClose(ctx, maxTrustListFile)
 	if err != nil {
 		return nil, err
 	}
@@ -109,19 +102,24 @@ func (g *Client) WriteTrustList(ctx context.Context, tl *ua.TrustListDataType) (
 	if err := f.Write(ctx, b); err != nil {
 		return false, errors.Join(err, f.Close(ctx))
 	}
-	out, err := g.fileCall(ctx, "CloseAndUpdate", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListCloseAndUpdate, 1, ua.MustVariant(f.Handle()))
+	in := uamethod.TrustListTypeCloseAndUpdateInput{FileHandle: f.Handle()}
+	out, err := g.fileCall(ctx, "CloseAndUpdate", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListCloseAndUpdate, 0, in.Pack()...)
 	if err != nil {
 		return false, err
 	}
-	return boolOut("CloseAndUpdate", out[0])
+	var o uamethod.TrustListTypeCloseAndUpdateOutput
+	if err := o.Unpack(out); err != nil {
+		return false, fmt.Errorf("gds: %w", err)
+	}
+	return o.ApplyChangesRequired, nil
 }
 
 // AddCertificate adds a certificate (DER) to the trusted certificates, or
 // with trusted false to the issuer certificates, of the trust list (Part 12
 // §7.8.2.4).
 func (g *Client) AddCertificate(ctx context.Context, cert []byte, trusted bool) error {
-	_, err := g.fileCall(ctx, "AddCertificate", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListAddCertificate, 0,
-		ua.MustVariant(cert), ua.MustVariant(trusted))
+	in := uamethod.TrustListTypeAddCertificateInput{Certificate: cert, IsTrustedCertificate: trusted}
+	_, err := g.fileCall(ctx, "AddCertificate", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListAddCertificate, 0, in.Pack()...)
 	return err
 }
 
@@ -130,7 +128,7 @@ func (g *Client) AddCertificate(ctx context.Context, cert []byte, trusted bool) 
 // issuer certificates (Part 12 §7.8.2.5). The server also removes the CRLs
 // of a CA certificate.
 func (g *Client) RemoveCertificate(ctx context.Context, thumbprint string, trusted bool) error {
-	_, err := g.fileCall(ctx, "RemoveCertificate", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListRemoveCertificate, 0,
-		ua.MustVariant(thumbprint), ua.MustVariant(trusted))
+	in := uamethod.TrustListTypeRemoveCertificateInput{Thumbprint: thumbprint, IsTrustedCertificate: trusted}
+	_, err := g.fileCall(ctx, "RemoveCertificate", id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListRemoveCertificate, 0, in.Pack()...)
 	return err
 }

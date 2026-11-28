@@ -56,6 +56,9 @@ type kind struct {
 	pack string
 	// array is the Go type of a one-dimensional array, "" if not supported.
 	array string
+	// packArray wraps a field of the array type into a Variant; ""
+	// is ua.MustVariant(%s).
+	packArray string
 }
 
 // builtinTypes are the built-in types of Part 6 §5.1.2 by the NodeId of
@@ -78,7 +81,7 @@ var builtinTypes = map[uint32]*kind{
 	12: {typeID: "ua.TypeIDString", goType: "string", get: "scalar", pack: "ua.MustVariant(%s)", array: "string"},
 	13: {typeID: "ua.TypeIDDateTime", goType: "time.Time", get: "scalar", pack: "ua.MustVariant(%s)", array: "time.Time"},
 	15: {typeID: "ua.TypeIDByteString", goType: "[]byte", get: "scalar", pack: "ua.MustVariant(%s)", array: "[]byte"},
-	17: {typeID: "ua.TypeIDNodeID", goType: "*ua.NodeID", get: "pointer", pack: "ua.MustVariant(nodeID(%s))", array: "*ua.NodeID"},
+	17: {typeID: "ua.TypeIDNodeID", goType: "*ua.NodeID", get: "pointer", pack: "ua.MustVariant(nodeID(%s))", array: "*ua.NodeID", packArray: "ua.MustVariant(nodeIDs(%s))"},
 	19: {typeID: "ua.TypeIDStatusCode", goType: "ua.StatusCode", get: "scalar", pack: "ua.MustVariant(%s)", array: "ua.StatusCode"},
 	21: {typeID: "ua.TypeIDLocalizedText", goType: "*ua.LocalizedText", get: "pointer", pack: "ua.MustVariant(localizedText(%s))", array: "*ua.LocalizedText"},
 	24: {goType: "*ua.Variant", get: "variant", pack: "orNull(%s)"},
@@ -327,15 +330,21 @@ func localName(bn string) string {
 }
 
 // docURL matches the Documentation of a node of the NodeSets of the OPC
-// Foundation: https://reference.opcfoundation.org/v105/Core/docs/Part20/4.2.2.
-var docURL = regexp.MustCompile(`/Part(\d+)/(\d+(?:\.\d+)*)/?$`)
+// Foundation: https://reference.opcfoundation.org/v105/Core/docs/Part20/4.2.2,
+// or a page with the anchor of a subclause of it,
+// https://reference.opcfoundation.org/v105/Core/docs/Part12/7.8.2/#7.8.2.3.
+var docURL = regexp.MustCompile(`/Part(\d+)/(\d+(?:\.\d+)*)/?(?:#(\d+(?:\.\d+)*))?$`)
 
 // clause returns "OPC 10000-<part> §<clause>" for the Documentation URL of
-// a node, "" when it names none.
+// a node (the subclause of the anchor when there is one), "" when it names
+// none.
 func clause(doc string) string {
 	m := docURL.FindStringSubmatch(strings.TrimSpace(doc))
 	if m == nil {
 		return ""
+	}
+	if m[3] != "" {
+		return "OPC 10000-" + m[1] + " §" + m[3]
 	}
 	return "OPC 10000-" + m[1] + " §" + m[2]
 }

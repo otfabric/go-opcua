@@ -278,6 +278,10 @@ func TestSKS_AddRemoveSecurityGroup(t *testing.T) {
 	require.Equal(t, ua.StatusOK, res.StatusCode)
 	require.Equal(t, nid, res.OutputArguments[0].Value())
 	require.Equal(t, ua.StatusBadNotFound, call(t, alice, pubSubID, getGroupID, "nope").StatusCode)
+	// The arguments of GetSecurityGroup (Part 14 §8.3.3).
+	require.Equal(t, ua.StatusBadTypeMismatch, call(t, alice, pubSubID, getGroupID, uint32(2)).StatusCode)
+	require.Equal(t, ua.StatusBadArgumentsMissing, call(t, alice, pubSubID, getGroupID).StatusCode)
+	require.Equal(t, ua.StatusBadTooManyArguments, call(t, alice, pubSubID, getGroupID, "sg2", "sg3").StatusCode)
 
 	cases := []struct {
 		name string

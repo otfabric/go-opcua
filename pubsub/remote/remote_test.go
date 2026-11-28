@@ -5,6 +5,7 @@ package remote_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -300,4 +301,76 @@ func TestRemoteMalformedServer(t *testing.T) {
 	require.Error(t, err)
 	_, err = r.AddConnection(ctx, pubsub.UDPConnection("c", "opc.udp://127.0.0.1:4840", uint16(1)))
 	require.Error(t, err, "the method is cached, the call itself fails")
+}
+
+// TestRemoteConfigFileOutputs: the outputs of ReserveIds and CloseAndUpdate
+// are unpacked with the contracts of PubSubConfigurationType (Part 14
+// §9.1.3.7.5, §9.1.3.7.6): CloseAndUpdate without ConfigurationObjects is
+// taken, a null ConfigurationValue is left out, and outputs of another type
+// are an error.
+func TestRemoteConfigFileOutputs(t *testing.T) {
+	t.Parallel()
+	srv, url := testutil.NewTestServer(t)
+	reg := func(m uint32, h server.MethodHandler) {
+		srv.RegisterMethod(remote.PubSubConfiguration, ua.NewNumericNodeID(0, m), h)
+	}
+	ret := func(out ...*ua.Variant) server.MethodHandler {
+		return func(context.Context, *ua.NodeID, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+			return out, ua.StatusOK
+		}
+	}
+	reg(id.PublishSubscribePubSubConfigurationOpen, ret(ua.MustVariant(uint32(1))))
+	reg(id.PublishSubscribePubSubConfigurationWrite, ret())
+	reg(id.PublishSubscribePubSubConfigurationClose, ret())
+	reg(id.PublishSubscribePubSubConfigurationReserveIDs, ret(ua.MustVariant(uint16(1)), ua.MustVariant("x"), ua.MustVariant([]uint16{})))
+	value := &ua.PubSubConfigurationValueDataType{
+		ConfigurationElement: remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferenceConnection, 0, 0, 0),
+		Name:                 "c",
+		Identifier:           ua.MustVariant(uint16(1)),
+	}
+	var (
+		mu    sync.Mutex
+		calls int
+		refs  []*ua.Variant
+	)
+	reg(id.PublishSubscribePubSubConfigurationCloseAndUpdate, func(_ context.Context, _, _ *ua.NodeID, in []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+		mu.Lock()
+		defer mu.Unlock()
+		calls++
+		refs = in
+		if calls == 1 {
+			return []*ua.Variant{
+				ua.MustVariant(true),
+				ua.MustVariant([]ua.StatusCode{ua.StatusOK}),
+				ua.MustVariant([]*ua.ExtensionObject{ua.NewExtensionObject(nil), ua.NewExtensionObject(value)}),
+			}, ua.StatusOK
+		}
+		return []*ua.Variant{ua.MustVariant("yes"), ua.MustVariant([]ua.StatusCode{}), ua.MustVariant([]*ua.ExtensionObject{}), ua.MustVariant([]*ua.NodeID{})}, ua.StatusOK
+	})
+
+	c := testutil.NewTestClient(t, url)
+	r := remote.New(c)
+	ctx := context.Background()
+
+	_, err := r.ReserveIDs(ctx, "http://opcfoundation.org/UA-Profile/Transport/pubsub-udp-uadp", 1, 0)
+	require.ErrorIs(t, err, ua.StatusBadTypeMismatch)
+	require.ErrorContains(t, err, "WriterGroupIds")
+
+	res, err := r.UpdateConfiguration(ctx, &ua.PubSubConfiguration2DataType{}, nil, false)
+	require.NoError(t, err)
+	require.True(t, res.ChangesApplied)
+	require.Equal(t, []ua.StatusCode{ua.StatusOK}, res.Results)
+	require.Len(t, res.Values, 1)
+	require.Equal(t, "c", res.Values[0].Name)
+	require.Nil(t, res.Objects)
+	mu.Lock()
+	eos, ok := refs[2].Value().([]*ua.ExtensionObject)
+	mu.Unlock()
+	require.True(t, ok)
+	require.NotNil(t, eos, "no references are an empty array")
+	require.Empty(t, eos)
+
+	_, err = r.UpdateConfiguration(ctx, &ua.PubSubConfiguration2DataType{}, nil, false)
+	require.ErrorIs(t, err, ua.StatusBadTypeMismatch)
+	require.ErrorContains(t, err, "ChangesApplied")
 }

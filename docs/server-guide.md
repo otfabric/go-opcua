@@ -742,9 +742,12 @@ func read(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Varia
 }
 ```
 
-The contracts are those of FileType and FileDirectoryType, and of
-RoleSetType and RoleType (OPC 10000-18); the families are chosen in
-`cmd/methods/config.go`.
+The contracts are those of FileType and FileDirectoryType, of
+RoleSetType and RoleType (OPC 10000-18), of ServerType (OPC 10000-5 §9),
+of TrustListType (OPC 10000-12 §7.8.2), and of PubSubConfigurationType
+and PubSubKeyServiceType (OPC 10000-14 §9.1.3.7, §8.3); the families are
+chosen in `cmd/methods/config.go`. The TrustList, PubSubConfiguration and
+SKS Methods of the server use them.
 
 ---
 
