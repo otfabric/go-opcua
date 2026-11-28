@@ -502,7 +502,7 @@ func TestConnectionManagerFile(t *testing.T) {
 	require.Equal(t, ua.StatusOK, sc)
 	h := out[0].Value().(uint32)
 	_, sc = call(f.c, "Open", uint8(0x06))
-	assert.Equal(t, ua.StatusBadInvalidState, sc, "no writer beside a reader")
+	assert.Equal(t, ua.StatusBadNotWritable, sc, "no writer beside a reader (OPC 10000-20 §4.2.2)")
 	var data []byte
 	for {
 		out, sc = call(f.c, "Read", h, int32(64))
@@ -592,7 +592,7 @@ func TestConnectionManagerFile(t *testing.T) {
 	out, sc = call(gone, "Open", uint8(0x06))
 	require.Equal(t, ua.StatusOK, sc)
 	_, sc = call(f.c, "Open", uint8(0x06))
-	assert.Equal(t, ua.StatusBadInvalidState, sc)
+	assert.Equal(t, ua.StatusBadNotWritable, sc)
 	require.NoError(t, gone.Close(context.Background()))
 	require.Eventually(t, func() bool {
 		out, sc = call(f.c, "Open", uint8(0x06))

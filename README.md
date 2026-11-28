@@ -89,8 +89,8 @@ For full API details see [API.md](API.md).
 
 | Guide | Description |
 |-------|-------------|
-| [Client Guide](docs/client-guide.md) | Connecting (`opc.tcp`, `opc.wss`, `opc.https`, reverse connect), reading, writing, browsing, subscriptions, alarms and conditions, methods, history, server diagnostics, certificate management (`gds`, push and pull) |
-| [Server Guide](docs/server-guide.md) | Building servers, transports, namespaces, custom nodes, methods, events, alarms and conditions, history, discovery, push certificate management, Global Discovery Server, access control, diagnostics |
+| [Client Guide](docs/client-guide.md) | Connecting (`opc.tcp`, `opc.wss`, `opc.https`, reverse connect), reading, writing, browsing, subscriptions, alarms and conditions, methods, files, history, server diagnostics, certificate management (`gds`, push and pull) |
+| [Server Guide](docs/server-guide.md) | Building servers, transports, namespaces, custom nodes, methods, files, events, alarms and conditions, history, discovery, push certificate management, Global Discovery Server, access control, diagnostics |
 | [Security Guide](docs/security.md) | Certificates, RSA and ECC security policies (incl. Brainpool and Curve448), TLS for `opc.wss` / `opc.https`, push certificate management, authentication, security checklist |
 | [Architecture](docs/architecture.md) | Package layering, message flow, concurrency patterns, internals |
 | [PubSub](docs/pubsub.md) | Publishers and subscribers over UDP, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0, UADP and JSON, message security, Security Key Service, chunks, discovery, Actions, diagnostics, PublishSubscribe information model |
@@ -389,7 +389,8 @@ you rely on.
 | **Subscriptions** | Data-change, events, modify/cancel, `SetTriggering`, `SetPublishingMode`, builder `Timestamps`, `SamplingInterval` and `DataChangeFilter` (trigger, deadband); Part 4 queue / lifecycle semantics on go-opcua servers |
 | **Alarms & Conditions** | `NewConditionEventFilter` / `ParseConditionEvent`, `Acknowledge`, `Confirm`, `AddComment`, `EnableCondition` / `DisableCondition`, `TimedShelve` / `OneShotShelve` / `Unshelve`, `ConditionRefresh` / `ConditionRefresh2`; v1.05 `Suppress` / `Unsuppress`, `RemoveFromService` / `PlaceInService`, `Silence`, `Reset`, `Respond`, `GetGroupMemberships` and every `*2` variant; `ReadAlarmMetrics` / `ResetAlarmMetrics`; `NewAuditConditionEventFilter` / `ParseAuditConditionEvent`, `WithAuditEntryID` (Part 9) |
 | **Monitoring** | `monitor` package: callback/channel subscriptions; batch add with per-item `ItemError`; zero-value `MonitoringMode` defaults to Reporting |
-| **Methods** | `Call`, `CallMethod` (auto-wrap args), `MethodArguments` introspection |
+| **Methods** | `Call`, `CallMethod` (auto-wrap args), `MethodArguments` introspection; typed contracts generated from the NodeSet (`uamethod`) |
+| **Files** | `filetransfer`: FileType Open / Read / Write / Close with `io.Reader` and `io.Writer`, `ReadAll` / `WriteAll`, the Properties; FileDirectoryType CreateDirectory / CreateFile / Delete / MoveOrCopy (Part 20) |
 | **History** | Read: raw/modified, events, processed, at-time. Update: data, events. Delete: raw/modified, at-time, events. Paging helpers `ReadHistory` / `ReadHistoryAll` (values) and `ReadEventHistory` / `ReadEventHistoryAll` (events) follow continuation points and release the one left on early stop; `HistoryReleaseContinuationPoints` |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` |
 | **Query** | `QueryFirst`, `QueryNext` |
@@ -412,7 +413,8 @@ you rely on.
 | **View** | RegisterNodes, UnregisterNodes |
 | **Query** | Opt-in (`WithQuery`): QueryFirst, QueryNext with full ContentFilter evaluation (all 18 operators, 3-valued logic), type/subtype matching, access control, and session-bound continuation points |
 | **Session** | Create, Activate, Close (with DeleteSubscriptions), Cancel; `WithSessionObserver` (connections, sessions, refused requests); security audit events of the SecureChannel and Session services (`WithAuditing`) |
-| **Methods** | Register handlers via `RegisterMethod`, argument introspection |
+| **Methods** | Register handlers via `RegisterMethod`, argument introspection; typed contracts generated from the NodeSet (`uamethod`) |
+| **Files** | `AddFile` / `ServeFile`: FileType (Part 20 §4.2) with per-session handles, the Open mode rules and the Properties, on a `MemoryFile`, `OSFile` or own backend; `AddFileDirectory`: FileDirectoryType file systems (§4.3) on a `MemoryDirectory` or an `OSDirectory` (`os.OpenRoot`) |
 | **Events** | `EmitEvent` (raw fields) and `EmitBaseEvent` (`BaseEvent` + custom `Fields` + EventFilter SelectClauses / WhereClause) |
 | **Alarms & Conditions** | `AddCondition`: ConditionType, AcknowledgeableConditionType, AlarmConditionType and the limit / off-normal alarm subtypes with their standard components; Enable / Disable, AddComment, Acknowledge / Confirm with EventId checks, Retain, shelving, suppression, ConditionRefresh / ConditionRefresh2; v1.05 OutOfService / Silence / Latched states with Suppress / Unsuppress / RemoveFromService / PlaceInService / Silence / Reset and every `*2` variant, DialogConditionType (Respond / Respond2), condition branches, alarm groups and alarm suppression groups, AuditConditionEventType events (`WithAuditing`), OnDelay / OffDelay, ReAlarmTime / ReAlarmRepeatCount, AudibleEnabled / AudibleSound, FirstInGroupFlag / FirstInGroup, AlarmMetricsType with Reset (`AddAlarmMetrics`, `WithAlarmClock`); methods run through the Call service and the `AccessController` (Part 9) |
 | **History** | Pluggable `HistoryProvider`; default in-memory `*Historian` with optional update/delete/at-time/modified/processed interfaces; processed reads with every standard Part 13 Aggregate but AnnotationCount (`server/aggregate`), also for a provider with raw reads only; historical events (`EnableEventHistory`, HistoricalEventFilter, ReadEventDetails, UpdateEventDetails, DeleteEventDetails) |

@@ -7,6 +7,14 @@
 
 The first items of phase 3 of docs/roadmap.md. The server gives every Structure, Union, Enumeration and OptionSet DataType its DataTypeDefinition Attribute, from the Definition of the NodeSet it imports. HistoryRead processed with the Part 13 Aggregates: the new package `server/aggregate` calculates every standard Aggregate of OPC 10000-13 §5.4.3 but AnnotationCount, for the built-in `*Historian` and for any `HistoryProvider` that has raw reads only. Its evidence is Annex A: the tests calculate all 1358 rows of the 159 example tables of AggregateExamples.csv (pinned in `schema/manifest.json`); 1294 match the file in value, timestamp and StatusCode, and the 64 others are rows where the file conflicts with a clause and the package follows the clause, each listed with it. A monitored item with an AggregateFilter (Part 4 §7.22.4) calculates the same Aggregates the same way, once per publishing interval.
 
+With it, phase 2 of docs/roadmap.md, generated Method contracts, with its
+pilot: Part 20 files. A generator emits typed contracts of Methods from the NodeSet; a
+public FileType and FileDirectoryType on the server and in a new client
+package are built on them, and the four FileType implementations of the
+library (the TrustLists of push management and `ServeTrustList`, the
+PubSubConfiguration file, the UAFX ConnectionManagerConfiguration) and the
+clients of their files now share them.
+
 ### Added
 
 - server: the DataTypeDefinition Attribute (AttributeId 23) of the DataTypes of namespace 0 and of every model `ImportNodeSetXML` imports. "The Attribute shall be mandatory for DataTypes derived from Structure and Union", with a StructureDefinition, and "for DataTypes derived from Enumeration, OptionSet and subtypes of UInteger representing an OptionSet", with an EnumDefinition (OPC 10000-3 §5.8.3, Table 16). "The DataTypeDefinition Attribute can be populated from the DataTypeDefinition belonging to a UADataType" (OPC 10000-6 §F.12), which lists only the fields the DataType adds: the importer follows the HasSubtype Reference to the supertype, in the document or already in the address space (namespace 0, a model imported before or a DataType a program gave the Attribute), and puts its fields first, "this list shall begin with the fields of the baseDataType followed by the fields of this StructureDefinition" (Part 3 §8.48).
@@ -22,12 +30,49 @@ The first items of phase 3 of docs/roadmap.md. The server gives every Structure,
   - the startTime becomes the first boundary startTime + n × processingInterval after the creation;
   - the configuration of the Variable comes from the history provider (Part 13 §4.3.1).
 - server: the AggregateFunctions folder of the ServerCapabilities (Part 5 §6.3.2) organizes the 36 Aggregates a monitored item can use.
+- `cmd/methods` (run by `make gen`, checked by `make check-gen`): emits the
+  contracts of the Methods of the ObjectTypes `cmd/methods/config.go`
+  selects, from the InputArguments and OutputArguments of the pinned
+  NodeSet, into `uamethod/methods_gen.go`.
+- Package `uamethod`: for FileType and FileDirectoryType (OPC 10000-20
+  §4.2, §4.3), a `Method` value per Method (NodeIds of the Method and its
+  ObjectType, clause, Mandatory, `InputArguments` / `OutputArguments`),
+  Input and Output structs with `Pack` and `Unpack` (the argument count,
+  built-in type and ValueRank checks of the Call service, as
+  `*ArgumentError` with `Bad_ArgumentsMissing`, `Bad_TooManyArguments` or
+  `Bad_TypeMismatch`), and `Call<Type><Method>` functions for a client
+  (`*CallError` for a Bad result).
+- `server`: `AddFile`, `ServeFile` and `NewFile` serve a FileType Object
+  (`FileObject`): per-session handles closed at the end of the session,
+  the Open rules of §4.2.2 (Table 4 modes, several readers, one writer,
+  `Bad_NotWritable` / `Bad_NotReadable`), Read, Write, GetPosition,
+  SetPosition, the Properties Size, Writable, UserWritable, OpenCount,
+  MaxByteStringLength, MimeType and LastModifiedTime; `FileConfig` with
+  Modes, MaxHandles, Authorize and OnChange; backends `MemoryFile`,
+  `OSFile`, `SnapshotFile` or your own `FileBackend`; `OpenBytes` and
+  `CloseAndTake` for subtypes with Methods of their own.
+- `server`: `AddFileDirectory` serves a file system of FileDirectoryType
+  Objects (§4.3) with CreateDirectory, CreateFile, Delete and MoveOrCopy,
+  on a `MemoryDirectory`, an `OSDirectory` (`os.OpenRoot`) or your own
+  `DirectoryBackend`, with an Authorize hook per operation and path.
+- Package `filetransfer`: the client of FileType (`NewObject`, `Open`,
+  `Read`, `Write`, `Position`, `SetPosition`, `Close`, `ReadAll`,
+  `WriteAll`, `Info`, `io.Reader` and `io.Writer` adapters, `Attach` for a
+  handle of OpenWithMasks or CreateFile, `ObjectFunc` for an own call path)
+  and of FileDirectoryType (`NewDirectory`, `Entries`, `CreateDirectory`,
+  `CreateFile`, `Delete`, `MoveOrCopy`).
 
 ### Changed
 
 - server: a HistoryRead `ReadProcessedDetails` reads `aggregateType[i]` for node `i` (Part 11 §6.5.4.2); it read the first Aggregate for every node.
 - server: for a provider without `ProcessedHistoryReader` the server calculates the Aggregates from `ReadRaw`, over one ProcessingInterval beyond the request on each side, following the provider's continuation points.
 - client: `HistoryReadProcessed` asks for source timestamps (TimestampsToReturn Source, Part 13 §5.4.3.1); it asked for Both.
+- The TrustList objects of push management and `ServeTrustList`, the
+  PubSubConfiguration file and `fxserver`'s ConnectionManagerConfiguration
+  use `server.FileObject` for their FileType Methods; `gds.ReadTrustList`,
+  `gds.WriteTrustList`, `remote.ReadConfiguration` and
+  `remote.UpdateConfiguration` use `filetransfer` (their errors stay
+  `*gds.Error` and `*remote.Error`).
 
 ### Behaviour changes
 
@@ -38,6 +83,29 @@ The first items of phase 3 of docs/roadmap.md. The server gives every Structure,
 - A custom provider with `ReadRaw` only now answers processed reads instead of `Bad_HistoryOperationUnsupported`, and the AggregateFunctions folder lists the Aggregates for it.
 - A monitored item with an AggregateFilter is created where it was refused with `Bad_MonitoredItemFilterUnsupported`. An Aggregate the server does not calculate is `Bad_AggregateNotSupported`, an attribute other than Value `Bad_FilterNotAllowed`, and an invalid aggregateConfiguration `Bad_MonitoredItemFilterInvalid`. TimestampsToReturn Server or Neither is `Bad_TimestampsToReturnInvalid` for the item (Part 13 §5.4.3.1); Both is accepted.
 - The Description of the AggregateFunction Objects in namespace 0 is set, and the AggregateFunctions folder of the ServerCapabilities organizes them. `server/testdata/nodeset_golden.txt` is rewritten for both: the digests of those 37 nodes change, with 72 more References of namespace 0, and nothing else.
+- Read with a length of zero is `Bad_InvalidArgument` on every file
+  (OPC 10000-20 §4.2.4, Table 6: "Only positive values are allowed"); the
+  TrustList, PubSubConfiguration and ConnectionManagerConfiguration files
+  returned an empty ByteString.
+  A client that wants the old result treats `Bad_InvalidArgument` of a Read
+  of length 0 as an empty read.
+- ConnectionManagerConfiguration: an Open for writing beside another handle
+  is `Bad_NotWritable` and an Open for reading beside a writer
+  `Bad_NotReadable` (§4.2.2), not `Bad_InvalidState`; a negative Read
+  length is `Bad_InvalidArgument` (§4.2.4), not `Bad_InvalidState`; an Open
+  outside a session is `Bad_SessionIdInvalid`. A client that matched
+  `Bad_InvalidState` matches the new codes.
+- The handles of the TrustList, push and PubSubConfiguration files are
+  closed when their session ends, as those of the ConnectionManager file
+  were; before, a handle of a closed session was found and dropped at the
+  next Open or OpenCount. OpenCount is the same; there is no option to keep
+  the old timing.
+- The `gds` and `pubsub/remote` clients check the output arguments of the
+  FileType Methods against their declarations: an Open whose FileHandle is
+  not a UInt32, or a Read whose Data is not a ByteString, is an
+  `*uamethod.ArgumentError` (`Bad_TypeMismatch`); a Read result of another
+  type was taken as the end of the file. `gds.ReadTrustList` beyond 64 MiB
+  says `filetransfer: the file exceeds 67108864 bytes`.
 
 ### Tests
 
@@ -51,6 +119,24 @@ The first items of phase 3 of docs/roadmap.md. The server gives every Structure,
 - `TestHistory_ReadProcessed` and `TestHistory_CustomProvider` (`conformance/history`): seven Aggregates with their status bits, reverse reads, one interval, invalid arguments, the list mismatch and the AggregateFunctions folder over the wire; processed reads of a provider with raw reads only.
 - `TestAggregateFilter_SameAsHistoryRead` (`server`): eleven Aggregates of each kind, over Good, Uncertain and Bad values in two calculations. Each value of a monitored item equals the value of a HistoryRead of the Historian over the same raw values, in Status, SourceTimestamp and Value, and its ServerTimestamp is the end of the interval. `TestAggregateFilter_Services`, `TestAggregateFilter_ProviderConfig`, `TestNewAggregateItem`, `TestReviseProcessingInterval`, `TestReviseAggregateStart`, `TestAggregateItemRecord`, `TestAggregateItemPrune`, `TestAggregateFilter_NotCalculated`, `TestAggregateFilter_SkipsUnreachableIntervals` and `TestAggregateFilter_SourceTimestamps` cover the revisions, every error, Modify to and from a DataChangeFilter, SetMonitoringMode, the configuration of the provider, arrays and the bounds.
 - `TestAggregateFilter_Wire` and `TestAggregateFilter_Errors` (`conformance/subscription`): the AggregateFilterResult and Count values over the wire, with their timestamps and bits, until every write is counted; the ServerCapabilities AggregateFunctions folder; the operation results. `TestDataChange_FilterErrors` expects `Bad_TimestampsToReturnInvalid` for its AggregateFilter with TimestampsToReturn Neither.
+- `uamethod`: round trips of every contract; wrong count, type, ValueRank
+  and null for each argument; the helpers of every ValueRank of Part 3
+  §5.6.2 and of structures; the call functions against a fake caller;
+  `FuzzUnpack`.
+- `server`: FileType conformance (`TestFileOpenModes`, `TestFileHandles`,
+  `TestFileReadWritePosition`, `TestFileSessionEnd`, `TestFileOpenRace`,
+  `TestFileBackendErrors`, `TestFileCloseAndTake`, `TestFileProperties`,
+  `TestFileMethodHandlers`, `TestOSFile`), `TestAddFile`, and
+  FileDirectoryType (`TestFileDirectory`, `TestFileDirectoryBackendErrors`,
+  `TestMemoryDirectory`, `TestOSDirectory`).
+- `filetransfer`: the client against a server (`TestFile`,
+  `TestFileOfType`, `TestDirectory`) and `TestObjectFunc`.
+- `cmd/methods`: the committed output, the next families
+  (`TestNextFamilies`), load errors and clauses. CI and the release
+  workflow run the tests of `cmd/` (policy CI-005); they excluded it.
+- No interop ledger rows: the FileType Methods are tested against go-opcua
+  only; the interop suite reads TrustLists of the peers through the
+  migrated `gds` client.
 
 ---
 ## v1.42.1

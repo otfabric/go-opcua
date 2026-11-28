@@ -523,7 +523,7 @@ func TestPushResetToServerDefaults(t *testing.T) {
 	require.Equal(t, p.ServerCert, s.HTTPSCertificate())
 	require.Nil(t, s.push.tx)
 	require.Empty(t, s.push.csrKeys)
-	require.Zero(t, s.push.groups[groupApplication].openCount.Load())
+	require.Zero(t, s.push.groups[groupApplication].file.OpenCount())
 	d := s.push.diagnostics()
 	require.Equal(t, ua.StatusBadRequestCancelledByClient, d.result)
 

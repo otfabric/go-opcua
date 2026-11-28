@@ -297,9 +297,6 @@ func (g cmGuard) SessionEnded(sess *server.Session) {
 			c.loseLockLocked(s)
 		}
 	}
-	if c.file != nil {
-		c.file.dropSession(owner)
-	}
 }
 
 // --- SelectionList writes ---------------------------------------------------

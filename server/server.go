@@ -87,6 +87,8 @@ type Server struct {
 
 	// methods stores registered server-side method handlers keyed by "objectID\x00methodID".
 	methods map[string]MethodHandler
+	// files are the FileObjects, whose handles end with their session.
+	files fileRegistry
 	// guards are the Guards of AddGuard: a slice AddGuard replaces, never
 	// changes in place, so that requests read it without a lock.
 	guards  atomic.Pointer[[]Guard]
@@ -375,6 +377,7 @@ func New(opts ...Option) (*Server, error) {
 	s.registerAlarmMethods()
 	if push != nil {
 		push.s = s
+		push.initFiles()
 		s.push = push
 	}
 
@@ -845,6 +848,8 @@ func (s *Server) sessionRemoved(sess *session, reason SessionCloseReason) {
 	}
 	s.diag.sessionRemoved(sess, reason == SessionTimedOut)
 	s.observeSessionClosed(sess, reason)
+	// OPC 10000-20 §4.2.2: a fileHandle is valid in its session only.
+	s.files.sessionEnded(sess.ID)
 	s.guardSessionEnded(sess)
 	s.auditSessionEnd(sess, reason)
 }

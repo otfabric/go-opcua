@@ -82,6 +82,15 @@ behaviour you may notice, and the deviations of peers are in
   `aggregate.MaxIntervals`), without continuation points, and the server
   searches bounding values one ProcessingInterval beyond the request of a
   raw-only provider.
+- Part 20 files: the server adds no FileSystem Object of its own (the
+  application adds one with `AddFileDirectory`); a FileDirectory reads the
+  backend when it is added and follows only the changes of its Methods; the
+  generated Method contracts (`uamethod`) cover FileType and
+  FileDirectoryType, the other Method handlers and clients keep their
+  argument code. `filetransfer.Directory.Entries` recognizes the Objects
+  whose TypeDefinition is FileType or FileDirectoryType, not those of a
+  subtype. The FileType Methods are tested against go-opcua only, besides
+  the TrustList reads and writes of the interop suite.
 
 ## Verification
 

@@ -15,7 +15,8 @@
 | **Browse** | `Browse`, `BrowseNext` | Fully implemented (`ResultMask`, continuation release) |
 | **View** | `RegisterNodes`, `UnregisterNodes` | Fully implemented |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` | Fully implemented |
-| **Method** | `Call`, `CallMethod` | Fully implemented |
+| **Method** | `Call`, `CallMethod`; typed contracts of package `uamethod` | Fully implemented |
+| **Files** (Part 20, over Method + Call) | package `filetransfer`: FileType (`Open`, `Read`, `Write`, `Position`, `SetPosition`, `Close`, `ReadAll`, `WriteAll`, `Info`, `io.Reader` / `io.Writer`) and FileDirectoryType (`Entries`, `CreateDirectory`, `CreateFile`, `Delete`, `MoveOrCopy`) | Implemented; see [Files](#files-part-20) |
 | **Subscription** | `Subscribe`, `SubscriptionBuilder`, `SetPublishingMode`, `Republish`, `TransferSubscriptions` | Fully implemented; reconnect recovery via `WithSubscriptionRecoveryHandler` |
 | **Monitored Items** | `Monitor`, `ModifyMonitoredItems`, `Unmonitor`, `SetMonitoringMode`, `SetTriggering` | Fully implemented (exact queues / Overflow on go-opcua servers) |
 | **Query** | `QueryFirst`, `QueryNext` | Fully implemented (server-dependent) |
@@ -1067,6 +1068,54 @@ req := &ua.CallMethodRequest{
 }
 
 result, err := c.Call(ctx, req)
+```
+
+### Typed calls
+
+Package `uamethod` has generated contracts of Methods of namespace 0
+(FileType and FileDirectoryType today): typed inputs and outputs and a
+call function that checks the outputs against the declaration. A nil
+method NodeId calls the declaration of the type, which a server maps to
+the Method of the Object (Part 4 §5.12.2.2 in 1.05.06):
+
+```go
+out, err := uamethod.CallFileTypeRead(ctx, c, fileObject, nil,
+    &uamethod.FileTypeReadInput{FileHandle: h, Length: 4096})
+// err: *uamethod.CallError for a Bad result, *uamethod.ArgumentError for outputs that do not match
+```
+
+---
+
+## Files (Part 20)
+
+Package `filetransfer` reads and writes FileType Objects (OPC 10000-20
+§4.2) and manages FileDirectoryType Objects (§4.3) of any server. The
+Methods are found by their BrowseName under the Object; without them the
+declarations of the type are called.
+
+```go
+f := filetransfer.NewObject(c, fileObject)
+data, err := f.ReadAll(ctx, 16<<20)     // Open(Read), Read to the end, Close; at most 16 MiB
+err = f.WriteAll(ctx, []byte("content")) // Open(Write|EraseExisting), Write, Close
+info, err := f.Info(ctx)                 // Size, Writable, OpenCount, MimeType, ...
+
+h, err := f.Open(ctx, ua.OpenFileModeRead)
+defer h.Close(ctx)
+_, err = io.Copy(os.Stdout, h.Reader(ctx)) // h.Writer(ctx) for a handle opened for writing
+```
+
+`Object.Chunk` is the size of each Read and Write call (64 KiB by
+default); a server returns at most its MaxByteStringLength per Read. A
+Bad result is an `*uamethod.CallError` (`errors.Is(err,
+ua.StatusBadNotWritable)` holds).
+
+```go
+d := filetransfer.NewDirectory(c, fileSystem)
+entries, err := d.Entries(ctx)                 // the directories and files it Organizes
+logs, err := d.CreateDirectory(ctx, "logs")
+obj, file, err := d.Directory(logs).CreateFile(ctx, "today", true) // opened with Read and Write
+newID, err := d.MoveOrCopy(ctx, obj.NodeID(), logs, true, "copy") // copy into logs
+err = d.Delete(ctx, logs)
 ```
 
 ---

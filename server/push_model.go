@@ -49,7 +49,7 @@ func (s *Server) buildPushModel() error {
 		d := g.def
 		set(d.certTypes, func() *ua.DataValue { return DataValueFromValue(m.groupTypes(g)) }, &g.nodes)
 		set(d.size, func() *ua.DataValue { return DataValueFromValue(uint64(g.trust.Load().size)) }, &g.nodes)
-		set(d.openCount, func() *ua.DataValue { return DataValueFromValue(uint16(g.openCount.Load())) }, &g.nodes)
+		set(d.openCount, func() *ua.DataValue { return DataValueFromValue(uint16(g.file.OpenCount())) }, &g.nodes)
 		set(d.lastUpdate, func() *ua.DataValue {
 			return DataValueFromValue(time.Unix(0, g.lastUpdate.Load()).UTC())
 		}, &g.nodes)
@@ -97,11 +97,11 @@ func (s *Server) buildPushModel() error {
 		handlers := map[string]func(context.Context, *MethodCaller, []*ua.Variant) ([]*ua.Variant, ua.StatusCode){
 			"Open":              gm(m.fileOpen),
 			"OpenWithMasks":     gm(m.fileOpenWithMasks),
-			"Close":             gm(m.fileClose),
-			"Read":              gm(m.fileRead),
-			"Write":             gm(m.fileWrite),
-			"GetPosition":       gm(m.fileGetPosition),
-			"SetPosition":       gm(m.fileSetPosition),
+			"Close":             gm(m.fileMethod("Close")),
+			"Read":              gm(m.fileMethod("Read")),
+			"Write":             gm(m.fileMethod("Write")),
+			"GetPosition":       gm(m.fileMethod("GetPosition")),
+			"SetPosition":       gm(m.fileMethod("SetPosition")),
 			"CloseAndUpdate":    gm(m.fileCloseAndUpdate),
 			"AddCertificate":    gm(m.addCertificate),
 			"RemoveCertificate": gm(m.removeCertificate),

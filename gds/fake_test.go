@@ -118,7 +118,7 @@ func TestMisbehavingServer(t *testing.T) {
 	_, err = g2.ReadTrustList(ctx, ua.TrustListMasksAll)
 	require.ErrorIs(t, err, ua.StatusBadInvalidArgument)
 	_, err = g2.WriteTrustList(ctx, &ua.TrustListDataType{})
-	require.ErrorContains(t, err, "want a UInt32")
+	require.ErrorIs(t, err, ua.StatusBadTypeMismatch)
 	_, err = g2.WriteTrustList(ctx, &ua.TrustListDataType{}) // Open itself fails on a second server below
 	require.Error(t, err)
 
