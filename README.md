@@ -415,7 +415,7 @@ you rely on.
 | **Methods** | Register handlers via `RegisterMethod`, argument introspection |
 | **Events** | `EmitEvent` (raw fields) and `EmitBaseEvent` (`BaseEvent` + custom `Fields` + EventFilter SelectClauses / WhereClause) |
 | **Alarms & Conditions** | `AddCondition`: ConditionType, AcknowledgeableConditionType, AlarmConditionType and the limit / off-normal alarm subtypes with their standard components; Enable / Disable, AddComment, Acknowledge / Confirm with EventId checks, Retain, shelving, suppression, ConditionRefresh / ConditionRefresh2; v1.05 OutOfService / Silence / Latched states with Suppress / Unsuppress / RemoveFromService / PlaceInService / Silence / Reset and every `*2` variant, DialogConditionType (Respond / Respond2), condition branches, alarm groups and alarm suppression groups, AuditConditionEventType events (`WithAuditing`), OnDelay / OffDelay, ReAlarmTime / ReAlarmRepeatCount, AudibleEnabled / AudibleSound, FirstInGroupFlag / FirstInGroup, AlarmMetricsType with Reset (`AddAlarmMetrics`, `WithAlarmClock`); methods run through the Call service and the `AccessController` (Part 9) |
-| **History** | Pluggable `HistoryProvider`; default in-memory `*Historian` with optional update/delete/at-time/modified/processed interfaces; historical events (`EnableEventHistory`, HistoricalEventFilter, ReadEventDetails, UpdateEventDetails, DeleteEventDetails) |
+| **History** | Pluggable `HistoryProvider`; default in-memory `*Historian` with optional update/delete/at-time/modified/processed interfaces; processed reads with every standard Part 13 Aggregate but AnnotationCount (`server/aggregate`), also for a provider with raw reads only; historical events (`EnableEventHistory`, HistoricalEventFilter, ReadEventDetails, UpdateEventDetails, DeleteEventDetails) |
 | **Access Control** | Pluggable `AccessController` interface for per-operation authorization |
 | **NodeSet2 Import** | Load standard or custom NodeSet2 XML via `ImportNodeSetXML`, including variable values, data types and access levels |
 | **Reverse connect** | `WithReverseConnect` / `AddReverseConnect`: connect to listening clients, keep one idle connection available, retry with back-off, add and remove targets at run time |
@@ -443,7 +443,7 @@ Per-area verification status: [docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md).
 | | Cancel | — | Yes |
 | **Attribute** | Read | Yes | Yes |
 | | Write | Yes | Yes |
-| | HistoryRead | Yes | Yes (via `HistoryProvider`; default `*Historian` supports raw/modified/at-time/processed and events) |
+| | HistoryRead | Yes | Yes (via `HistoryProvider`; default `*Historian` supports raw/modified/at-time/processed and events; Part 13 Aggregates for any provider) |
 | | HistoryUpdate | Yes | Yes (when historian implements optional updater/deleter interfaces; default `*Historian` does, for data and events) |
 | **View** | Browse | Yes | Yes |
 | | BrowseNext | Yes | Yes |

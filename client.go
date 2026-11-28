@@ -2343,13 +2343,19 @@ func (c *Client) HistoryReadRawModified(ctx context.Context, nodes []*ua.History
 	return send[ua.HistoryReadResponse](ctx, c, req)
 }
 
+// HistoryReadProcessed reads Aggregates of the history of nodes (Part 11
+// §6.5.4): details.AggregateType holds one Aggregate per node, in the order
+// of nodes. It asks for source timestamps (Part 13 §5.4.3.1).
 func (c *Client) HistoryReadProcessed(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadProcessedDetails) (*ua.HistoryReadResponse, error) {
 	stats.Client().Add("HistoryReadProcessed", 1)
 	stats.Client().Add("HistoryReadValueID", int64(len(nodes)))
 
-	// Part 4, 5.10.3 HistoryRead
+	// Part 4, 5.10.3 HistoryRead. Processed values have source timestamps
+	// only: "If a requested timestamp is set to anything but the source
+	// timestamp the operation shall return the Bad_TimestampToReturnInvalid
+	// StatusCode" (Part 13 §5.4.3.1).
 	req := &ua.HistoryReadRequest{
-		TimestampsToReturn: ua.TimestampsToReturnBoth,
+		TimestampsToReturn: ua.TimestampsToReturnSource,
 		NodesToRead:        nodes,
 		// Part 11, 6.4 HistoryReadDetails parameters
 		HistoryReadDetails: &ua.ExtensionObject{

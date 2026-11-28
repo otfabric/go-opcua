@@ -431,6 +431,7 @@ func New(opts ...Option) (*Server, error) {
 	}
 	s.bindAuditing()
 	s.bindHistoryCapabilities()
+	s.bindAggregateFunctions()
 	s.bindSessionCapabilities()
 	s.bindMonitoredItemCapabilities()
 	s.bindContinuationPointCapabilities()

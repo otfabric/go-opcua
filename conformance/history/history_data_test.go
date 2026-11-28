@@ -13,6 +13,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/server/aggregate"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -340,51 +341,118 @@ func TestHistory_ReadProcessed(t *testing.T) {
 		require.Len(t, resp.Results, 1)
 		return resp.Results[0]
 	}
+	values := func(r *ua.HistoryReadResult) []*ua.DataValue {
+		t.Helper()
+		require.Equal(t, ua.StatusOK, r.StatusCode)
+		return r.HistoryData.Value.(*ua.HistoryData).DataValues
+	}
+	// The StatusCodes of processed values carry the Aggregate bits of Part 4
+	// §7.38.1, Table 177, with the InfoType DataValue.
+	const (
+		calculated   = ua.StatusCodeInfoTypeDataValue | ua.StatusCodeHistorianCalculated
+		interpolated = ua.StatusCodeInfoTypeDataValue | ua.StatusCodeHistorianInterpolated
+		partial      = ua.StatusCodeHistorianPartial
+	)
 
-	// Three 5s intervals over samples 0..9: [0..4], [5..9], and an empty one.
+	// Three 5s intervals over samples 0..9 (value i at i s): [0..4], [5..9],
+	// and one after the end of data. The second overlaps the latest value
+	// and is Partial (Part 13 §5.3.3.2).
 	for _, tc := range []struct {
-		name string
-		agg  uint32
-		want []any
+		name   string
+		agg    uint32
+		want   []any
+		status []ua.StatusCode
 	}{
-		{"Average", id.AggregateFunctionAverage, []any{float64(2), float64(7)}},
-		{"Minimum", id.AggregateFunctionMinimum, []any{float64(0), float64(5)}},
-		{"Maximum", id.AggregateFunctionMaximum, []any{float64(4), float64(9)}},
-		{"Count", id.AggregateFunctionCount, []any{uint32(5), uint32(5)}},
+		// Average never sets Partial (Table 53).
+		{"Average", id.AggregateFunctionAverage, []any{float64(2), float64(7)}, []ua.StatusCode{calculated, calculated}},
+		// The minimum is the raw value at the start of the interval:
+		// "Good, Raw" (Table 58).
+		{"Minimum", id.AggregateFunctionMinimum, []any{float64(0), float64(5)}, []ua.StatusCode{0, partial | ua.StatusCodeInfoTypeDataValue}},
+		{"Maximum", id.AggregateFunctionMaximum, []any{float64(4), float64(9)}, []ua.StatusCode{calculated, calculated | partial}},
+		{"Count", id.AggregateFunctionCount, []any{int32(5), int32(5)}, []ua.StatusCode{calculated, calculated | partial}},
+		{"Interpolative", id.AggregateFunctionInterpolative, []any{float64(0), float64(5)}, []ua.StatusCode{0, 0}},
+		// Without a value after 9 s the end bound of [5, 10) is
+		// extrapolated, Uncertain (Table 54): (5+9)/2 x 4 s + 9 x 1 s over 5 s.
+		{"TimeAverage", id.AggregateFunctionTimeAverage, []any{float64(2.5), float64(7.4)}, []ua.StatusCode{calculated, ua.StatusUncertainDataSubNormal | calculated | partial}},
+		{"Range", id.AggregateFunctionRange, []any{float64(4), float64(4)}, []ua.StatusCode{calculated, calculated | partial}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := read(tc.agg, histAt(0), histAt(15), 5000)
-			require.Equal(t, ua.StatusOK, r.StatusCode)
-			dvs := r.HistoryData.Value.(*ua.HistoryData).DataValues
+			dvs := values(read(tc.agg, histAt(0), histAt(15), 5000))
 			require.Len(t, dvs, 3)
 			for i, want := range tc.want {
-				require.Equal(t, ua.StatusOK, dvs[i].Status)
+				require.Equal(t, tc.status[i], dvs[i].Status, "interval %d: %v", i, dvs[i].Status)
 				require.Equal(t, want, dvs[i].Value.Value(), "interval %d", i)
 				require.True(t, histAt(5*i).Equal(dvs[i].SourceTimestamp), "interval %d starts at its lower bound", i)
 			}
-			require.Equal(t, ua.StatusBadNoData, dvs[2].Status, "interval without samples")
+			if tc.agg == id.AggregateFunctionInterpolative || tc.agg == id.AggregateFunctionTimeAverage {
+				// Both extrapolate after the end of data (Tables 52, 54).
+				require.Equal(t, ua.StatusUncertainDataSubNormal, dvs[2].Status&^ua.StatusCodeHistorianBits&^ua.StatusCodeInfoTypeDataValue)
+			} else {
+				require.Equal(t, ua.StatusBadNoData, dvs[2].Status, "interval after the end of data")
+			}
 			require.True(t, histAt(10).Equal(dvs[2].SourceTimestamp))
 		})
 	}
 
 	t.Run("PartialLastInterval", func(t *testing.T) {
 		// 4s intervals over [0s, 10s): [0..3], [4..7], [8..9].
-		r := read(id.AggregateFunctionCount, histAt(0), histAt(10), 4000)
-		dvs := r.HistoryData.Value.(*ua.HistoryData).DataValues
+		dvs := values(read(id.AggregateFunctionCount, histAt(0), histAt(10), 4000))
 		require.Len(t, dvs, 3)
-		require.Equal(t, []any{uint32(4), uint32(4), uint32(2)},
+		require.Equal(t, []any{int32(4), int32(4), int32(2)},
 			[]any{dvs[0].Value.Value(), dvs[1].Value.Value(), dvs[2].Value.Value()})
 	})
 
+	t.Run("Reverse", func(t *testing.T) {
+		// endTime before startTime: "the data shall be returned in reverse
+		// order with the later data coming first" (Part 11 §6.5.4.2), the
+		// late time of each interval included, the early one excluded
+		// (Part 13 §5.4.2.2): (4..8], (0..4].
+		dvs := values(read(id.AggregateFunctionCount, histAt(8), histAt(0), 4000))
+		require.Len(t, dvs, 2)
+		require.Equal(t, []any{int32(4), int32(4)}, []any{dvs[0].Value.Value(), dvs[1].Value.Value()})
+		require.True(t, histAt(8).Equal(dvs[0].SourceTimestamp))
+		require.True(t, histAt(4).Equal(dvs[1].SourceTimestamp))
+	})
+
+	t.Run("OneInterval", func(t *testing.T) {
+		// ProcessingInterval 0: one interval from startTime to endTime.
+		dvs := values(read(id.AggregateFunctionAverage, histAt(0), histAt(10), 0))
+		require.Len(t, dvs, 1)
+		require.Equal(t, float64(4.5), dvs[0].Value.Value())
+	})
+
 	t.Run("InvalidArguments", func(t *testing.T) {
-		require.Equal(t, ua.StatusBadHistoryOperationInvalid,
+		require.Equal(t, ua.StatusBadInvalidArgument,
 			read(id.AggregateFunctionAverage, histAt(5), histAt(5), 1000).StatusCode, "empty time range")
-		require.Equal(t, ua.StatusBadHistoryOperationInvalid,
-			read(id.AggregateFunctionAverage, histAt(5), histAt(2), 1000).StatusCode, "end before start")
-		require.Equal(t, ua.StatusBadHistoryOperationInvalid,
-			read(id.AggregateFunctionAverage, histAt(0), histAt(10), 0).StatusCode, "zero processing interval")
-		require.Equal(t, ua.StatusBadHistoryOperationUnsupported,
-			read(id.AggregateFunctionTotal, histAt(0), histAt(10), 1000).StatusCode, "unsupported aggregate")
+		require.Equal(t, ua.StatusBadInvalidArgument,
+			read(id.AggregateFunctionAverage, histAt(0), histAt(10), -1).StatusCode, "negative processing interval")
+		require.Equal(t, ua.StatusBadAggregateNotSupported,
+			read(id.AggregateFunctionAnnotationCount, histAt(0), histAt(10), 1000).StatusCode, "unsupported aggregate")
+	})
+
+	t.Run("AggregateListMismatch", func(t *testing.T) {
+		_, err := c.HistoryReadProcessed(ctx,
+			[]*ua.HistoryReadValueID{{NodeID: f.HistoryVar}, {NodeID: f.HistoryVar}},
+			&ua.ReadProcessedDetails{
+				StartTime:          histAt(0),
+				EndTime:            histAt(10),
+				ProcessingInterval: 1000,
+				AggregateType:      []*ua.NodeID{ua.NewNumericNodeID(0, id.AggregateFunctionCount)},
+			})
+		require.ErrorIs(t, err, ua.StatusBadAggregateListMismatch)
+	})
+
+	t.Run("AggregateFunctions", func(t *testing.T) {
+		// Part 11 §5.7.2: the AggregateFunctions folder of the
+		// HistoryServerCapabilities organizes the Aggregates, each with the
+		// Description of Part 13 Table 5.
+		refs, err := c.Node(ua.NewNumericNodeID(0, id.HistoryServerCapabilitiesAggregateFunctions)).
+			ReferencedNodes(ctx, id.Organizes, ua.BrowseDirectionForward, ua.NodeClassObject, false)
+		require.NoError(t, err)
+		require.Len(t, refs, len(aggregate.Functions()))
+		desc, err := c.Node(ua.NewNumericNodeID(0, id.AggregateFunctionTimeAverage)).Description(ctx)
+		require.NoError(t, err)
+		require.Equal(t, "Retrieve the time weighted average data over the interval using Interpolated Bounding Values.", desc.Text)
 	})
 }
 
@@ -690,8 +758,9 @@ func (p *pagingProvider) ReleaseContinuation(cp []byte) {
 }
 
 // TestHistory_CustomProvider plugs a user-supplied HistoryProvider into the
-// server and verifies continuation points are mapped, hidden and released, and
-// that capabilities the provider lacks are reported as unsupported.
+// server and verifies continuation points are mapped, hidden and released,
+// that processed reads are calculated from its raw values, and that the
+// other capabilities the provider lacks are reported as unsupported.
 func TestHistory_CustomProvider(t *testing.T) {
 	p := &pagingProvider{total: 11, page: 4}
 	c, f, _, _ := setupWith(t, func(srv *server.Server, _ *testutil.Fixture) { srv.SetHistorian(p) })
@@ -736,6 +805,24 @@ func TestHistory_CustomProvider(t *testing.T) {
 		require.Equal(t, ua.StatusBadNodeIDUnknown, r.StatusCode)
 	})
 
+	t.Run("ProcessedFromRawReads", func(t *testing.T) {
+		// A provider without ReadProcessed gets the Aggregates of
+		// server/aggregate: the server reads the raw values, following the
+		// continuation points of the provider (pages of 4), and calculates.
+		pr, err := c.HistoryReadProcessed(ctx, []*ua.HistoryReadValueID{{NodeID: f.HistoryVar}}, &ua.ReadProcessedDetails{
+			StartTime: histAt(0), EndTime: histAt(10), ProcessingInterval: 2000,
+			AggregateType: []*ua.NodeID{ua.NewNumericNodeID(0, id.AggregateFunctionAverage)},
+		})
+		require.NoError(t, err)
+		require.Equal(t, ua.StatusOK, pr.Results[0].StatusCode)
+		dvs := pr.Results[0].HistoryData.Value.(*ua.HistoryData).DataValues
+		var got []any
+		for _, dv := range dvs {
+			got = append(got, dv.Value.Value())
+		}
+		require.Equal(t, []any{0.5, 2.5, 4.5, 6.5, 8.5}, got)
+	})
+
 	t.Run("MissingCapabilitiesUnsupported", func(t *testing.T) {
 		nodes := []*ua.HistoryReadValueID{{NodeID: f.HistoryVar}}
 		unsupported := ua.StatusBadHistoryOperationUnsupported
@@ -743,14 +830,6 @@ func TestHistory_CustomProvider(t *testing.T) {
 		at, err := c.HistoryReadAtTime(ctx, nodes, &ua.ReadAtTimeDetails{ReqTimes: []time.Time{histAt(1)}})
 		require.NoError(t, err)
 		require.Equal(t, unsupported, at.Results[0].StatusCode)
-
-		pr, err := c.HistoryReadProcessed(ctx, nodes, &ua.ReadProcessedDetails{
-			StartTime: histAt(0), EndTime: histAt(10), ProcessingInterval: 1000,
-			AggregateType:          []*ua.NodeID{ua.NewNumericNodeID(0, id.AggregateFunctionAverage)},
-			AggregateConfiguration: &ua.AggregateConfiguration{},
-		})
-		require.NoError(t, err)
-		require.Equal(t, unsupported, pr.Results[0].StatusCode)
 
 		mod, err := c.HistoryReadRawModified(ctx, nodes, &ua.ReadRawModifiedDetails{IsReadModified: true})
 		require.NoError(t, err)

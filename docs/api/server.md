@@ -181,6 +181,26 @@ The [Session](#type-session) parameter is the session of the request (nil withou
 
 Provide a custom implementation via [WithAccessController](#func-withaccesscontroller). The default is [DefaultAccessController](#type-defaultaccesscontroller) which allows all operations.
 
+### type AggregateConfigProvider
+
+```go
+type AggregateConfigProvider interface {
+	AggregateConfig(nodeID *ua.NodeID) aggregate.Config
+}
+```
+
+AggregateConfigProvider is optionally implemented by a HistoryProvider to give the configuration the Aggregates of a Variable are calculated with: the AggregateConfiguration of the Variable (Part 13 §4.2.1.2) and its Stepped Property (Part 11 §5.2.2). The aggregateConfiguration of a ReadProcessedDetails overrides it ([aggregate.Config.Override](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Config.Override)). Without it the server uses [aggregate.DefaultConfig](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#DefaultConfig).
+
+### type AggregateFunctionLister
+
+```go
+type AggregateFunctionLister interface {
+	AggregateFunctions() []*ua.NodeID
+}
+```
+
+AggregateFunctionLister is optionally implemented by a [ProcessedHistoryReader](#type-processedhistoryreader) to list the AggregateFunction Objects it calculates; the server references them from the AggregateFunctions folder of the HistoryServerCapabilities (Part 11 §5.7.2). A ProcessedHistoryReader without it lists none. For a HistoryProvider that is no ProcessedHistoryReader the server calculates the Aggregates itself and lists [aggregate.Functions](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Functions).
+
 ### type AlarmGroup
 
 ```go
@@ -1414,6 +1434,9 @@ type Historian struct {
 
 	// eventSeq orders the stored events of the same Time.
 
+	// aggConfig is the Aggregate configuration of nodes
+	// (SetAggregateConfig), keyed by NodeID.String().
+
 }
 ```
 
@@ -1428,6 +1451,22 @@ func NewHistorian() *Historian
 ```
 
 NewHistorian creates a new in-memory historian.
+
+#### func (Historian) AggregateConfig
+
+```go
+func (h *Historian) AggregateConfig(nodeID *ua.NodeID) aggregate.Config
+```
+
+AggregateConfig implements [AggregateConfigProvider](#type-aggregateconfigprovider): the configuration of [Historian.SetAggregateConfig](#func-historian-setaggregateconfig), or [aggregate.DefaultConfig](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#DefaultConfig).
+
+#### func (Historian) AggregateFunctions
+
+```go
+func (h *Historian) AggregateFunctions() []*ua.NodeID
+```
+
+AggregateFunctions implements [AggregateFunctionLister](#type-aggregatefunctionlister): the Historian calculates every Aggregate of [aggregate.Functions](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Functions).
 
 #### func (Historian) DeleteAtTime
 
@@ -1519,7 +1558,7 @@ ReadModified implements ModifiedHistoryReader.
 func (h *Historian) ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error)
 ```
 
-ReadProcessed implements ProcessedHistoryReader for Average/Minimum/Maximum/Count.
+ReadProcessed implements ProcessedHistoryReader: it calculates every Aggregate of [aggregate.Functions](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Functions) over the samples of nodeID (Part 11 §6.5.4, Part 13 §5.4), with the configuration of [Historian.AggregateConfig](#func-historian-aggregateconfig) overridden by aggregateConfiguration. A node without history is Bad\_HistoryOperationUnsupported; the other results are those of [aggregate.Request.Check](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Request.Check) and [aggregate.Request.Calculate](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Request.Calculate).
 
 #### func (Historian) ReadRaw
 
@@ -1552,6 +1591,14 @@ func (h *Historian) ReleaseContinuation(continuationPoint []byte)
 ```
 
 ReleaseContinuation releases a continuation point without returning data.
+
+#### func (Historian) SetAggregateConfig
+
+```go
+func (h *Historian) SetAggregateConfig(nodeID *ua.NodeID, cfg aggregate.Config)
+```
+
+SetAggregateConfig sets the configuration the Aggregates of nodeID are calculated with: its AggregateConfiguration (Part 13 §4.2.1.2) and its Stepped Property (Part 11 §5.2.2). Without it a node uses [aggregate.DefaultConfig](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#DefaultConfig).
 
 #### func (Historian) UpdateData
 
@@ -4517,7 +4564,7 @@ SetAuditing turns the audit events on or off.
 func (s *Server) SetHistorian(h HistoryProvider)
 ```
 
-SetHistorian attaches a HistoryProvider for HistoryRead support. Pass nil to disable historical access (HistoryRead returns BadHistoryOperationUnsupported). A provider that also implements [EventHistoryProvider](#type-eventhistoryprovider) keeps the event history of the HistoricalEventNodes ([Server.EnableEventHistory](#func-server-enableeventhistory)). The HistoryServerCapabilities report what the provider supports.
+SetHistorian attaches a HistoryProvider for HistoryRead support. Pass nil to disable historical access (HistoryRead returns BadHistoryOperationUnsupported). A provider that also implements [EventHistoryProvider](#type-eventhistoryprovider) keeps the event history of the HistoricalEventNodes ([Server.EnableEventHistory](#func-server-enableeventhistory)). The HistoryServerCapabilities report what the provider supports; their AggregateFunctions folder organizes the Aggregates of its processed reads (see [AggregateFunctionLister](#type-aggregatefunctionlister)).
 
 #### func (Server) SetPubSubConfigurationHook
 

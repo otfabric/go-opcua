@@ -26,8 +26,9 @@ const upstreamRepo = "OPCFoundation/UA-Nodeset"
 // manifestPath is the manifest, relative to the module root.
 const manifestPath = "schema/manifest.json"
 
-// input is a vendored input of the code generators or of the runtime: the
-// path in this repository and the path in the upstream repository.
+// input is a vendored input of the code generators, of the runtime or of
+// the tests: the path in this repository and the path in the upstream
+// repository.
 type input struct{ path, upstream string }
 
 // inputs lists every file schema/update-schema.sh downloads, in the order
@@ -54,6 +55,8 @@ var inputs = []input{
 	{"schema/opc.ua.fx.cm.nodeset2.csv", "UAFX/opc.ua.fx.cm.nodeset2.csv"},
 	{"uafx/internal/model/opc.ua.fx.cm.nodeset2.xml", "UAFX/opc.ua.fx.cm.nodeset2.xml"},
 	{"schema/opc.ua.fx.cm.nodeset2.bsd", "UAFX/opc.ua.fx.cm.nodeset2.bsd"},
+	// The examples of Part 13 Annex A, the evidence of server/aggregate.
+	{"server/aggregate/testdata/AggregateExamples.csv", "Schema/AggregateExamples.csv"},
 }
 
 func (in input) isNodeSet() bool { return strings.HasSuffix(strings.ToLower(in.path), ".xml") }

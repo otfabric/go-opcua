@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/otfabric/go-opcua/server/aggregate"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -34,6 +35,10 @@ type Historian struct {
 	eventCPs map[string]*eventContinuation
 	// eventSeq orders the stored events of the same Time.
 	eventSeq uint64
+
+	// aggConfig is the Aggregate configuration of nodes
+	// (SetAggregateConfig), keyed by NodeID.String().
+	aggConfig map[string]aggregate.Config
 }
 
 // Compile-time check that *Historian implements HistoryProvider.
@@ -291,7 +296,8 @@ func generateContinuationPoint() []byte {
 // BadHistoryOperationUnsupported). A provider that also implements
 // [EventHistoryProvider] keeps the event history of the HistoricalEventNodes
 // ([Server.EnableEventHistory]). The HistoryServerCapabilities report what
-// the provider supports.
+// the provider supports; their AggregateFunctions folder organizes the
+// Aggregates of its processed reads (see [AggregateFunctionLister]).
 func (s *Server) SetHistorian(h HistoryProvider) {
 	s.histMu.Lock()
 	s.historian = h
@@ -300,6 +306,7 @@ func (s *Server) SetHistorian(h HistoryProvider) {
 	} else {
 		s.historyCPs = newHistoryCPRegistry(h.ReleaseContinuation)
 	}
+	s.syncAggregateFunctions(h)
 	s.histMu.Unlock()
 	s.notifyHistoryCapabilities()
 }
