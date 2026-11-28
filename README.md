@@ -261,7 +261,7 @@ what the interop suite has actually exercised.
 | PubSub (Part 14) ⁷ | ✅ UADP and JSON over UDP, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0, security, SKS | ✅ UDP, Ethernet, MQTT | — | — | ✅ UDP, MQTT | commercial add-on | experimental UADP over UDP |
 | JSON / XML data encoding of values ⁸ | ✅ JSON 1.05 Compact and Verbose, 1.04; XML | ✅ JSON; XML for built-in types | ✅ JSON Compact and Verbose; XML | JSON 1.04 form; NodeSet2 XML | ✅ JSON Compact and Verbose; XML | JSON | — NodeSet2 XML only |
 | NodeSet2 XML import at run time | ✅ | ✅ loader, plus build-time compiler | — | ✅ | ✅ | ✅ | ✅ |
-| Custom structured DataTypes | registered Go types | generated or runtime descriptions | decoded dynamically | generated | decoded dynamically | decoded dynamically | decoded dynamically |
+| Custom structured DataTypes | registered Go types; client decodes dynamically (opt in) | generated or runtime descriptions | decoded dynamically | generated | decoded dynamically | decoded dynamically | decoded dynamically |
 | GDS / certificate management (Part 12) | push: server and client (`gds`); pull: GDS and client (`gds/gdsserver`, `gds.PullClient`) | push (build option) | · | — | ✅ push and pull | push | — |
 | Automatic reconnect with subscription recovery | ✅ | reconnect; application re-creates subscriptions | ✅ | ✅ | ✅ | ✅ | application reconnects |
 | Cancellation and deadlines per call | ✅ `context.Context` | timeouts | futures, timeouts | async, timeouts | `CancellationToken` | promises, timeouts | asyncio, timeouts |

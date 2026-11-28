@@ -304,6 +304,16 @@ func (e *xmlEncoder) extensionObject(x *xmlElem, p *ExtensionObject) error {
 		typeID(wireID)
 		x.add("Body").addText("ByteString", base64.StdEncoding.EncodeToString(body))
 		return nil
+	case *DynamicStructure:
+		// A structure decoded with its DataTypeDefinition goes as a
+		// binary body (OPC 10000-6 §5.3.1.16).
+		b, err := body.Encode()
+		if err != nil {
+			return err
+		}
+		typeID(wireID)
+		x.add("Body").addText("ByteString", base64.StdEncoding.EncodeToString(b))
+		return nil
 	case XMLElement:
 		typeID(wireID)
 		b := x.add("Body")

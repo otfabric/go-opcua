@@ -987,8 +987,9 @@ func RegisterExtensionObject(typeID *NodeID, v interface{})
 ```
 
 Call once per type (typically from `init()`), passing a zero value of the Go
-type. Unknown `ExtensionObject` bodies are preserved as opaque bytes (dynamic
-structure decoding is not implemented). See also
+type. Unknown `ExtensionObject` bodies are preserved as opaque bytes; a
+client decodes them with the DataTypeDefinition of the server with
+[`DynamicTypeDecoding`](#dynamic-structure-decoding). See also
 [Registered Custom DataTypes](#registered-custom-datatypes).
 
 ### TypeID
@@ -2488,8 +2489,60 @@ an `ArrayStruct`, exercising the codec through the method call path.
 - Write of a `FlatStruct` round-trips through the server and reads back correctly.
 - Method call with `FlatStruct` input returns the expected `ArrayStruct` output.
 
-**Dynamic structure decoding** – not implemented (deferred). Unknown `ExtensionObject`
-bodies are preserved opaquely and passed through as raw bytes.
+### Dynamic structure decoding
+
+A client decodes the Structures and Unions it has no Go type for with the
+DataTypeDefinition Attribute of their DataType (OPC 10000-3 §5.8.3), opt in:
+
+```go
+func DynamicTypeDecoding(enabled bool) Option
+func (c *Client) LoadDataTypes(ctx context.Context, dataTypeIDs ...*ua.NodeID) error
+func (c *Client) DecodeExtensionObjects(ctx context.Context, v any) error
+func (c *Client) DynamicTypes() *ua.DynamicTypes
+
+func NewDynamicTypes() *DynamicTypes
+func (s *DynamicTypes) Add(t *DynamicType) error
+func (s *DynamicTypes) Type(dataTypeID *NodeID) *DynamicType
+func (s *DynamicTypes) TypeByEncoding(encodingID *NodeID) *DynamicType
+func (s *DynamicTypes) New(dataTypeID *NodeID) (*DynamicStructure, error)
+func (s *DynamicTypes) DecodeExtensionObject(eo *ExtensionObject) error
+func UndecodedBody(eo *ExtensionObject) ([]byte, bool)
+
+type DynamicType struct { DataTypeID *NodeID; Name string; Definition any; BuiltIn TypeID; IsAbstract bool }
+type DynamicStructure struct { Type *DynamicType; Fields []any; Switch uint32 }
+func (d *DynamicStructure) Field(name string) (any, bool)
+func (d *DynamicStructure) Set(name string, v any) error
+func (d *DynamicStructure) Encode() ([]byte, error)
+type DynamicMatrix struct { Dimensions []int32; Values any }
+```
+
+With `DynamicTypeDecoding(true)` the values of `Read` (and `ReadValue`,
+`ReadValues`, `Node.Value`), the output arguments of `Call` and `CallMethod`,
+the results of the four `HistoryRead*` calls and the data changes and events
+of subscriptions hold an `*ua.ExtensionObject` whose `Value` is a
+`*ua.DynamicStructure` for a type without a Go type; such a Read result keeps
+the status of the server instead of `StatusBadDataTypeIDUnknown`. The client
+browses the DataType of the encoding (inverse HasEncoding) and reads the
+DataTypeDefinition, BrowseName and IsAbstract of it and of the DataTypes of
+its fields, by namespace URI, for the lifetime of the client; the encodings
+the server cannot resolve are not asked again in that namespace table. A
+value that cannot be decoded keeps its `RawBody` and never fails the call.
+Without the option nothing changes; `LoadDataTypes` and
+`DecodeExtensionObjects` decode on request.
+
+Fields are in the order of the definition: built-in types as a Variant holds
+them, Enumerations as `int32`, Structures with a registered Go type as that
+type, others as `*ua.DynamicStructure`, fields of DataType Structure or that
+allow subtypes as `*ua.ExtensionObject`, of BaseDataType and Number as
+`*ua.Variant`, arrays as slices, matrices as `*ua.DynamicMatrix`; an absent
+optional field and the fields of a Union that `Switch` does not select are
+nil. A `*ua.DynamicStructure` encodes itself in an ExtensionObject
+(`ua.NewExtensionObject(v)`), in the binary, JSON and XML encodings, for
+Write and Method arguments. Decoding checks every length against the input
+before it allocates.
+
+Not supported: a DataTypeDictionary (OPC 10000-5 Annex D) and JSON-encoded
+bodies of the UA JSON transports.
 
 ---
 

@@ -88,6 +88,10 @@ type Config struct {
 	// (ReturnDiagnostics option).
 	returnDiagnostics uint32
 
+	// dynamicTypes is set by DynamicTypeDecoding: the client decodes
+	// structures it has no Go type for with their DataTypeDefinition.
+	dynamicTypes bool
+
 	// reverse is set when the client waits for the server to connect
 	// (reverse connect) instead of connecting to it.
 	reverse *reverseConfig

@@ -397,6 +397,14 @@ func TypeDefinitionDisplayName(typeDefID *NodeID) string
 
 TypeDefinitionDisplayName returns a display string for a type definition NodeID (VariableType or ObjectType in namespace 0). It tries VariableTypeName then ObjectTypeName; if neither matches, returns the NodeID string. Returns the empty string if typeDefID is nil.
 
+### func UndecodedBody
+
+```go
+func UndecodedBody(eo *ExtensionObject) ([]byte, bool)
+```
+
+UndecodedBody returns the binary body of an ExtensionObject that no Go type decoded: the RawBody the binary decoder keeps, or the \[]byte Value the JSON and XML decoders keep. It returns false for an ExtensionObject that has a decoded Value, no TypeId or no binary body.
+
 ### func VariantAs
 
 ```go
@@ -915,6 +923,171 @@ Resolve resolves the DiagnosticInfo against the string table of its response. It
 ```go
 func (d *DiagnosticInfo) UpdateMask()
 ```
+
+### type DynamicMatrix
+
+```go
+type DynamicMatrix struct {
+	// Dimensions is the length of each dimension.
+	Dimensions []int32
+	// Values is a slice of the element type with the values in the order
+	// of the encoding, "Higher rank dimensions are serialized first"
+	// (OPC 10000-6 §5.2.2.16).
+	Values any
+}
+```
+
+DynamicMatrix is the value of a field that is an array of two or more dimensions, which OPC 10000-6 §5.2.5 encodes as an inline matrix.
+
+### type DynamicStructure
+
+```go
+type DynamicStructure struct {
+	// Type is the DataType, with its StructureDefinition.
+	Type *DynamicType
+	// Fields are the field values in the order of the definition.
+	Fields []any
+	// Switch selects the field of a Union, 1 for the first; 0 is a Union
+	// without a field ("If the switch field is 0 then no field is
+	// present", OPC 10000-6 §5.2.8). It is 0 for a Structure.
+	Switch uint32
+
+}
+```
+
+DynamicStructure is the value of a Structure or Union decoded with its DataTypeDefinition ([DynamicTypes](#type-dynamictypes)). It encodes itself in the OPC UA Binary DataEncoding, so it can be written and passed as a Method argument in an ExtensionObject.
+
+Fields holds a value per field of the StructureDefinition, in its order. The value of a field is
+
+  - of a built-in DataType: the Go type a [Variant](#type-variant) holds for it (int32, string, \*LocalizedText, time.Time, ...);
+  - of an Enumeration: int32; of an OptionSet of a UInteger or of a simple DataType: the Go type of its built-in type;
+  - of a Structure or Union: a pointer to its Go type when one is registered for its DefaultEncodingId, a \*DynamicStructure otherwise, and \*OptionSet for a subtype of OptionSet;
+  - of DataType Structure or Decimal, or of a field that allows subtypes of a Structure: \*ExtensionObject ("A field is serialized as an ExtensionObject if a field has a DataType set explicitly to Structure", OPC 10000-6 §5.1.7, §5.1.10);
+  - of BaseDataType, Number, Integer, UInteger and other abstract DataTypes that are no Structure, and of a field that allows subtypes of one: \*Variant (§5.1.6, §F.12);
+  - an array (ValueRank 1): a slice of these; a matrix (ValueRank 2 or more): a \*DynamicMatrix.
+
+An ExtensionObject of a field that no Go type and no DataType of the set decodes keeps its binary body as a \[]byte Value, so that the Structure encodes back unchanged.
+
+An optional field that is absent is nil; so is every field of a Union but the one Switch selects. A mandatory field that is nil is encoded with the default value of its DataType, an array as a null array: "the encoder shall create a new instance with DefaultValues for all fields and serialize that" (§5.2.6).
+
+#### func (DynamicStructure) Encode
+
+```go
+func (d *DynamicStructure) Encode() ([]byte, error)
+```
+
+Encode encodes d in the OPC UA Binary DataEncoding.
+
+#### func (DynamicStructure) Field
+
+```go
+func (d *DynamicStructure) Field(name string) (any, bool)
+```
+
+Field returns the value of the field name and whether the Structure has a field of that name.
+
+#### func (DynamicStructure) Set
+
+```go
+func (d *DynamicStructure) Set(name string, v any) error
+```
+
+Set sets the field name to v. For a Union it selects the field (and clears the others). It does not check v; Encode does.
+
+### type DynamicType
+
+```go
+type DynamicType struct {
+	// DataTypeID is the NodeId of the DataType.
+	DataTypeID *NodeID
+	// Name is the Name of the BrowseName of the DataType; it is
+	// informational.
+	Name string
+	// Definition is the value of the DataTypeDefinition Attribute: a
+	// *StructureDefinition for a Structure or Union, an *EnumDefinition for
+	// an Enumeration or an OptionSet, nil for a DataType without one.
+	Definition any
+	// BuiltIn is how a value of a DataType that is no Structure is
+	// encoded: TypeIDInt32 for an Enumeration ("Enumerations are encoded
+	// as Int32 values", OPC 10000-6 §5.2.4); the UInteger of an OptionSet
+	// of one; the built-in supertype of a simple DataType, which is
+	// "handled on the wire like the Built-in DataType" (OPC 10000-3
+	// §5.8.2); TypeIDVariant for an abstract DataType that is no
+	// Structure, such as a subtype of Number ("the field value is encoded
+	// as a Variant", OPC 10000-6 §5.1.6); and TypeIDExtensionObject for a
+	// subtype of OptionSet, which is encoded as the OptionSet Structure
+	// (OPC 10000-3 §5.8.2), and for an abstract Structure. It is ignored
+	// for a DataType with a StructureDefinition.
+	BuiltIn TypeID
+	// IsAbstract is the IsAbstract Attribute of the DataType.
+	IsAbstract bool
+}
+```
+
+DynamicType is a DataType of a [DynamicTypes](#type-dynamictypes) set. It must not be modified once it is added.
+
+### type DynamicTypes
+
+```go
+type DynamicTypes struct {
+
+	// by DataType NodeId
+	// by DefaultEncodingId
+
+}
+```
+
+DynamicTypes is a set of DataTypes described by their DataTypeDefinition, with which [DynamicTypes.DecodeExtensionObject](#func-dynamictypes-decodeextensionobject) decodes the body of an ExtensionObject whose type has no Go type registered with [RegisterExtensionObject](#func-registerextensionobject). Its NodeIds are those of one server's namespace table: a set belongs to one session. It is safe for concurrent use.
+
+The opcua client builds such a set from the server, by namespace URI, with the DynamicTypeDecoding option or LoadDataTypes; see Client.DynamicTypes.
+
+#### func NewDynamicTypes
+
+```go
+func NewDynamicTypes() *DynamicTypes
+```
+
+NewDynamicTypes returns an empty set.
+
+#### func (DynamicTypes) Add
+
+```go
+func (s *DynamicTypes) Add(t *DynamicType) error
+```
+
+Add adds the DataType t to the set, or replaces the DataType with its NodeId. A StructureDefinition must be usable: a StructureType of OPC 10000-3 §8.49, fields with a DataType and a ValueRank that is Scalar or a fixed rank ("It shall be Scalar (-1) or a fixed rank Array (>=1)", §8.51), and at most 32 optional fields.
+
+#### func (DynamicTypes) DecodeExtensionObject
+
+```go
+func (s *DynamicTypes) DecodeExtensionObject(eo *ExtensionObject) error
+```
+
+DecodeExtensionObject decodes the binary body of eo, which the binary decoder kept in RawBody because no Go type is registered for its TypeId (the JSON and XML decoders keep a binary body as a \[]byte Value), with the Structure of the set whose DefaultEncodingId is the TypeId, and sets Value to the [\*DynamicStructure](#type-dynamicstructure). It does nothing for an ExtensionObject that has a Value. An ExtensionObject of a type the set does not have, or whose body does not match the definition, is left as it is and the error says why: StatusBadDataTypeIDUnknown or StatusBadDecodingError.
+
+#### func (DynamicTypes) New
+
+```go
+func (s *DynamicTypes) New(dataTypeID *NodeID) (*DynamicStructure, error)
+```
+
+New returns a value of the Structure or Union dataTypeID with every field absent (nil), to fill with [DynamicStructure.Set](#func-dynamicstructure-set) and send in an ExtensionObject ([NewExtensionObject](#func-newextensionobject)).
+
+#### func (DynamicTypes) Type
+
+```go
+func (s *DynamicTypes) Type(dataTypeID *NodeID) *DynamicType
+```
+
+Type returns the DataType with the NodeId dataTypeID, nil if the set has none.
+
+#### func (DynamicTypes) TypeByEncoding
+
+```go
+func (s *DynamicTypes) TypeByEncoding(encodingID *NodeID) *DynamicType
+```
+
+TypeByEncoding returns the Structure whose DefaultEncodingId is encodingID, nil if the set has none.
 
 ### type EventFilterBuilder
 

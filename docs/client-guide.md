@@ -452,6 +452,7 @@ if _, err := c.Read(ctx, req); err != nil {
 | `TLSConfig(cfg)` | TLS of `opc.wss` / `opc.https` endpoints (trusted roots, client certificate for mutual TLS) |
 | `HTTPClient(c)` | `*http.Client` of `opc.https` endpoints |
 | `ReturnDiagnostics(mask)` | Ask the server for DiagnosticInfos on every request ([DiagnosticInfo](#diagnosticinfo)) |
+| `DynamicTypeDecoding(bool)` | Decode Structures without a Go type with the server's DataTypeDefinition ([structures without a Go type](#structures-without-a-go-type)) |
 
 ---
 
@@ -539,6 +540,56 @@ for _, result := range resp.Results {
     fmt.Println(result.Value.Value())
 }
 ```
+
+### Structures without a Go type
+
+A value of a Structure or Union is an `*ua.ExtensionObject`. Its `Value`
+is the Go type registered with `ua.RegisterExtensionObject` for its
+encoding; without one the client keeps the body in `RawBody` and Read
+reports `StatusBadDataTypeIDUnknown`. With `DynamicTypeDecoding` the client
+decodes such a body with the DataTypeDefinition Attribute the server gives
+the DataType (OPC 10000-3 §5.8.3):
+
+```go
+c, err := opcua.NewClient(endpoint, opcua.DynamicTypeDecoding(true))
+// ...
+dv, err := c.ReadValue(ctx, nodeID)
+if err != nil {
+    log.Fatal(err)
+}
+eo := dv.Value.Value().(*ua.ExtensionObject)
+if v, ok := eo.Value.(*ua.DynamicStructure); ok {
+    name, _ := v.Field("Name") // fields by name, or v.Fields in order
+    fmt.Println(v.Type.Name, name)
+}
+```
+
+The values of Read, Call, HistoryRead and subscriptions are decoded. The
+client resolves a new type once (a Browse of its encoding, a Read and a
+Browse per DataType it uses, in batches of 10) and keeps it by namespace
+URI, so the same types serve a reconnect to a server whose namespace table
+changed. A type registered in Go comes first; a value the client cannot
+decode keeps its `RawBody` and the call does not fail.
+
+To send a value, load its DataType and fill a new structure; it encodes
+itself:
+
+```go
+if err := c.LoadDataTypes(ctx, dataTypeID); err != nil {
+    log.Fatal(err)
+}
+v, err := c.DynamicTypes().New(dataTypeID)
+if err != nil {
+    log.Fatal(err)
+}
+v.Set("Name", "pump")
+v.Set("Speed", 1450.0)
+_, err = c.WriteNodeValue(ctx, nodeID, ua.NewExtensionObject(v))
+```
+
+Without the option nothing is decoded; `c.DecodeExtensionObjects(ctx, dv)`
+decodes a value on request. A DataTypeDictionary (the 1.03 mechanism) and
+JSON-encoded bodies are not supported; see LIMITATIONS.md.
 
 ---
 

@@ -104,6 +104,12 @@ Enumeration and OptionSet DataType of namespace 0 and of the imported models,
 from the NodeSet Definition with the fields of the supertypes (Part 3 §5.8.3,
 Part 6 §F.12); see docs/server-guide.md.
 
+Also in v1.43.0: the client decodes the Structures and Unions it has no Go
+type for from that Attribute, opt in (`opcua.DynamicTypeDecoding`), with
+the DataTypes kept by namespace URI; see docs/client-guide.md. Not done: a
+DataTypeDictionary (Part 5 Annex D), JSON-encoded bodies, and ledger rows
+against an independent server.
+
 ## Phase 4: durable administration
 
 One persistence package for the server, PubSub and UAFX, from
