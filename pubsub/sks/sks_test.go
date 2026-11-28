@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/server"
@@ -57,7 +58,7 @@ func startSKS(t *testing.T, ks *security.KeyService) *sksServer {
 	rings := &security.KeyRings{}
 	require.NoError(t, srv.EnableSecurityKeyPush(rings))
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return &sksServer{url: fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()), ks: ks, rings: rings}
 }
 
@@ -102,7 +103,7 @@ func connect(t *testing.T, url string, anonymous bool) *opcua.Client {
 	defer cancel()
 	c, err := dial(ctx, url, anonymous)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	return c
 }
 
@@ -207,7 +208,7 @@ func TestKeySourceRefresh(t *testing.T) {
 			cfg.OnUpdate = func(*Result) { updates.Add(1) }
 			src, err := NewKeySource(context.Background(), cfg)
 			require.NoError(t, err)
-			t.Cleanup(func() { _ = src.Close() })
+			cleanup.Register(t, func() { _ = src.Close() })
 			require.Same(t, security.Aes128CTR(), src.Policy())
 			// Under load the first rotation may already have happened by now
 			// (the key lifetime is short), so only bound the start state.
@@ -387,7 +388,7 @@ func TestKeySourceSlowSKS(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = src.Close() })
+	cleanup.Register(t, func() { _ = src.Close() })
 	svc, err := ks.KeySource("sg")
 	require.NoError(t, err)
 	first := src.Ring().CurrentTokenID()
@@ -420,7 +421,7 @@ func TestKeySourceRefreshOnUnknownToken(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = src.Close() })
+	cleanup.Register(t, func() { _ = src.Close() })
 	require.Equal(t, int32(1), fetches.Load())
 	cur := src.Ring().CurrentTokenID()
 

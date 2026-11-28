@@ -237,7 +237,7 @@ func TestHistoryReadProcessed(t *testing.T) {
 			d    *ua.ReadProcessedDetails
 			want ua.StatusCode
 		}{
-			"unsupported aggregate": {&rawProvider{}, details(id.AggregateFunctionAnnotationCount), ua.StatusBadAggregateNotSupported},
+			"unsupported aggregate": {&rawProvider{}, details(99999), ua.StatusBadAggregateNotSupported},
 			"start equals end":      {&rawProvider{}, &ua.ReadProcessedDetails{StartTime: processedBase, EndTime: processedBase, AggregateType: aggType(id.AggregateFunctionCount)}, ua.StatusBadInvalidArgument},
 			"raw read fails":        {&rawProvider{status: ua.StatusBadNoContinuationPoints}, details(id.AggregateFunctionCount), ua.StatusBadNoContinuationPoints},
 			"raw read returns nil":  {&rawProvider{nilRes: true}, details(id.AggregateFunctionCount), ua.StatusBadHistoryOperationUnsupported},

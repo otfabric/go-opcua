@@ -10,6 +10,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +41,7 @@ func TestSessionTouchedWhenRequestArrives(t *testing.T) {
 		return nil, ua.StatusOK
 	})
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	url := srv.Endpoints()[0].EndpointURL
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -50,7 +51,7 @@ func TestSessionTouchedWhenRequestArrives(t *testing.T) {
 			opcua.AutoReconnect(false), opcua.RequestTimeout(30*time.Second))
 		require.NoError(t, err)
 		require.NoError(t, c.Connect(ctx))
-		t.Cleanup(func() { _ = c.Close(context.Background()) })
+		cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 		return c
 	}
 	sessions := func() map[*session]bool {

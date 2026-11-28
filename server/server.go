@@ -155,6 +155,9 @@ type Server struct {
 	// push is the push certificate management (push.go), nil without
 	// WithPushManagement.
 	push *pushManager
+	// roleSet is the managed RoleSet (roleset.go), nil without
+	// WithRoleManagement.
+	roleSet *RoleSet
 }
 
 type serverConfig struct {
@@ -195,6 +198,7 @@ type serverConfig struct {
 	accessController           AccessController
 	nodeManagement             bool // EnableNodeManagement
 	roleMapper                 RoleMapper
+	roleMgmt                   *RoleManagement // WithRoleManagement
 	usernameValidator          UsernameValidator
 	x509UserValidator          X509UserValidator
 	issuedTokenValidator       IssuedTokenValidator
@@ -255,6 +259,9 @@ type serverConfig struct {
 	diagnosticsOff bool
 	// auditing turns the audit events on (WithAuditing).
 	auditing bool
+	// changeAuditOff: WithChangeAuditing(false), no audit events of Write,
+	// HistoryUpdate and the NodeManagement services.
+	changeAuditOff bool
 	// alarmClock is the clock of the alarm timers (WithAlarmClock).
 	alarmClock Clock
 	// push is the configuration of WithPushManagement (nil: none).
@@ -265,6 +272,10 @@ type serverConfig struct {
 	// stateChange carries out RequestServerStateChange
 	// (WithServerStateChange); nil refuses it.
 	stateChange ServerStateChangeFunc
+	// serverProfiles is the ServerProfileArray (WithServerProfiles).
+	serverProfiles []string
+	// localeIDs is the LocaleIdArray (WithLocaleIDs); empty: ["en"].
+	localeIDs []string
 }
 
 var capabilities = ServerCapabilities{
@@ -449,6 +460,7 @@ func New(opts ...Option) (*Server, error) {
 	if err := s.buildPushModel(); err != nil {
 		return nil, err
 	}
+	s.bindRoleSet()
 	s.bindAuditing()
 	s.bindHistoryCapabilities()
 	s.bindAggregateFunctions()
@@ -456,6 +468,7 @@ func New(opts ...Option) (*Server, error) {
 	s.bindMonitoredItemCapabilities()
 	s.bindContinuationPointCapabilities()
 	s.bindEstimatedReturnTime()
+	s.bindServerCapabilities()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()

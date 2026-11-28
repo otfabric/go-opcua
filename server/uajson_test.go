@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -41,9 +42,9 @@ func startUAJSONServer(tb testing.TB, opts ...Option) (*Server, string, *http.Cl
 	s, err := New(append(defaults, opts...)...)
 	require.NoError(tb, err)
 	require.NoError(tb, s.Start(context.Background()))
-	tb.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(tb, func() { _ = s.Close() })
 	c := uasc.NewHTTPSClient(pki.ClientConfig())
-	tb.Cleanup(c.CloseIdleConnections)
+	cleanup.Register(tb, c.CloseIdleConnections)
 	return s, "https://" + s.hs.ln.Addr().String() + "/", c, "opc.wss://" + s.wl.Addr().String()
 }
 
@@ -233,7 +234,7 @@ func wssJSONClient(t *testing.T, url string) uacp.MessageConn {
 	require.NoError(t, err)
 	c, err := (&uacp.Dialer{TLSConfig: pki.ClientConfig()}).DialWebSocketJSON(context.Background(), url)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	cleanup.Register(t, func() { _ = c.Close() })
 	require.NoError(t, c.SetReadDeadline(time.Now().Add(30*time.Second)))
 	return c
 }

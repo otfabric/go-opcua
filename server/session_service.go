@@ -299,12 +299,10 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	sess.serverNonce = nonce
 
 	// The role mapper gets the token the client sent, with its password in
-	// clear text; the session keeps it without (Session.Identity).
-	if rm := s.srv.cfg.roleMapper; rm != nil {
-		sess.roles = rm(identity)
-	} else {
-		sess.roles = DefaultRoleMapper(identity)
-	}
+	// clear text; the session keeps it without (Session.Identity). The
+	// managed RoleSet adds the roles whose rules the session complies with
+	// (roleset.go).
+	s.srv.grantRoles(sc, sess, identity)
 	if uname, ok := identity.(*ua.UserNameIdentityToken); ok {
 		identity = withoutSecrets(uname)
 	}

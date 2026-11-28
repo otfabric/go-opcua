@@ -306,7 +306,7 @@ func TestHistorian_ReadProcessed_MinMaxCount(t *testing.T) {
 		return res.StatusCode
 	}
 	require.Equal(t, ua.StatusBadAggregateNotSupported, read(base, end, 1000, 99999, nil))
-	require.Equal(t, ua.StatusBadAggregateNotSupported, read(base, end, 1000, id.AggregateFunctionAnnotationCount, nil))
+	require.Equal(t, ua.StatusBadAggregateNotSupported, read(base, end, 1000, 99998, nil))
 	// Part 11 §6.5.4.2: startTime equal to endTime is Bad_InvalidArgument,
 	// an endTime before the startTime reads backwards.
 	require.Equal(t, ua.StatusBadInvalidArgument, read(base, base, 1000, id.AggregateFunctionCount, nil))

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/pubsub/uadp"
@@ -31,7 +32,7 @@ func TestRegressionJSONActionMessageToReader(t *testing.T) {
 		WithDataSetHandler(rec.handler))
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	cid := mustID(t, sub, KindConnection, Root, "sub")
 	require.Eventually(t, func() bool { return bus.subscribers(url) > 0 }, 3*time.Second, time.Millisecond)
 
@@ -65,7 +66,7 @@ func TestRegressionChunkedActionDataSetMessageToReader(t *testing.T) {
 		WithDataSetHandler(rec.handler))
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	require.Eventually(t, func() bool { return bus.subscribers(url) > 0 }, 3*time.Second, time.Millisecond)
 
 	// DataSetMessage flags: valid, Variant fields, Flags2 with the type
@@ -146,7 +147,7 @@ func TestRegressionReaderStreamsBounded(t *testing.T) {
 		WithDataSetHandler(rec.handler))
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	rid := mustID(t, sub, KindDataSetReader, mustID(t, sub, KindReaderGroup, mustID(t, sub, KindConnection, Root, "sub"), "rg"), "r")
 	require.Eventually(t, func() bool { return bus.subscribers(url) > 0 }, 3*time.Second, time.Millisecond)
 
@@ -203,7 +204,7 @@ func TestRegressionActionExchangesEndWithWriter(t *testing.T) {
 				defer close(done)
 				_, _ = req.CallAction(ctx, tg, int32s(1, 2))
 			}()
-			t.Cleanup(func() { cancel(); <-done })
+			cleanup.Register(t, func() { cancel(); <-done })
 			select {
 			case <-started:
 			case <-time.After(5 * time.Second):
@@ -239,7 +240,7 @@ func TestRegressionCallActionTimeoutWhileSendBlocks(t *testing.T) {
 	bus.mu.Lock()
 	bus.blockSend[url] = true
 	bus.mu.Unlock()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		bus.mu.Lock()
 		delete(bus.blockSend, url)
 		bus.mu.Unlock()
@@ -271,7 +272,7 @@ func TestRegressionDiscoveryContextRace(t *testing.T) {
 		WithDataSource(ds), WithRetryInterval(time.Millisecond),
 		WithDiscovery(DiscoveryOptions{MinInterval: time.Nanosecond, Rate: 1e9, Burst: 1 << 20}))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = pub.Close() })
+	cleanup.Register(t, func() { _ = pub.Close() })
 	probe := probeBytes(t, &message.DiscoveryRequest{ProbeType: message.ProbeFindApplications}, 5)
 	stop := make(chan struct{})
 	done := make(chan struct{})
@@ -332,7 +333,7 @@ func TestRegressionIncompleteChunksExpire(t *testing.T) {
 		WithChunkReassembly(uadp.ReassemblerOptions{Timeout: 50 * time.Millisecond}))
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	require.Eventually(t, func() bool { return bus.subscribers(url) > 0 }, 3*time.Second, time.Millisecond)
 	b, err := uadp.Encode(&message.NetworkMessage{
 		Type:        message.NetworkMessageDataSet,
@@ -374,7 +375,7 @@ func TestRegressionActionExchangeExpiry(t *testing.T) {
 	resp := startReal(t, responderConfig(url, 10*time.Millisecond, ua.MessageSecurityModeNone), WithActionHandler("Calc", 1, h),
 		WithActionOptions(ActionOptions{MaxTimeout: 50 * time.Millisecond, MaxConcurrent: 1}))
 	var once sync.Once
-	t.Cleanup(func() { once.Do(func() { close(release) }) })
+	cleanup.Register(t, func() { once.Do(func() { close(release) }) })
 	waitRunning(t, resp, "Responder")
 	waitResponder(t, resp)
 
@@ -434,7 +435,7 @@ func TestRegressionReaderSecurityGroupIDDoesNotDowngrade(t *testing.T) {
 		WithDataSetHandler(rec.handler), WithKeySource("sg", testRing(t)))
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	require.Eventually(t, func() bool { return bus.subscribers(url) > 0 }, 3*time.Second, time.Millisecond)
 	b, err := uadp.Encode(&message.NetworkMessage{
 		Type:        message.NetworkMessageDataSet,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 )
@@ -23,7 +24,7 @@ func TestMonitorDropsObservationAcrossRun(t *testing.T) {
 	m, err := New(Options{Dialer: offline{}, ApplicationURI: cmURI, Retry: &RetryPolicy{},
 		Monitor: &MonitorOptions{Reestablish: true}, Observer: ObserverFunc(func(e Event) { events <- e })})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = m.Close() })
+	cleanup.Register(t, func() { _ = m.Close() })
 
 	addr := ServerAddress{Address: "opc.tcp://peer:4840"}
 	fe := ua.NewStringNodeID(1, "fe")

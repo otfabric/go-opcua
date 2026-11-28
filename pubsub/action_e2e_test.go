@@ -13,6 +13,7 @@ import (
 
 	imqtt "github.com/otfabric/go-opcua/internal/mqtt"
 	"github.com/otfabric/go-opcua/internal/testutil/amqpbroker"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/ua"
@@ -87,7 +88,7 @@ func TestE2EActionMQTT(t *testing.T) {
 	t.Parallel()
 	b := mqttbroker.New(mqttbroker.Options{})
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	for _, m := range []MessageMapping{MappingJSON, MappingUADP} {
 		t.Run(fmt.Sprint(m), func(t *testing.T) {
 			t.Parallel()
@@ -120,7 +121,7 @@ func TestE2EActionMQTT5(t *testing.T) {
 				}
 			}})
 			require.NoError(t, b.Start())
-			t.Cleanup(b.Close)
+			cleanup.Register(t, b.Close)
 			queue := ActionRequestTopic("e2e5"+compression, MappingJSON, "1", "Actions")
 			conn := func(name string, id uint16) *ua.PubSubConnectionDataType {
 				return SetJSONCompression(SetMQTTVersion(MQTTConnection(name, b.URL(), id, MappingJSON), MQTTVersion5), compression)

@@ -109,15 +109,15 @@ namespace.
 |---|---|
 | DataTypeDefinition Attribute on every DataType, imported and ns=0 | done in v1.43.0 |
 | Client decoding of structures it has no Go type for, from DataTypeDefinition, per session and namespace URI | done in v1.43.0, opt in (`opcua.DynamicTypeDecoding`) |
-| Part 13 aggregates and AggregateFilter in monitored items | HistoryRead processed: every standard Aggregate but AnnotationCount (`server/aggregate`, v1.43.0), for the Historian and any raw-only provider, checked against every example of Annex A; AggregateFilter of monitored items with the same calculation, at the publishing interval (v1.43.0); no ledger row (no peer of opcua-interop v0.20.0 reads processed history or aggregates monitored items) |
+| Part 13 aggregates and AggregateFilter in monitored items | HistoryRead processed: every standard Aggregate (`server/aggregate`, v1.43.0), AnnotationCount over the Annotations of an `AnnotationHistoryProvider`, for the Historian and any raw-only provider, checked against every example of Annex A; AggregateFilter of monitored items with the same calculation, at the publishing interval, AnnotationCount refused as historical only (v1.43.0); no ledger row (no peer of opcua-interop v0.20.0 reads processed history or aggregates monitored items) |
 | Part 5 Methods: GetMonitoredItems, ResendData, SetSubscriptionDurable, RequestServerStateChange | done in v1.43.0 (Part 5 §9.1–§9.4), with typed client calls; durable subscriptions in memory only (LIMITATIONS.md); no ledger row (not tested against an independent stack) |
 | ModelChange and SemanticChange events | done in v1.43.0 |
 | NamespaceMetadata, DefaultRolePermissions | done in v1.43.0 |
-| RoleSet Methods (AddRole, AddIdentity and the others) | roles only from the Go RoleMapper |
-| AuditWriteUpdate, AuditHistoryUpdate, AuditNodeManagement events | not emitted |
-| History annotations (UpdateStructureData) | not dispatched |
+| RoleSet Methods (AddRole, AddIdentity and the others) | done in v1.43.0, opt in (`server.WithRoleManagement`; client package `rolemgmt`); in memory, persistence is phase 4; no ledger row (no peer of opcua-interop manages roles) |
+| AuditWriteUpdate, AuditHistoryUpdate, AuditNodeManagement events | done in v1.43.0, with auditing on (`server.WithChangeAuditing(false)` turns them off); no ledger row |
+| History annotations (UpdateStructureData) | done in v1.43.0: UpdateStructureDataDetails, ReadAnnotationDataDetails, the Annotations Property (`EnableAnnotations`), `AnnotationHistoryProvider`, client helpers; no ledger row |
 | Client session keepalive while idle | done in v1.43.0 |
-| ServerProfileArray | no value; Read returns Bad_AttributeIdInvalid |
+| ServerProfileArray | done in v1.43.0: every Mandatory ServerCapabilities Property has a value (Part 5 §6.3.2); ServerProfileArray from `WithServerProfiles`, empty by default, until phase 5 computes it |
 
 Done in v1.43.0: the DataTypeDefinition Attribute of every Structure, Union,
 Enumeration and OptionSet DataType of namespace 0 and of the imported models,
@@ -141,6 +141,15 @@ the ServerStatus State after half the revised session timeout without a
 request (`SessionKeepAlive`, Part 4 §5.7.2.1 and §6.7), and a keep-alive
 without response is a lost connection; see docs/client-guide.md.
 
+Also in v1.43.0: the managed RoleSet of OPC 10000-18, opt in
+(`server.WithRoleManagement`). AddRole and RemoveRole (§4.2.2, §4.2.3),
+the Role Methods AddIdentity to RemoveEndpoint (§4.4.5 to §4.4.10) and the
+Properties of the roles (§4.4.1), with the roles granted at ActivateSession
+next to those of the RoleMapper and re-evaluated for the active sessions on
+every change; the client package `rolemgmt`; see docs/server-guide.md and
+docs/client-guide.md. Not done: persistence of the configuration (below),
+a CustomConfiguration, ledger rows against an independent stack.
+
 ## Phase 4: durable administration
 
 One persistence package for the server, PubSub and UAFX, from
@@ -153,6 +162,9 @@ One persistence package for the server, PubSub and UAFX, from
 - persistence of the PubSub configuration of the server, with NotPersisted
   (Part 14 §9.1.2), for the Go API, the configuration Methods and the
   configuration file;
+- persistence of the managed RoleSet (`server.WithRoleManagement`): the
+  roles AddRole added and the Identities, Applications and Endpoints of
+  every role, kept in memory since v1.43.0;
 - restart, failed commit and concurrent change tests through each entry
   point.
 

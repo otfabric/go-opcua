@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,7 @@ func TestPubSubCov_DiagValue(t *testing.T) {
 	s := newTestServer()
 	s.cfg.pubsub = &pubsubConfig{}
 	require.NotNil(t, s.PubSub())
-	t.Cleanup(s.closePubSub)
+	cleanup.Register(t, s.closePubSub)
 	require.NoError(t, s.buildPubSubModel())
 	m := s.ps.model
 

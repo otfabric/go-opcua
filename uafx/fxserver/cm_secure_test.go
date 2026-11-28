@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -53,7 +54,7 @@ func TestConnectionManagerSecure(t *testing.T) {
 	require.NoError(t, err)
 	m, err := fxcm.New(fxcm.Options{Dialer: offlineDialer{}, ApplicationURI: "urn:test:cm", Logger: slog.New(slog.DiscardHandler)})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = m.Close() })
+	cleanup.Register(t, func() { _ = m.Close() })
 	_, err = m.Add(cmConf("Line1"))
 	require.NoError(t, err)
 
@@ -79,9 +80,9 @@ func TestConnectionManagerSecure(t *testing.T) {
 		Manager: m, Editable: true, File: true, Authorizer: authorize, Logger: slog.New(slog.DiscardHandler),
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = cm.Close() })
+	cleanup.Register(t, func() { _ = cm.Close() })
 	require.NoError(t, srv.Start(ctx))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 
 	connect := func(user string) *opcua.Client {
 		t.Helper()
@@ -98,7 +99,7 @@ func TestConnectionManagerSecure(t *testing.T) {
 			opcua.AuthUsername(user, users[user]))
 		require.NoError(t, err)
 		require.NoError(t, c.Connect(ctx))
-		t.Cleanup(func() { _ = c.Close(ctx) })
+		cleanup.Register(t, func() { _ = c.Close(ctx) })
 		return c
 	}
 	admin, viewer := connect("admin"), connect("viewer")

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ func TestRegressionMQTTConnectionNamesShareBroker(t *testing.T) {
 	t.Parallel()
 	b := mqttbroker.New(mqttbroker.Options{})
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 
 	ds := NewMemoryDataSource()
 	require.NoError(t, ds.Set(nodeA, int32(1)))
@@ -42,7 +43,7 @@ func TestRegressionMQTTConnectionNamesShareBroker(t *testing.T) {
 			WithDataSetHandler(handler(name)))
 		require.NoError(t, err)
 		require.NoError(t, sub.Start(context.Background()))
-		t.Cleanup(func() { _ = sub.Close() })
+		cleanup.Register(t, func() { _ = sub.Close() })
 	}
 	require.Eventually(t, func() bool { return b.ClientCount() == 2 }, 5*time.Second, time.Millisecond)
 	time.Sleep(100 * time.Millisecond) // the subscriptions
@@ -50,7 +51,7 @@ func TestRegressionMQTTConnectionNamesShareBroker(t *testing.T) {
 		WriterGroup("wg", 1, 5*time.Millisecond, SetWriterQueue(DataSetWriter("w", 1, "pds"), "regress/q", "")))), WithDataSource(ds))
 	require.NoError(t, err)
 	require.NoError(t, pub.Start(context.Background()))
-	t.Cleanup(func() { _ = pub.Close() })
+	cleanup.Register(t, func() { _ = pub.Close() })
 
 	require.Eventually(t, func() bool { return b.ClientCount() == 3 }, 5*time.Second, time.Millisecond)
 	deadline := time.Now().Add(time.Second)

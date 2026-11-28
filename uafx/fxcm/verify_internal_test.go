@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxstore"
@@ -115,7 +116,7 @@ func TestVerifyOptionsDefaults(t *testing.T) {
 	t.Parallel()
 	m, err := New(Options{Dialer: offline{}, ApplicationURI: cmURI, Verify: VerifyOptions{RetryInitial: 2 * DefaultVerifyRetryMax}})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = m.Close() })
+	cleanup.Register(t, func() { _ = m.Close() })
 	v := m.opts.Verify
 	assert.Equal(t, DefaultVerifyTimeout, v.Timeout)
 	assert.Positive(t, v.Parallelism)

@@ -799,7 +799,7 @@ func (d *serverDiagnostics) activated(sc *uasc.SecureChannel, sess *session, req
 	sd.userID = user
 	sd.authMech = mech
 	sd.locales = slices.Clone(req.LocaleIDs)
-	sd.roles = slices.Clone(sess.roles)
+	sd.roles = slices.Clone(sess.currentRoles())
 	if sc != nil {
 		sd.secMode = sc.SecurityMode()
 		sd.secPolicy = sc.SecurityPolicyURI()

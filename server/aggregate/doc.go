@@ -2,10 +2,11 @@
 
 // Package aggregate calculates the standard Aggregates of OPC 10000-13
 // (Part 13 §5.4) over the raw values of a Variable: every Aggregate of
-// Part 13 §5.4.3 but AnnotationCount, with the interval rules of §5.4.2,
-// the bounding values of §3.1.8 and §3.1.9, the StatusCode calculation of
-// §5.4.3.2 and the Aggregate bits of Part 4 §7.38.1 (Calculated,
-// Interpolated, Partial, MultipleValues).
+// Part 13 §5.4.3, AnnotationCount over the Annotations of the Variable
+// (Part 11 §5.1.2, [Request.CalculateWithAnnotations]), with the interval
+// rules of §5.4.2, the bounding values of §3.1.8 and §3.1.9, the StatusCode
+// calculation of §5.4.3.2 and the Aggregate bits of Part 4 §7.38.1
+// (Calculated, Interpolated, Partial, MultipleValues).
 //
 // A [Request] holds the time domain, the Aggregate and the [Config]; it is
 // the ReadProcessedDetails of a HistoryRead (Part 11 §6.5.4) or the

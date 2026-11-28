@@ -10,6 +10,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -29,11 +30,11 @@ func newChangeClient(t *testing.T, srv *server.Server) *changeClient {
 	t.Helper()
 	c := testutil.NewTestClient(t, srv.Endpoints()[0].EndpointURL)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	t.Cleanup(cancel)
+	cleanup.Register(t, cancel)
 	cc := &changeClient{t: t, c: c, ctx: ctx, notify: make(chan *opcua.PublishNotificationData, 64)}
 	sub, _, err := c.NewSubscription().Interval(20 * time.Millisecond).NotifyChannel(cc.notify).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	cc.sub = sub
 	filter := ua.NewEventFilter().Select("EventType", "Changes", "SourceNode").Build()
 	res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth, &ua.MonitoredItemCreateRequest{
@@ -112,7 +113,7 @@ func TestModelChangeEventsOverTheWire(t *testing.T) {
 	ns.Objects().AddRef(folder, id.Organizes, true)
 	folderVersion := ns.AddNodeVersion(folder).ID()
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	cc := newChangeClient(t, srv)
 	version := func(nid *ua.NodeID) string {
 		t.Helper()
@@ -222,7 +223,7 @@ func TestSemanticChangeOverTheWire(t *testing.T) {
 	ns.AddNode(eu)
 	level.AddRef(eu, id.HasProperty, true)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	cc := newChangeClient(t, srv)
 
 	res, err := cc.sub.Monitor(cc.ctx, ua.TimestampsToReturnBoth, &ua.MonitoredItemCreateRequest{
@@ -286,7 +287,7 @@ func TestModelChangeRestoreOverTheWire(t *testing.T) {
 	ns.AddNode(folder)
 	folderVersion := ns.AddNodeVersion(folder).ID()
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	cc := newChangeClient(t, srv)
 
 	added := ua.NewStringNodeID(ns.ID(), "Added")

@@ -5,6 +5,7 @@ package server
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"math"
 	"sync"
 	"time"
 
@@ -58,6 +59,17 @@ func (s *serverConfig) queryContinuationPointLimit() int {
 	return limitOrDefault(s.maxQueryContinuationPoints, defaultMaxQueryContinuationPoints)
 }
 
+// continuationPointCapability returns a limit as the UInt16 of its
+// ServerCapabilities variable (Part 5 §6.3.2 declares MaxBrowseContinuationPoints
+// and MaxQueryContinuationPoints UInt16); a larger limit is published as
+// the largest UInt16, which a client that keeps to it never exceeds.
+func continuationPointCapability(n int) uint16 {
+	if n >= math.MaxUint16 {
+		return math.MaxUint16
+	}
+	return uint16(n)
+}
+
 // bindContinuationPointCapabilities serves the continuation point limits
 // from their ServerCapabilities variables (Part 5 §6.3.2).
 func (s *Server) bindContinuationPointCapabilities() {
@@ -74,7 +86,7 @@ func (s *Server) bindContinuationPointCapabilities() {
 		}
 		limit := c.limit
 		n.mu.Lock()
-		n.val = func() *ua.DataValue { return DataValueFromValue(capabilityValue(limit())) }
+		n.val = func() *ua.DataValue { return DataValueFromValue(continuationPointCapability(limit())) }
 		n.mu.Unlock()
 	}
 }

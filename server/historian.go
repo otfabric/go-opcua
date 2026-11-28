@@ -39,6 +39,11 @@ type Historian struct {
 	// aggConfig is the Aggregate configuration of nodes
 	// (SetAggregateConfig), keyed by NodeID.String().
 	aggConfig map[string]aggregate.Config
+
+	// annotations holds the Annotations of the enabled nodes (Part 11
+	// §5.1.2), keyed by NodeID.String(), in the order of their
+	// SourceTimestamp; created by the first insert.
+	annotations map[string]*nodeHistory
 }
 
 // Compile-time check that *Historian implements HistoryProvider.
@@ -50,13 +55,16 @@ type nodeHistory struct {
 }
 
 type historyContinuation struct {
-	nodeKey   string
-	startTime time.Time
-	endTime   time.Time
-	nextIndex int
-	numValues uint32
-	bounds    bool
-	created   time.Time
+	nodeKey string
+	// annotations: the continuation point of a read of the Annotations of
+	// the node (ReadRawAnnotations).
+	annotations bool
+	startTime   time.Time
+	endTime     time.Time
+	nextIndex   int
+	numValues   uint32
+	bounds      bool
+	created     time.Time
 }
 
 const (
@@ -86,6 +94,7 @@ func (h *Historian) EnableNode(nodeID *ua.NodeID, maxSamples int) {
 		samples: make([]*ua.DataValue, 0, maxSamples),
 		maxSize: maxSamples,
 	}
+	delete(h.annotations, nodeID.String())
 }
 
 // RecordValue stores a historical sample for a node. If the node is not
@@ -121,7 +130,17 @@ func (h *Historian) IsEnabled(nodeID *ua.NodeID) bool {
 
 // ReadRaw implements ReadRawModifiedDetails for a single node.
 // It returns the matching DataValues and a continuation point if results are truncated.
+//
+// A sample with an Annotation at its SourceTimestamp has the Extra Data bit
+// (Part 4 §7.38.1, Table 177): Part 11 §5.1.2 has a client find the times
+// of the Annotations of a node in the values of a raw read of the node
+// that carry the ExtraData flag.
 func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, returnBounds bool, continuationPoint []byte) (*ua.HistoryReadResult, error) {
+	return h.readRaw(nodeID, false, startTime, endTime, numValues, returnBounds, continuationPoint)
+}
+
+// readRaw reads the samples of nodeID, or its Annotations.
+func (h *Historian) readRaw(nodeID *ua.NodeID, annotations bool, startTime, endTime time.Time, numValues uint32, returnBounds bool, continuationPoint []byte) (*ua.HistoryReadResult, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -132,7 +151,7 @@ func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, num
 	if len(continuationPoint) > 0 {
 		cpKey := hex.EncodeToString(continuationPoint)
 		cont = h.continuations[cpKey]
-		if cont == nil {
+		if cont == nil || cont.annotations != annotations {
 			return &ua.HistoryReadResult{
 				StatusCode: ua.StatusBadContinuationPointInvalid,
 			}, nil
@@ -150,6 +169,12 @@ func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, num
 		return &ua.HistoryReadResult{
 			StatusCode: ua.StatusBadHistoryOperationUnsupported,
 		}, nil
+	}
+	if annotations {
+		nh = h.annotations[nodeKey]
+		if nh == nil {
+			nh = &nodeHistory{}
+		}
 	}
 
 	// Determine time range direction.
@@ -187,7 +212,7 @@ func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, num
 			continue
 		}
 
-		matches = append(matches, sample)
+		matches = append(matches, h.withExtraData(nodeKey, annotations, sample))
 
 		if numValues > 0 && uint32(len(matches)) >= numValues {
 			// Create continuation point for remaining data.
@@ -195,13 +220,14 @@ func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, num
 				cpBytes := generateContinuationPoint()
 				cpKey := hex.EncodeToString(cpBytes)
 				h.continuations[cpKey] = &historyContinuation{
-					nodeKey:   nodeKey,
-					startTime: startTime,
-					endTime:   endTime,
-					nextIndex: next,
-					numValues: numValues,
-					bounds:    returnBounds,
-					created:   time.Now(),
+					nodeKey:     nodeKey,
+					annotations: annotations,
+					startTime:   startTime,
+					endTime:     endTime,
+					nextIndex:   next,
+					numValues:   numValues,
+					bounds:      returnBounds,
+					created:     time.Now(),
 				}
 				h.cleanExpiredContinuations()
 

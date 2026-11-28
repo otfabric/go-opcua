@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	imqtt "github.com/otfabric/go-opcua/internal/mqtt"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/ua"
@@ -46,7 +47,7 @@ func TestMQTT5EndToEnd(t *testing.T) {
 				mu.Unlock()
 			}})
 			require.NoError(t, b.Start())
-			t.Cleanup(b.Close)
+			cleanup.Register(t, b.Close)
 
 			ds := NewMemoryDataSource()
 			require.NoError(t, ds.Set(nodeA, int32(7)))
@@ -64,7 +65,7 @@ func TestMQTT5EndToEnd(t *testing.T) {
 			pub, err := New(NewConfiguration([]*ua.PublishedDataSetDataType{pds}, AttachWriterGroups(pubConn, wg)), WithDataSource(ds))
 			require.NoError(t, err)
 			require.NoError(t, pub.Start(context.Background()))
-			t.Cleanup(func() { _ = pub.Close() })
+			cleanup.Register(t, func() { _ = pub.Close() })
 
 			// Reader WriterGroupId 0: a UADP metadata announcement carries
 			// no WriterGroupId.
@@ -75,7 +76,7 @@ func TestMQTT5EndToEnd(t *testing.T) {
 				WithDataSetHandler(rec.handler))
 			require.NoError(t, err)
 			require.NoError(t, sub.Start(context.Background()))
-			t.Cleanup(func() { _ = sub.Close() })
+			cleanup.Register(t, func() { _ = sub.Close() })
 
 			require.Eventually(t, func() bool {
 				for _, d := range rec.dataSets() {

@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 )
 
@@ -40,7 +41,7 @@ func listen(t *testing.T, cfgFor func(port int) transport.Config, h transport.Ha
 		require.NoError(t, err)
 		cancel, err = c.Subscribe(context.Background(), "", 0, h)
 		if err == nil {
-			t.Cleanup(func() { _ = c.Close() })
+			cleanup.Register(t, func() { _ = c.Close() })
 			return c, port, cancel
 		}
 		_ = c.Close()
@@ -58,7 +59,7 @@ func open(t *testing.T, cfg transport.Config) *Conn {
 	t.Helper()
 	c, err := Open(context.Background(), cfg)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	cleanup.Register(t, func() { _ = c.Close() })
 	return c
 }
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/pubsub/transport"
@@ -92,11 +93,11 @@ func TestE2EEthernetSecure(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	pub, err := pubsub.New(pubCfg, pubsub.WithKeySource("sg", src), pubsub.WithDataSource(values))
 	require.NoError(t, err)
 	require.NoError(t, pub.Start(context.Background()))
-	t.Cleanup(func() { _ = pub.Close() })
+	cleanup.Register(t, func() { _ = pub.Close() })
 
 	require.Eventually(t, func() bool { return got.Load() == 4242 }, 10*time.Second, 5*time.Millisecond)
 }
