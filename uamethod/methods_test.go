@@ -421,6 +421,14 @@ func TestCallAll(t *testing.T) {
 		func() error { _, err := uamethod.CallFileDirectoryTypeCreateFile(ctx, c, obj, nil, nil); return err },
 		func() error { return uamethod.CallFileDirectoryTypeDelete(ctx, c, obj, nil, nil) },
 		func() error { _, err := uamethod.CallFileDirectoryTypeMoveOrCopy(ctx, c, obj, nil, nil); return err },
+		func() error { _, err := uamethod.CallRoleSetTypeAddRole(ctx, c, obj, nil, nil); return err },
+		func() error { return uamethod.CallRoleSetTypeRemoveRole(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeAddIdentity(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeRemoveIdentity(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeAddApplication(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeRemoveApplication(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeAddEndpoint(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeRemoveEndpoint(ctx, c, obj, nil, nil) },
 	} {
 		require.ErrorIs(t, call(), ua.StatusBadNotFound)
 	}
@@ -446,6 +454,9 @@ func TestCallAll(t *testing.T) {
 		func() error { _, err := uamethod.CallFileDirectoryTypeCreateFile(ctx, c, obj, nil, nil); return err },
 		func() error { return uamethod.CallFileDirectoryTypeDelete(ctx, c, obj, nil, nil) },
 		func() error { _, err := uamethod.CallFileDirectoryTypeMoveOrCopy(ctx, c, obj, nil, nil); return err },
+		func() error { _, err := uamethod.CallRoleSetTypeAddRole(ctx, c, obj, nil, nil); return err },
+		func() error { return uamethod.CallRoleSetTypeRemoveRole(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeAddIdentity(ctx, c, obj, nil, nil) },
 	} {
 		require.ErrorIs(t, call(), ua.StatusBadTooManyArguments)
 	}
