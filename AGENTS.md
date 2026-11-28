@@ -27,7 +27,7 @@ This repository follows **otfabric/engineering policy 1.6**, profile **protocol-
 3. Never invent protocol semantics: cite the Part and clause.
 4. Interop claims only from a test recorded in the ledger, against the pinned opcua-interop release.
 5. No incidental breaking changes to exported API; this library stays on v0 or v1.
-6. `chaos/` stays out of the shared race job: it starves timing-sensitive tests. `server`, `uafx/fxcm` and `uafx/fxserver` run in the `server` job (each hit the 120 s race timeout beside the others); their coverage is merged back in `coverage-merged`, which holds the repository coverage gate (see `.github/workflows/ci.yml`).
+6. `chaos/` stays out of the shared race job: it starves timing-sensitive tests. `server`, `uafx/fxcm` and `uafx/fxserver` run in the `server` job (each hit the 120 s race timeout beside the others); their coverage is merged back in `coverage-merged`, which holds the repository coverage gate (see `.github/workflows/ci.yml`). The server job and `coverage-merged` take those three packages one at a time (one step each in the server job): side by side they use more memory than a hosted runner has, and the VM is shut down without a log.
 
 ## Commands
 
