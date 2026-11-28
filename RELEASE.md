@@ -1,5 +1,31 @@
 # go-opcua Releases
 
+## v1.43.0
+
+**Date:** 2026-11-28
+**Previous release:** v1.42.1
+
+The first item of phase 3 of docs/roadmap.md: the server gives every Structure, Union, Enumeration and OptionSet DataType its DataTypeDefinition Attribute, from the Definition of the NodeSet it imports.
+
+### Added
+
+- server: the DataTypeDefinition Attribute (AttributeId 23) of the DataTypes of namespace 0 and of every model `ImportNodeSetXML` imports. "The Attribute shall be mandatory for DataTypes derived from Structure and Union", with a StructureDefinition, and "for DataTypes derived from Enumeration, OptionSet and subtypes of UInteger representing an OptionSet", with an EnumDefinition (OPC 10000-3 §5.8.3, Table 16). "The DataTypeDefinition Attribute can be populated from the DataTypeDefinition belonging to a UADataType" (OPC 10000-6 §F.12), which lists only the fields the DataType adds: the importer follows the HasSubtype Reference to the supertype, in the document or already in the address space (namespace 0, a model imported before or a DataType a program gave the Attribute), and puts its fields first, "this list shall begin with the fields of the baseDataType followed by the fields of this StructureDefinition" (Part 3 §8.48).
+  - StructureDefinition: BaseDataType is the direct supertype; DefaultEncodingId the DataTypeEncoding with the BrowseName `0:Default Binary` (Part 3 §5.8.3), null for an abstract DataType ("If the DataType is abstract the DefaultEncodingId shall be null", §8.48) and for one without that encoding; StructureType from IsUnion, IsOptional and AllowSubTypes by OPC 10000-6 §F.12 Table F.13, over the inherited fields as well, as "the subtypes extend the EncodingMask defined for the parent" (Part 6 §5.2.7); a StructureField per field with its Name, Description, DataType (an alias resolved, BaseDataType when absent), ValueRank, ArrayDimensions (one 0, "unknown", per dimension when the NodeSet gives none; null for a scalar, Part 3 §8.51), MaxStringLength and IsOptional, which is the field's IsOptional in a StructureWithOptionalFields, its AllowSubTypes in a StructureWithSubtypedValues or UnionWithSubtypedValues and false otherwise (§8.51). Union (`i=12756`) and its subtypes are unions.
+  - EnumDefinition: an EnumField per field with its Name, Value, DisplayName and Description (Part 3 §8.50, §8.52); for an OptionSet the Value is the number of the bit, as the NodeSet writes it. A subtype of an Enumeration without a Definition of its own has the fields of its supertype.
+  - A Definition that cannot be mapped is logged at Warn and the DataType has no Attribute; the import goes on. These are a combination of flags Table F.13 does not have ("Any combination of flags that does not have a mapping is invalid and an error should be raised"), a field DataType that is no NodeId or alias, a ValueRank that is neither -1 nor ≥ 1 ("It shall be Scalar (-1) or a fixed rank Array (>=1)", §8.51), ArrayDimensions with another number of dimensions than the ValueRank or that are not UInt32s, a Definition with fields on a DataType that is no Structure, Enumeration or OptionSet (Part 6 §F.11) and a Structure whose supertype has no StructureDefinition.
+
+### Behaviour changes
+
+- server: Read of the DataTypeDefinition Attribute of a Structure, Union, Enumeration or OptionSet DataType returns its StructureDefinition or EnumDefinition, where it returned `Bad_AttributeIdInvalid` for every DataType; 250 DataTypes of namespace 0 have it, and every DataType of the GDS, DI and UAFX models. Read of it on BaseDataType, Structure, Enumeration, Number and the other abstract, built-in and simple DataTypes still returns `Bad_AttributeIdInvalid`: the Attribute is optional for them (Part 3 §5.8.3) and the NodeSet has no fields for them. A value written to the Attribute, or set with `Node.SetAttribute`, replaces the imported one as before. A new server builds the definitions of namespace 0 at start (about 2 % more allocations in `BenchmarkNewServer`).
+
+### Tests
+
+- `TestDataTypeDefinition_Namespace0` (`server`): BuildInfo, EUInformation, NodeClass, AccessLevelType, OptionSet, Union, UserIdentityToken and its subtypes, LogRecord (optional fields) and PublishedDataSetDataType (subtyped values) against their NodeSet definitions; every subtype of Structure and Enumeration has the Attribute; BaseDataType, Structure, Enumeration, Number, Int32, String, Duration, UtcTime and Image have none. `TestDataTypeDefinition_Read`: the same over the wire with the go-opcua client.
+- `TestDataTypeDefinition_CompanionModels`: the GDS, DI and UAFX models imported at the namespace indexes of the server (the field DataTypes, supertypes and encodings in the server's namespaces), a union, a union with subtyped values, optional fields, and the Attribute on every DataType of the models.
+- `TestDataTypeDefinition_Import`, `TestDataTypeDefinition_Invalid`, `TestDataTypeDefinition_SupertypeOfAnotherImport`, `TestDataTypeDefinition_Cycle` and `TestDataTypeDefinition_Guards`: a NodeSet imported at its own and at another namespace index, inherited fields over two levels, arrays with and without ArrayDimensions, a matrix, a field without DataType, an enumeration and its subtype, an OptionSet of a UInt32, abstract types and a type without encoding, a supertype of another import and of the program, and every Definition that cannot be mapped.
+- `TestImportedAddressSpaceGolden`: `testdata/nodeset_golden.txt` is rewritten for the Attribute; the dumps of the address space differ from those of v1.42.0 by the added Attribute 23 of 250 nodes of namespace 0 and of 84 nodes of the GDS, DI and UAFX models, and in nothing else.
+
+---
 ## v1.42.1
 
 **Date:** 2026-11-28

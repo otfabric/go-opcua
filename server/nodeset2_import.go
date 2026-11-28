@@ -159,6 +159,9 @@ func (s *Server) importNodeSet(nodes *nodeset.Set) error {
 	if err != nil {
 		return fmt.Errorf("opcua: problem creating references: %w", err)
 	}
+	// The DataTypeDefinitions need the HasSubtype and HasEncoding
+	// References of the DataTypes.
+	s.importDataTypeDefinitions(nodes)
 	return nil
 }
 
