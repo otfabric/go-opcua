@@ -11,6 +11,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	pubsubsec "github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/server"
@@ -77,7 +78,7 @@ func startSKS(t *testing.T, ks *pubsubsec.KeyService, pushOpts ...server.SKSOpti
 	rings := &pubsubsec.KeyRings{}
 	require.NoError(t, srv.EnableSecurityKeyPush(rings, pushOpts...))
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return &sksServer{srv: srv, url: fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()), sks: h, rings: rings}
 }
 
@@ -113,7 +114,7 @@ func connect(t *testing.T, url, policy string, mode ua.MessageSecurityMode, user
 	c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(ctx))
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	return c
 }
 

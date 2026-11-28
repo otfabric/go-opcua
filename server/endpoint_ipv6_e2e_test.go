@@ -11,6 +11,7 @@ import (
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,7 @@ func TestEndPoint_IPv6Loopback(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 
 	want := fmt.Sprintf("opc.tcp://[::1]:%d", srv.Port())
 	require.Equal(t, []string{want}, srv.URLs())

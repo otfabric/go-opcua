@@ -31,6 +31,17 @@ field is no limit) and fails a larger request with `BadTooManyOperations`.
 The monitored item, continuation point and event queue limits are listed in
 [security.md](security.md#per-call-and-per-session-resource-limits).
 
+Every Mandatory Property of the ServerCapabilities (OPC 10000-5 §6.3.2) has a
+value. `WithServerProfiles(uris...)` sets the ServerProfileArray, the URIs of
+the OPC 10000-7 Profiles the server supports in its configuration; the library
+does not determine its Profiles, so without the option the array is empty.
+`WithLocaleIDs(locales...)` sets the LocaleIdArray, `["en"]` by default, the
+locale of the texts the server writes. MinSupportedSampleRate is 0 (a sampling
+interval of 0 is exception-based sampling), MaxHistoryContinuationPoints is 0
+(the server refuses no HistoryRead for a count of continuation points; a
+`HistoryProvider` may release those it cannot keep, OPC 10000-4 §7.9), and
+SoftwareCertificates is empty. The continuation point limits are UInt16.
+
 Unsupported services return consistent OPC UA status codes. Any request type
 not registered with the server returns `StatusBadServiceUnsupported`.
 
@@ -184,6 +195,45 @@ an `EventAccessController` allows (RBAC: ReceiveEvents for SecurityAdmin).
 Channels of opc.https and opcua+uajson are not opened or closed and have no
 SecureChannelId. OpenSecureChannel requests the server cannot decrypt or
 verify are not reported.
+
+### Change audit events
+
+With auditing on the server also reports the audit events of the services
+that change the address space or the history, for successful and failed
+calls (Part 4 §6.5.7, §6.5.8; Part 11 §5.8):
+
+| Event type | SourceName | SourceNode | Per |
+|------------|------------|------------|-----|
+| AuditWriteUpdateEventType | `Attribute/Write` | the node written | WriteValue |
+| AuditHistoryValueUpdateEventType | `Attribute/HistoryUpdate` | the node | UpdateDataDetails |
+| AuditHistoryAnnotationUpdateEventType | `Attribute/HistoryUpdate` | the node | UpdateStructureDataDetails |
+| AuditHistoryEventUpdateEventType | `Attribute/HistoryUpdate` | the notifier | UpdateEventDetails |
+| AuditHistoryRawModifyDeleteEventType | `Attribute/HistoryUpdate` | the node | DeleteRawModifiedDetails |
+| AuditHistoryAtTimeDeleteEventType | `Attribute/HistoryUpdate` | the node | DeleteAtTimeDetails |
+| AuditHistoryEventDeleteEventType | `Attribute/HistoryUpdate` | the notifier | DeleteEventDetails |
+| AuditAddNodesEventType, AuditDeleteNodesEventType, AuditAddReferencesEventType, AuditDeleteReferencesEventType | `NodeManagement/AddNodes` … | the Server object | call |
+
+Each carries the fields of AuditEventType (ActionTimeStamp, Status: false when
+the operation failed, ServerId, ClientAuditEntryId, ClientUserId) and its own
+(Part 5 §6.4.19 to §6.4.26):
+
+- Write: AttributeId, IndexRange, OldValue (the value before the write, limited
+  to the IndexRange; null for a node that is not there or not readable) and
+  NewValue.
+- HistoryUpdate: ParameterDataTypeId (the DataType of the details), UpdatedNode,
+  PerformInsertReplace, NewValues and OldValues: the values the provider held
+  before a Replace, Update or delete, read with its `ReadRaw`. A modified
+  delete has no OldValues; event updates and deletes have null OldValues (the
+  provider keeps no event before an update). An event insert lists the
+  EventIds of the inserted events in its Message (Part 11 §5.8.1).
+- NodeManagement: NodesToAdd, NodesToDelete, ReferencesToAdd or
+  ReferencesToDelete, the whole parameter of the call; Status is false when
+  any item failed and the Message names the first failure.
+
+A request the service refuses as a whole (a ServiceFault) reports one event of
+its type with Status false and the Server object as SourceNode.
+`server.WithChangeAuditing(false)` turns these events off while the security
+audit events stay on, the behaviour before v1.43.0.
 
 ---
 
@@ -690,8 +740,9 @@ func read(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Varia
 }
 ```
 
-The contracts are those of FileType and FileDirectoryType today; the
-families are chosen in `cmd/methods/config.go`.
+The contracts are those of FileType and FileDirectoryType, and of
+RoleSetType and RoleType (OPC 10000-18); the families are chosen in
+`cmd/methods/config.go`.
 
 ---
 
@@ -1175,7 +1226,7 @@ below), plus UpdateData and raw/at-time deletes. Continuations are session-bound
 ### Processed reads (Part 13 Aggregates)
 
 HistoryRead `ReadProcessedDetails` (Part 11 §6.5.4) returns one value per interval
-of every standard Aggregate of Part 13 §5.4.3 but AnnotationCount, calculated by
+of every standard Aggregate of Part 13 §5.4.3, calculated by
 the `server/aggregate` package: the intervals of Table 49 (reverse reads, a
 ProcessingInterval of 0 for one interval), Interpolated and Simple Bounding
 Values, the PercentValues and PercentTime StatusCode calculation and the
@@ -1222,6 +1273,53 @@ The last raw value read is taken as the end of the history: an interval after it
 "After End of Data". Where the examples of Annex A conflict with a clause the
 package follows the clause; LIMITATIONS.md lists those cases.
 
+AnnotationCount (Part 13 §5.4.3.20) counts the Annotations of each interval: an
+Int32 with the Calculated bit and the interval's StartTime, Partial for an
+incomplete interval (Part 13 §5.3.3.2), `Bad_NoData` before and after the data,
+which the raw values give. The server reads the Annotations from an
+`AnnotationHistoryProvider`; `aggregate.Request.CalculateWithAnnotations` takes
+their times. Part 13 Table 5 says it "applies to Historical Aggregates only": the
+AggregateFilter of a monitored item refuses it (`aggregate.HistoricalOnly`).
+
+### Annotations
+
+An Annotation (Part 11 §6.6.6: message, userName, annotationTime) is a note on
+the history of a Variable or Object at a time. `EnableAnnotations` adds the
+Annotations Property (Part 11 §5.1.2: DataType Annotation, ValueRank -2,
+AccessLevel CurrentRead, HistoryRead and HistoryWrite, a null value) to the node:
+
+```go
+h := server.NewHistorian()
+h.EnableNode(nodeID, 0) // the Annotations live with the history of the node
+s.SetHistorian(h)
+if err := s.EnableAnnotations(nodeID); err != nil { // Bad_NodeClassInvalid for a Property
+    log.Fatal(err)
+}
+```
+
+- HistoryUpdate `UpdateStructureDataDetails` (Part 11 §6.9.3) on the node or on its
+  Property inserts (`Good_EntryInserted`, `Bad_EntryExists`), replaces
+  (`Good_EntryReplaced`, `Bad_NoEntryExists`), updates (either Good) or removes
+  (`Good`, `Bad_NoEntryExists`) Annotations. The SourceTimestamp of each DataValue
+  identifies the Annotation; a value that is no Annotation is
+  `Bad_TypeMismatch`, one without a SourceTimestamp `Bad_InvalidArgument`. An
+  empty annotationTime is set to the time of the update, an empty userName to the
+  user of the session (empty for an anonymous session).
+- HistoryRead `ReadAnnotationDataDetails` (Part 11 §6.5.6) returns one DataValue
+  per reqTime in the order of the request, `Bad_NoData` for a time without one.
+  `ReadRawModifiedDetails` on the Property returns the Annotations of the range in
+  time order, with continuation points; IsReadModified is
+  `Bad_HistoryOperationUnsupported`.
+- The raw values at a time with an Annotation carry the ExtraData bit (Part 4
+  §7.38.1).
+- A node without the Property is `Bad_HistoryOperationUnsupported`; the HistoryWrite
+  and HistoryRead bits and the RBAC permissions of the node apply to the Property
+  too. The Historian keeps the Annotations of a node until `EnableNode` starts a
+  new history; when its history is full an Annotation older than its oldest value
+  is `Bad_OutOfRange`.
+- Your own store implements `AnnotationHistoryProvider`, which also gives the
+  InsertAnnotationCapability of the HistoryServerCapabilities.
+
 ### Historical events
 
 A notifier (an Object or View whose EventNotifier has the HistoryRead bit) is a
@@ -1265,7 +1363,8 @@ _ = s.EmitBaseEvent(pumpID, &server.BaseEvent{ /* ... */ })
   `EventHistoryUpdater` / `EventHistoryDeleter`) on the value given to `SetHistorian`.
 - The HistoryServerCapabilities report what the provider implements.
 - ReadEventDetails2 with ReadModified and ReadEventDetailsSorted answer
-  `Bad_HistoryOperationUnsupported`; no audit events are reported for history updates.
+  `Bad_HistoryOperationUnsupported`; history updates are audited ([change audit
+  events](#change-audit-events)).
 
 ### Monitored-item queues and modes
 
@@ -1370,7 +1469,7 @@ next boundary. An item keeps at most 65536 raw values between two calculations.
 | Request | StatusCode |
 |---------|------------|
 | An attribute other than Value | `BadFilterNotAllowed` |
-| An Aggregate of no `aggregate.Functions()`, AnnotationCount among them | `BadAggregateNotSupported` |
+| An Aggregate of no `aggregate.Functions()`, or AnnotationCount (historical only, Part 13 Table 5) | `BadAggregateNotSupported` |
 | An aggregateConfiguration that is not valid (Part 13 §4.2.1.2) | `BadMonitoredItemFilterInvalid` |
 | TimestampsToReturn Server or Neither (Part 13 §5.4.3.1; Both is accepted) | `BadTimestampsToReturnInvalid` |
 
@@ -1910,6 +2009,50 @@ defaults of their namespace. Reading the RolePermissions,
 UserRolePermissions or AccessRestrictions Attribute of a node without its
 own answers as before; the defaults are read from the NamespaceMetadata
 Object.
+
+### Role management (RoleSet, OPC 10000-18)
+
+By default the roles of a session come from the `RoleMapper`
+(`WithRoleMapper`, `DefaultRoleMapper` without one). `WithRoleManagement`
+adds the managed RoleSet of OPC 10000-18: the server keeps the
+configuration of its roles in memory and serves it through the RoleSet
+Object (`Server.ServerCapabilities.RoleSet`, §4.3), whose roles a
+certificate or user manager changes over the wire with the RoleSet and
+Role Methods, and the application with `Server.RoleSet()`:
+
+```go
+srv, _ := server.New(
+    server.ApplicationIdentity(cert, key),
+    server.EnableSecurity(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt),
+    server.EnableAuthMode(ua.UserTokenTypeUserName),
+    server.WithUsernameValidator(checkPassword),
+    server.WithClientCertificateTrustList(clientCA), // Applications need trusted certificates
+    server.WithAccessController(server.NewRBACAccessController(nil)),
+    server.WithRoleManagement(server.RoleManagement{}),
+)
+// The first administrator: the RoleSet Methods need SecurityAdmin.
+err := srv.RoleSet().AddIdentity(ua.RoleSecurityAdmin.NodeID(),
+    &ua.IdentityMappingRuleType{CriteriaType: ua.IdentityCriteriaTypeUserName, Criteria: "secadmin"})
+maintainer, err := srv.RoleSet().AddRole("Maintainer", "") // in server.RolesNamespaceURI
+```
+
+| Topic | Behaviour |
+|-------|-----------|
+| Roles | The 12 well-known roles of the NodeSet (Anonymous, AuthenticatedUser, Observer, Operator, Engineer, Supervisor, ConfigureAdmin, SecurityAdmin, SecurityKeyServerAdmin, TrustedApplication and the SKS roles), and up to `MaxRoles` (default 64) added by AddRole (§4.2.2) as Objects of RoleType below the RoleSet, with the String NodeId `<namespace index of the BrowseName>:<RoleName>` in the namespace `server.RolesNamespaceURI` (added at the first AddRole). An empty NamespaceUri qualifies the BrowseName with that namespace, any other must be in the NamespaceArray (`Bad_InvalidArgument`); a well-known name with the OPC UA namespace URI is `Bad_AlreadyExists` |
+| Defaults | §4.3: Anonymous has the rules Anonymous and AuthenticatedUser, AuthenticatedUser the rule AuthenticatedUser, TrustedApplication the rule TrustedApplication; these three cannot be changed (`Bad_RequestNotAllowed`; their NodeSet Objects have no Methods). The other roles start without Identities, and with ApplicationsExclude and EndpointsExclude TRUE |
+| Methods | AddRole, RemoveRole (§4.2.3); AddIdentity, RemoveIdentity, AddApplication, RemoveApplication, AddEndpoint, RemoveEndpoint (§4.4.5 to §4.4.10), with their results: `Bad_InvalidArgument`, `Bad_AlreadyExists`, `Bad_NotFound`, `Bad_NodeIdUnknown`, `Bad_RequestNotAllowed`, `Bad_NotSupported` (no more roles), `Bad_ResourceUnavailable` (more than `MaxEntries`, default 256, Identities, Applications or Endpoints of a role) |
+| Properties | Identities, Applications, ApplicationsExclude, Endpoints, EndpointsExclude and CustomConfiguration (FALSE) show the configuration (§4.4.1) and report a data change when it changes; ApplicationsExclude and EndpointsExclude are written with the Write service |
+| Access | A SignAndEncrypt channel (`Bad_SecurityModeInsufficient`) and the SecurityAdmin role (`Bad_UserAccessDenied`), or what `RoleManagement.Authorizer` allows, for the Methods and the Writes. The RolePermissions of the NodeSet limit the Properties to SecurityAdmin under the `RBACAccessController`; an added role takes those of Observer |
+| Granting | At ActivateSession a session gets the roles of the `RoleMapper`, then every role whose Identities match its identity token and whose Applications and Endpoints allow its Client Certificate and Endpoint (§4.4.1), each role once. A change of a role is applied at once to the active sessions (§4.4.1); the `RoleMapper` is not called again for them |
+| Identity rules | UserName (the user name), Thumbprint (SHA-1 of the user certificate, upper-case hex), X509Subject (the subject or the issuer name of the user certificate, `CN="..."/O="..."` in the order of §4.4.3 Table 10), Application (the ApplicationUri of a trusted Client Certificate), Anonymous, AuthenticatedUser, TrustedApplication, Role and GroupId (the `roles` and `groups` claims of a JWT, prefixed with `iss/`, with `WithIssuedTokenPolicy(server.IssuedTokenTypeJWT, …)` only, `Bad_NotSupported` without). A rule of another form is `Bad_InvalidArgument`; an Anonymous rule for SecurityAdmin, ConfigureAdmin or SecurityKeyServerAdmin is `Bad_RequestNotAllowed` |
+| Applications and Endpoints | An include list grants the role only to those, an exclude list to all others; a role with Applications needs a signed channel and a Client Certificate the server validated (a trust list, a validator or push management). An Endpoint matches the endpointUrl of CreateSession and the SecurityPolicy and SecurityMode of the channel; fields left at their default are ignored (§4.4.2) |
+| RemoveRole | Removes the role's nodes, its RolePermissions on every node and in the DefaultRolePermissions of every namespace (§4.2.3), and the role from the sessions. Roles of namespace 0 are not removable (`Bad_RequestNotAllowed`) |
+| Audit | With auditing on, a change by a Role Method reports a RoleMappingRuleChangedAuditEventType event (§4.5); AddRole, RemoveRole and refused calls an AuditUpdateMethodEventType event |
+| Persistence | None: the configuration starts from the defaults with each `New` and is lost when the process ends |
+
+Without `WithRoleManagement` the roles come from the `RoleMapper` alone,
+the RoleSet Methods are not served (`Bad_MethodInvalid`) and the
+Properties have the values of the NodeSet, as in v1.42 and earlier.
 
 ---
 

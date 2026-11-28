@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uasc"
@@ -72,7 +73,7 @@ func newBrokerPair(t *testing.T) *brokerPair {
 		defer close(received)
 		p.cb.receive(ctx, ssc, p.w, 1)
 	}()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		cancel()
 		p.w.close()
 		<-p.w.exited

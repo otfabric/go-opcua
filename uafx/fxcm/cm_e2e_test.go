@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
@@ -92,7 +93,7 @@ func newCMServer(t *testing.T, m *fxcm.Manager) *cmServer {
 	})
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		_ = cm.Close()
 		_ = srv.Close()
 	})
@@ -100,7 +101,7 @@ func newCMServer(t *testing.T, m *fxcm.Manager) *cmServer {
 		opcua.ApplicationURI("urn:go-opcua:fxcm:operator"), opcua.AutoReconnect(false))
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(context.Background()))
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	return &cmServer{srv: srv, ns: ns, cm: cm, c: c}
 }
 
@@ -161,7 +162,7 @@ func processingEvents(t *testing.T, c *opcua.Client, cm *ua.NodeID) <-chan *ua.N
 			}
 		}
 	}()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		_ = sub.Cancel(context.Background())
 		close(done)
 		<-exited

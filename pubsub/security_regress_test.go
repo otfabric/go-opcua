@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/jsonmsg"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/security"
@@ -46,7 +47,7 @@ func TestRegressionJSONBypassesReaderSecurity(t *testing.T) {
 		WithDataSetHandler(rec.handler), WithKeySource("sg", regressSource(t, ks, "sg")))
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	cid := mustID(t, sub, KindConnection, Root, "sub")
 	rid := mustID(t, sub, KindDataSetReader, mustID(t, sub, KindReaderGroup, cid, "rg"), "r")
 	require.Eventually(t, func() bool { return bus.subscribers(url) > 0 }, 3*time.Second, time.Millisecond)
@@ -110,13 +111,13 @@ func TestRegressionReaderOfOtherSecurityGroup(t *testing.T) {
 		WithDataSetHandler(rec.handler), WithKeySource("A", regressSource(t, ks, "A")), WithKeySource("B", regressSource(t, ks, "B")))
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	pub, err := New(NewConfiguration([]*ua.PublishedDataSetDataType{pds}, AttachWriterGroups(memConnection("pub", url, uint16(8)),
 		Secure(WriterGroup("wg", 1, 5*time.Millisecond, DataSetWriter("w", 1, "pds")), ua.MessageSecurityModeSign, "A"))),
 		WithDataSource(ds), WithKeySource("A", regressSource(t, ks, "A")))
 	require.NoError(t, err)
 	require.NoError(t, pub.Start(context.Background()))
-	t.Cleanup(func() { _ = pub.Close() })
+	cleanup.Register(t, func() { _ = pub.Close() })
 
 	require.Eventually(t, func() bool { return len(rec.dataSets()) >= 10 }, 3*time.Second, time.Millisecond)
 	for _, d := range rec.dataSets() {
@@ -144,13 +145,13 @@ func TestRegressionReadersOfDifferentSecurity(t *testing.T) {
 		WithDataSetHandler(rec.handler), WithKeySource("A", regressSource(t, ks, "A")))
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	pub, err := New(NewConfiguration([]*ua.PublishedDataSetDataType{pds}, AttachWriterGroups(memConnection("pub", url, uint16(8)),
 		Secure(WriterGroup("wg", 1, 5*time.Millisecond, DataSetWriter("w", 1, "pds")), ua.MessageSecurityModeSign, "A"))),
 		WithDataSource(ds), WithKeySource("A", regressSource(t, ks, "A")))
 	require.NoError(t, err)
 	require.NoError(t, pub.Start(context.Background()))
-	t.Cleanup(func() { _ = pub.Close() })
+	cleanup.Register(t, func() { _ = pub.Close() })
 
 	require.Eventually(t, func() bool {
 		n := map[string]int{}

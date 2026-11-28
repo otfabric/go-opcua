@@ -52,7 +52,7 @@ func (h *Session) Roles() []*ua.NodeID {
 	if h == nil {
 		return nil
 	}
-	return slices.Clone(h.s.roles)
+	return slices.Clone(h.s.currentRoles())
 }
 
 // ClientCertificate returns the application instance certificate (DER) the

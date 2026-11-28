@@ -427,7 +427,7 @@ func TestHistory_ReadProcessed(t *testing.T) {
 		require.Equal(t, ua.StatusBadInvalidArgument,
 			read(id.AggregateFunctionAverage, histAt(0), histAt(10), -1).StatusCode, "negative processing interval")
 		require.Equal(t, ua.StatusBadAggregateNotSupported,
-			read(id.AggregateFunctionAnnotationCount, histAt(0), histAt(10), 1000).StatusCode, "unsupported aggregate")
+			read(99999, histAt(0), histAt(10), 1000).StatusCode, "unsupported aggregate")
 	})
 
 	t.Run("AggregateListMismatch", func(t *testing.T) {

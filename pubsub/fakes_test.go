@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/jsonmsg"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/security"
@@ -617,7 +618,7 @@ func start(t *testing.T, cfg *ua.PubSubConfigurationDataType, opts ...Option) *P
 	p, err := New(cfg, opts...)
 	require.NoError(t, err)
 	require.NoError(t, p.Start(context.Background()))
-	t.Cleanup(func() { _ = p.Close() })
+	cleanup.Register(t, func() { _ = p.Close() })
 	return p
 }
 

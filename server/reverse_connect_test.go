@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,7 @@ func rcServer(t *testing.T, opts ...Option) *Server {
 		ApplicationURI("urn:otfabric:test:reverse"),
 	}, opts...)...)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	return s
 }
 
@@ -47,7 +48,7 @@ func rcListener(t *testing.T) (*uacp.ReverseListener, string) {
 	t.Helper()
 	l, err := uacp.ListenReverse(context.Background(), "127.0.0.1:0", nil)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = l.Close() })
+	cleanup.Register(t, func() { _ = l.Close() })
 	return l, "opc.tcp://" + l.Addr().String()
 }
 

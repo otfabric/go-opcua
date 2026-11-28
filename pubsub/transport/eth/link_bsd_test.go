@@ -16,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 )
@@ -49,7 +50,7 @@ func useBPFFake(t *testing.T) *bpfFake {
 	sysOpen = fk.open
 	sysIoctl = fk.ioctl
 	sysSocket = fk.socket
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		sysOpen, sysIoctl, sysSocket = oldOpen, oldIoctl, oldSocket
 		fk.mu.Lock()
 		defer fk.mu.Unlock()

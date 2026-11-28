@@ -11,6 +11,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -25,7 +26,7 @@ func diagServer(t *testing.T, opts ...server.Option) (*server.Server, string) {
 	}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return srv, srv.Endpoints()[0].EndpointURL
 }
 
@@ -105,7 +106,7 @@ func TestDiagnostics_SubscriptionCounters(t *testing.T) {
 	ch := make(chan *opcua.PublishNotificationData, 64)
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 20 * time.Millisecond}, ch)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth, opcua.NewMonitoredItemCreateRequestWithDefaults(f.Int32, ua.AttributeIDValue, 1))
 	require.NoError(t, err)
 	itemID := res.Results[0].MonitoredItemID
@@ -197,7 +198,7 @@ func TestDiagnostics_SessionTimeout(t *testing.T) {
 	short, err := opcua.NewClient(url, opcua.InsecureNoSecurity(), opcua.SessionTimeout(time.Second), opcua.AutoReconnect(false))
 	require.NoError(t, err)
 	require.NoError(t, short.Connect(ctx))
-	t.Cleanup(func() { _ = short.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = short.Close(context.Background()) })
 	sid := short.Session().SessionID()
 	require.Equal(t, 1, testhook.ServerResourcesOf(srv).DiagnosticsSessionObjects)
 	// Drop the connection without closing the session; the session times

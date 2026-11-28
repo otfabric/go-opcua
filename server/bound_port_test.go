@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,7 @@ func TestServer_ListenPortZero_AssignsConcretePort(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, s.Start(context.Background()))
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 
 	port := s.Port()
 	require.NotZero(t, port)

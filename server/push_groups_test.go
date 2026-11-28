@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uapolicy"
@@ -978,7 +979,7 @@ func TestPushHTTPSTrustOnResumedConnection(t *testing.T) {
 
 			ln, err := tls.Listen("tcp", "127.0.0.1:0", s.push.tlsConfig(&tls.Config{MaxVersion: version}))
 			require.NoError(t, err)
-			t.Cleanup(func() { _ = ln.Close() })
+			cleanup.Register(t, func() { _ = ln.Close() })
 			go func() {
 				for {
 					c, err := ln.Accept()

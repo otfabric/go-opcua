@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	imqtt "github.com/otfabric/go-opcua/internal/mqtt"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 )
@@ -20,7 +21,7 @@ func startBroker(t *testing.T, opts mqttbroker.Options) *mqttbroker.Broker {
 	t.Helper()
 	b := mqttbroker.New(opts)
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	return b
 }
 
@@ -30,7 +31,7 @@ func open(t *testing.T, cfg transport.Config) *Conn {
 	defer cancel()
 	c, err := Open(ctx, cfg)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	cleanup.Register(t, func() { _ = c.Close() })
 	return c
 }
 

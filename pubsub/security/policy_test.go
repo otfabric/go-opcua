@@ -9,6 +9,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -204,7 +205,7 @@ func TestPolicyErrors(t *testing.T) {
 	require.Error(t, err)
 	old := nonceReader
 	nonceReader = failing
-	t.Cleanup(func() { nonceReader = old })
+	cleanup.Register(t, func() { nonceReader = old })
 	_, err = p.NewMessageNonce(1)
 	require.Error(t, err)
 }

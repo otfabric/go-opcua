@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -108,11 +109,18 @@ func TestContinuationPointsExpire(t *testing.T) {
 func TestContinuationPointCapabilities(t *testing.T) {
 	srv, err := New(WithMaxBrowseContinuationPoints(3), WithMaxQueryContinuationPoints(2))
 	require.NoError(t, err)
-	val := func(n uint32) uint32 {
-		return srv.Node(ua.NewNumericNodeID(0, n)).Value().Value.Value().(uint32)
+	val := func(n uint32) any {
+		return srv.Node(ua.NewNumericNodeID(0, n)).Value().Value.Value()
 	}
-	require.Equal(t, uint32(3), val(id.ServerServerCapabilitiesMaxBrowseContinuationPoints))
-	require.Equal(t, uint32(2), val(id.ServerServerCapabilitiesMaxQueryContinuationPoints))
+	require.Equal(t, uint16(3), val(id.ServerServerCapabilitiesMaxBrowseContinuationPoints))
+	require.Equal(t, uint16(2), val(id.ServerServerCapabilitiesMaxQueryContinuationPoints))
+}
+
+func TestContinuationPointCapabilityUInt16(t *testing.T) {
+	require.Equal(t, uint16(10), continuationPointCapability(10))
+	require.Equal(t, uint16(math.MaxUint16-1), continuationPointCapability(math.MaxUint16-1))
+	require.Equal(t, uint16(math.MaxUint16), continuationPointCapability(math.MaxUint16))
+	require.Equal(t, uint16(math.MaxUint16), continuationPointCapability(math.MaxUint16+1))
 }
 
 // denyController denies reading and browsing one node.

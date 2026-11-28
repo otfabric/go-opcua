@@ -11,6 +11,7 @@ import (
 
 	"github.com/otfabric/go-opcua/gds"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -107,7 +108,7 @@ func TestMisbehavingConfigurationServer(t *testing.T) {
 	reg(id.ServerConfigurationGetCertificates, out([]*ua.NodeID{gds.HTTPSCertificateType}, [][]byte{}))
 	reg(id.ServerConfigurationCreateSelfSignedCertificate, out([]byte{}))
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	c, err := dial(t, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()), ua.MessageSecurityModeSignAndEncrypt, identity{p.ClientCert, p.ClientKey}, "", "")
 	require.NoError(t, err)
 	g := gds.New(c)

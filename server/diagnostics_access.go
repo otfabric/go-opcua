@@ -27,7 +27,7 @@ func hasRole(sess *session, roles ...ua.WellKnownRole) bool {
 	if sess == nil {
 		return false
 	}
-	for _, r := range sess.roles {
+	for _, r := range sess.currentRoles() {
 		if r == nil || r.Namespace() != 0 {
 			continue
 		}
