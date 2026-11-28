@@ -80,20 +80,40 @@ jobs:
   # The race run's package timeout is 10 minutes: before v1.40.0 uafx/fxcm
   # took 238 s and uafx/fxserver 186 s of the 5 minutes on a 2-CPU runner
   # (#56), and 369 s and 414 s with GOMAXPROCS=2 locally. The tests' own
-  # deadlines are unchanged; the job timeout covers three such packages.
+  # deadlines are unchanged.
+  # Both runs take the three packages one at a time, one step each. The
+  # plain run took them side by side until 2026-11-28, and on seven runs of
+  # #58, #61, #63, #65, #67 and #70 the hosted VM was shut down about 60 s into
+  # that step, before any package had finished: bash ended with exit 143 and
+  # "The runner has received a shutdown signal", or the runner never
+  # reported again and the job ran into its limit with no log. The race and
+  # coverage runs, one package at a time, never were. The cause is memory:
+  # run alone on this runner (4 CPUs, 16 GB, 3 GB swap; #72), the largest
+  # process of uafx/fxcm peaks at 8.0 to 8.5 GB, of uafx/fxserver at 7.6 to
+  # 7.8 GB and of server at 1.8 GB, 17 GB or more side by side. A parent
+  # test that waits for its parallel subtests gives up its -parallel slot
+  # but keeps its servers, so the fixtures of every parent add up. The step
+  # timeouts end a step whose go test outlives its own -timeout and kill
+  # (one minute after it); a VM that is shut down ends only at the job's
+  # limit, which is short for the plain run. Each step prints its wall time
+  # and the peak RSS of its largest process.
   server:
     name: ${{ matrix.race && 'Race' || 'Test' }} server (Go ${{ matrix.go-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # Usual totals: 4 minutes plain, 12 race.
+    timeout-minutes: ${{ matrix.race && 40 || 20 }}
     strategy:
       fail-fast: false
       matrix:
         go-version: ["1.26", "1.27"]
         race: [false, true]
-    # The UAFX multicast end-to-end test (uafx/fxcm) must run here, not
-    # skip: it fails when no interface carries UDP multicast.
     env:
+      # The UAFX multicast end-to-end test (uafx/fxcm) must run here, not
+      # skip: it fails when no interface carries UDP multicast.
       GO_OPCUA_MULTICAST_REQUIRE: "1"
+      GO_TEST_FLAGS: ${{ matrix.race && '-race -timeout=10m' || '-timeout=120s' }}
+      # The format of GNU time.
+      TIME: "%e s elapsed, peak RSS of the largest process %M KB"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -103,12 +123,27 @@ jobs:
         env:
           TOKEN: ${{ secrets.OTFABRIC_READ_TOKEN }}
         run: git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-      - name: Test
-        if: ${{ !matrix.race }}
-        run: go test -count=1 -timeout=120s ./server ./uafx/fxcm ./uafx/fxserver
-      - name: Race test
-        if: ${{ matrix.race }}
-        run: go test -count=1 -p 1 -timeout=10m -race ./server ./uafx/fxcm ./uafx/fxserver
+      - name: Runner resources
+        run: |
+          echo "CPUs: $(nproc)"
+          free -m
+          df -h .
+      # A later package runs after an earlier one failed, so that a run
+      # reports all three.
+      - name: Test server
+        timeout-minutes: ${{ matrix.race && 12 || 6 }}
+        run: /usr/bin/time go test -count=1 $GO_TEST_FLAGS ./server
+      - name: Test uafx/fxcm
+        if: ${{ !cancelled() }}
+        timeout-minutes: ${{ matrix.race && 12 || 6 }}
+        run: /usr/bin/time go test -count=1 $GO_TEST_FLAGS ./uafx/fxcm
+      - name: Test uafx/fxserver
+        if: ${{ !cancelled() }}
+        timeout-minutes: ${{ matrix.race && 12 || 6 }}
+        run: /usr/bin/time go test -count=1 $GO_TEST_FLAGS ./uafx/fxserver
+      - name: Kernel out-of-memory messages
+        if: ${{ failure() }}
+        run: sudo dmesg | grep -iE 'out of memory|oom-kill|killed process' || echo "none"
 
   # The shared coverage job no longer runs the tests of the server and
   # uafx/fxcm packages, so this job runs them with the same -coverpkg, merges the profile into the
@@ -135,7 +170,8 @@ jobs:
         # 10m like the race run of the server job: with -covermode=atomic and
         # this -coverpkg, uafx/fxcm alone took 120.3 s on a 2-CPU runner
         # after C3.3 (74 s on 10 cores); its tests' own deadlines are
-        # unchanged.
+        # unchanged. It usually takes 3 to 6 minutes.
+        timeout-minutes: 20
         run: go test -count=1 -p 1 -timeout=10m -covermode=atomic -coverpkg="$COVERPKG" -coverprofile=server.out ./server ./uafx/fxcm ./uafx/fxserver
       - name: Download the shared coverage profile
         uses: actions/download-artifact@v7
