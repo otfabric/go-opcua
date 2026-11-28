@@ -366,8 +366,13 @@ func TestPushChurn(t *testing.T) {
 				switch {
 				case err == nil, chaoskit.IsConnectionError(err):
 				case errors.Is(err, ua.StatusBadTransactionPending), errors.Is(err, ua.StatusBadInvalidArgument),
-					errors.Is(err, ua.StatusBadInvalidState), errors.Is(err, ua.StatusBadNotWritable), errors.Is(err, ua.StatusBadNotReadable):
-					// another admin's transaction or open file
+					errors.Is(err, ua.StatusBadInvalidState), errors.Is(err, ua.StatusBadNotWritable), errors.Is(err, ua.StatusBadNotReadable),
+					errors.Is(err, ua.StatusBadSessionIDInvalid), errors.Is(err, ua.StatusBadNothingToDo):
+					// another admin's transaction or open file; ApplyChanges
+					// or CancelChanges of another admin's transaction
+					// (Bad_SessionIdInvalid) or without one, after a read or
+					// a failed ApplyChanges (Bad_NothingToDo, Part 12 §7.10.9,
+					// §7.10.11)
 				default:
 					errs.Addf("admin: %v", err)
 				}
