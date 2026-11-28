@@ -100,6 +100,8 @@ var generatedFiles = []string{
 	"uamethod/methods_gen.go",
 	"uamethod/pubsub_gen.go",
 	"uamethod/roles_gen.go",
+	"uamethod/securitygroup_gen.go",
+	"uamethod/serverconfig_gen.go",
 	"uamethod/trustlist_gen.go",
 }
 

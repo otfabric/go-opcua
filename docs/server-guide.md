@@ -752,10 +752,14 @@ func read(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Varia
 
 The contracts are those of FileType and FileDirectoryType, of
 RoleSetType and RoleType (OPC 10000-18), of ServerType (OPC 10000-5 §9),
-of TrustListType (OPC 10000-12 §7.8.2), and of PubSubConfigurationType
-and PubSubKeyServiceType (OPC 10000-14 §9.1.3.7, §8.3); the families are
-chosen in `cmd/methods/config.go`. The TrustList, PubSubConfiguration and
-SKS Methods of the server use them.
+of TrustListType and ServerConfigurationType (OPC 10000-12 §7.8.2,
+§7.10), and of PubSubConfigurationType, PubSubKeyServiceType,
+SecurityGroupFolderType, PubSubKeyPushTargetType,
+PubSubKeyPushTargetFolderType and PublishSubscribeType (OPC 10000-14
+§9.1.3.7, §8.3, §8.5, §8.6, §8.7, §9.1.3); the families are chosen in
+`cmd/methods/config.go`. The TrustList, push certificate management,
+PubSubConfiguration and SKS Methods of the server (SetSecurityKeys of
+`EnableSecurityKeyPush` among them) use them.
 
 ---
 

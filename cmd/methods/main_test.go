@@ -68,7 +68,9 @@ func TestGenerated(t *testing.T) {
 }
 
 // TestNextFamilies: the ObjectTypes the roadmap names next do not resolve
-// with the generator as it is. The Methods of the GDS DirectoryType have
+// with the generator as it is (ServerConfigurationType,
+// SecurityGroupFolderType and the key push targets of namespace 0 did, and
+// are families now: TestFamiliesOfPhase2). The Methods of the GDS DirectoryType have
 // arguments of DataTypes outside namespace 0 (ApplicationRecordDataType of
 // the GDS NodeSet); those of CertificateDirectoryType have arguments of
 // subtypes of built-in types (UtcTime) that the GDS NodeSet alone does not
@@ -90,6 +92,39 @@ func TestNextFamilies(t *testing.T) {
 			t.Errorf("%s: %v, want %q (when it resolves, add it to families)", typ, err, want)
 		}
 	}
+}
+
+// TestFamiliesOfPhase2: the push certificate management, SecurityGroup
+// folder, key push target and PublishSubscribe Methods are families, and an
+// argument name with an initialism goname leaves alone gets a Go field with
+// it (IpAddresses of OPC 10000-12 §7.10.6).
+func TestFamiliesOfPhase2(t *testing.T) {
+	want := map[string]bool{
+		"ServerConfigurationType": true, "SecurityGroupFolderType": true,
+		"PubSubKeyPushTargetType": true, "PubSubKeyPushTargetFolderType": true, "PublishSubscribeType": true,
+	}
+	for _, f := range families {
+		for _, typ := range f.Types {
+			delete(want, typ)
+		}
+	}
+	if len(want) > 0 {
+		t.Errorf("not families: %v", want)
+	}
+	types, err := resolve(ns0Set(t), family{NodeSet: ns0NodeSet, Types: []string{"ServerConfigurationType"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range types[0].methods {
+		if m.name != "CreateSelfSignedCertificate" {
+			continue
+		}
+		if got := m.in[4]; got.name != "IpAddresses" || got.field != "IPAddresses" {
+			t.Errorf("argument 4: %s as %s, want IpAddresses as IPAddresses", got.name, got.field)
+		}
+		return
+	}
+	t.Error("no CreateSelfSignedCertificate")
 }
 
 func TestLoadErrors(t *testing.T) {

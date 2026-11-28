@@ -5,10 +5,12 @@ package gds
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 )
 
 // trustListMethods are the NodeIds of the TrustList methods of the
@@ -52,30 +54,38 @@ func (g *Client) trustListFallback(name string, fallback uint32) uint32 {
 // of a certificate group that the server uses (Part 12 §7.10.8); nil is
 // the DefaultApplicationGroup.
 func (g *Client) GetCertificates(ctx context.Context, group *ua.NodeID) ([]*ua.NodeID, [][]byte, error) {
-	out, err := g.call(ctx, ServerConfiguration, "GetCertificates", id.ServerConfigurationGetCertificates, 2, ua.MustVariant(groupOrDefault(group)))
+	in := uamethod.ServerConfigurationTypeGetCertificatesInput{CertificateGroupID: groupOrDefault(group)}
+	out, err := g.call(ctx, ServerConfiguration, "GetCertificates", id.ServerConfigurationGetCertificates, 0, in.Pack()...)
 	if err != nil {
 		return nil, nil, err
 	}
-	var (
-		types []*ua.NodeID
-		certs [][]byte
-		ok1   = out[0].Value() == nil
-		ok2   = out[1].Value() == nil
-	)
-	if !ok1 {
-		types, ok1 = out[0].Value().([]*ua.NodeID)
+	var o uamethod.ServerConfigurationTypeGetCertificatesOutput
+	if err := o.Unpack(nullArrays(out, map[int]any{0: []*ua.NodeID(nil), 1: [][]byte(nil)})); err != nil {
+		return nil, nil, fmt.Errorf("gds: %w", err)
 	}
-	if !ok2 {
-		certs, ok2 = out[1].Value().([][]byte)
+	if len(o.CertificateTypeIDs) != len(o.Certificates) {
+		return nil, nil, fmt.Errorf("gds: GetCertificates returned %d certificate types and %d certificates, want lists of the same length", len(o.CertificateTypeIDs), len(o.Certificates))
 	}
-	if !ok1 || !ok2 || len(types) != len(certs) {
-		return nil, nil, fmt.Errorf("gds: GetCertificates returned %T and %T, want NodeId and ByteString arrays of the same length", out[0].Value(), out[1].Value())
+	return o.CertificateTypeIDs, o.Certificates, nil
+}
+
+// nullArrays returns out with the null Variant at each position of null
+// replaced by the null array of the declared type: the client takes a null
+// Variant for an empty array (GetCertificates, GetRejectedList), as it did
+// before the generated contracts, which refuse a Variant of another
+// built-in type. out is not changed.
+func nullArrays(out []*ua.Variant, null map[int]any) []*ua.Variant {
+	out = slices.Clone(out)
+	for i, v := range null {
+		if i < len(out) && (out[i] == nil || out[i].Value() == nil) {
+			out[i] = ua.MustVariant(v)
+		}
 	}
-	return types, certs, nil
+	return out
 }
 
 // SelfSignedCertificate is the input of CreateSelfSignedCertificate (Part
-// 12 §7.10.5).
+// 12 §7.10.6).
 type SelfSignedCertificate struct {
 	// CertificateGroup is the certificate group (nil: the
 	// DefaultApplicationGroup).
@@ -107,18 +117,27 @@ func stringsOrEmpty(xs []string) []string {
 // self-signed certificate for it, which replaces the current certificate
 // of the type when the changes are applied. It returns the certificate.
 func (g *Client) CreateSelfSignedCertificate(ctx context.Context, req *SelfSignedCertificate) ([]byte, error) {
-	out, err := g.call(ctx, ServerConfiguration, "CreateSelfSignedCertificate", id.ServerConfigurationCreateSelfSignedCertificate, 1,
-		ua.MustVariant(groupOrDefault(req.CertificateGroup)), ua.MustVariant(nodeOrNull(req.CertificateType)),
-		ua.MustVariant(req.SubjectName), ua.MustVariant(stringsOrEmpty(req.DNSNames)), ua.MustVariant(stringsOrEmpty(req.IPAddresses)),
-		ua.MustVariant(req.LifetimeInDays), ua.MustVariant(req.KeySizeInBits))
+	in := uamethod.ServerConfigurationTypeCreateSelfSignedCertificateInput{
+		CertificateGroupID: groupOrDefault(req.CertificateGroup),
+		CertificateTypeID:  req.CertificateType,
+		SubjectName:        req.SubjectName,
+		DNSNames:           stringsOrEmpty(req.DNSNames),
+		IPAddresses:        stringsOrEmpty(req.IPAddresses),
+		LifetimeInDays:     req.LifetimeInDays,
+		KeySizeInBits:      req.KeySizeInBits,
+	}
+	out, err := g.call(ctx, ServerConfiguration, "CreateSelfSignedCertificate", id.ServerConfigurationCreateSelfSignedCertificate, 0, in.Pack()...)
 	if err != nil {
 		return nil, err
 	}
-	cert, ok := out[0].Value().([]byte)
-	if !ok || len(cert) == 0 {
+	var o uamethod.ServerConfigurationTypeCreateSelfSignedCertificateOutput
+	if err := o.Unpack(out); err != nil {
+		return nil, fmt.Errorf("gds: %w", err)
+	}
+	if len(o.Certificate) == 0 {
 		return nil, fmt.Errorf("gds: CreateSelfSignedCertificate returned no certificate")
 	}
-	return cert, nil
+	return o.Certificate, nil
 }
 
 // ResetToServerDefaults has the server go back to the trust lists and
@@ -190,7 +209,7 @@ func (g *Client) TransactionDiagnostics(ctx context.Context) (*TransactionDiagno
 
 // DeleteCertificate has the server delete the certificate of a type of a
 // certificate group (nil: the DefaultApplicationGroup) when the changes are
-// applied (DeleteCertificate, Part 12 1.05 §7.10); certType nil is a null
+// applied (DeleteCertificate, Part 12 §7.10.7); certType nil is a null
 // NodeId. A server refuses it with Bad_InvalidState if the group has no
 // certificate of the type, and ApplyChanges fails with Bad_InvalidState
 // for a certificate one of its endpoints uses. Deleting a certificate and
@@ -198,8 +217,8 @@ func (g *Client) TransactionDiagnostics(ctx context.Context) (*TransactionDiagno
 // replaces it, which servers that refuse to overwrite a certificate
 // require.
 func (g *Client) DeleteCertificate(ctx context.Context, group, certType *ua.NodeID) error {
-	_, err := g.call(ctx, ServerConfiguration, "DeleteCertificate", id.ServerConfigurationDeleteCertificate, 0,
-		ua.MustVariant(groupOrDefault(group)), ua.MustVariant(nodeOrNull(certType)))
+	in := uamethod.ServerConfigurationTypeDeleteCertificateInput{CertificateGroupID: groupOrDefault(group), CertificateTypeID: certType}
+	_, err := g.call(ctx, ServerConfiguration, "DeleteCertificate", id.ServerConfigurationDeleteCertificate, 0, in.Pack()...)
 	return err
 }
 

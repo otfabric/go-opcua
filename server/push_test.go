@@ -528,13 +528,15 @@ func TestPushUpdateCertificateErrors(t *testing.T) {
 	good := reissue(t, p.ServerCert, p.ServerKey, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
 	p256 := ua.NewNumericNodeID(0, id.EccNistP256ApplicationCertificateType)
 
-	require.Equal(t, ua.StatusBadTypeMismatch, update("g", rsaType, good, [][]byte{}, "", []byte{}))
+	// An argument of another built-in type is Bad_InvalidArgument (OPC
+	// 10000-4 §5.12.2.2), the result of the generated contract.
+	require.Equal(t, ua.StatusBadInvalidArgument, update("g", rsaType, good, [][]byte{}, "", []byte{}))
 	require.Equal(t, ua.StatusBadInvalidArgument, update(rsaType, rsaType, good, [][]byte{}, "", []byte{}))
 	require.Equal(t, ua.StatusBadInvalidArgument, update(defaultGroup, ua.NewStringNodeID(1, "x"), good, [][]byte{}, "", []byte{}))
 	require.Equal(t, ua.StatusBadInvalidArgument, update(defaultGroup, p256, good, [][]byte{}, "", []byte{}))
-	require.Equal(t, ua.StatusBadTypeMismatch, update(defaultGroup, rsaType, "c", [][]byte{}, "", []byte{}))
-	require.Equal(t, ua.StatusBadTypeMismatch, update(defaultGroup, rsaType, good, "i", "", []byte{}))
-	require.Equal(t, ua.StatusBadTypeMismatch, update(defaultGroup, rsaType, good, [][]byte{}, "", "k"))
+	require.Equal(t, ua.StatusBadInvalidArgument, update(defaultGroup, rsaType, "c", [][]byte{}, "", []byte{}))
+	require.Equal(t, ua.StatusBadInvalidArgument, update(defaultGroup, rsaType, good, "i", "", []byte{}))
+	require.Equal(t, ua.StatusBadInvalidArgument, update(defaultGroup, rsaType, good, [][]byte{}, "", "k"))
 	require.Equal(t, ua.StatusBadCertificateInvalid, update(defaultGroup, rsaType, []byte{0x30, 0}, [][]byte{}, "", []byte{}))
 	ecc := p.ECC.Server[testpki.CurveP256]
 	require.Equal(t, ua.StatusBadCertificateInvalid, update(defaultGroup, rsaType, ecc.Cert, [][]byte{}, "", []byte{}))
@@ -577,6 +579,38 @@ func reqURI(t *testing.T, p *testpki.PKI) []byte {
 	return csr
 }
 
+// TestPushNullArguments: the push Methods take a null Variant for an empty
+// IssuerCertificates, PrivateKey and Nonce, as before the generated
+// contracts, and a matrix where the declaration has an array with one
+// dimension (OPC 10000-3 §5.6.2) breaks a constraint (OPC 10000-4
+// §5.12.2.2).
+func TestPushNullArguments(t *testing.T) {
+	p := pushPKI(t)
+	s := newPushServer(t, PushManagement{})
+	ctx, _ := adminCtx(s)
+	null := &ua.Variant{}
+	good := reissue(t, p.ServerCert, p.ServerKey, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+
+	s.mu.Lock()
+	h := s.methods[methodKey(ua.NewNumericNodeID(0, scObj), ua.NewNumericNodeID(0, mUpdate))]
+	s.mu.Unlock()
+	args := []*ua.Variant{ua.MustVariant(defaultGroup), ua.MustVariant(rsaType), ua.MustVariant(good), null, ua.MustVariant(""), nil}
+	out, sc := h(ctx, ua.NewNumericNodeID(0, scObj), ua.NewNumericNodeID(0, mUpdate), args)
+	require.Equal(t, ua.StatusOK, sc)
+	require.Len(t, out, 1)
+	require.Same(t, null, args[3], "the arguments are not changed")
+	require.Nil(t, args[5])
+
+	_, sc = pushCall(t, s, ctx, scObj, mCSR, defaultGroup, rsaType, "", false, null)
+	require.Equal(t, ua.StatusOK, sc)
+
+	matrix := ua.MustVariant([][][]byte{{p.CACert}, {p.CACert}})
+	_, sc = pushCall(t, s, ctx, scObj, mUpdate, defaultGroup, rsaType, good, matrix, "", []byte{})
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
+	_, sc = pushCall(t, s, ctx, scObj, mSelfSigned, defaultGroup, rsaType, "", ua.MustVariant([][]string{{"a"}, {"b"}}), []string{}, uint16(1), uint16(0))
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
+}
+
 func TestPushCreateSigningRequest(t *testing.T) {
 	p := pushPKI(t)
 	s := newPushServer(t, PushManagement{})
@@ -591,10 +625,11 @@ func TestPushCreateSigningRequest(t *testing.T) {
 	}
 	nonce := make([]byte, 32)
 
+	// Arguments of another built-in type (OPC 10000-4 §5.12.2.2).
 	_, sc := csr(defaultGroup, rsaType, int32(1), false, nonce)
-	require.Equal(t, ua.StatusBadTypeMismatch, sc)
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	_, sc = csr(defaultGroup, rsaType, "", false, "n")
-	require.Equal(t, ua.StatusBadTypeMismatch, sc)
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	_, sc = csr(defaultGroup, ua.NewNumericNodeID(0, id.EccApplicationCertificateType), "", false, nonce)
 	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	_, sc = csr(defaultGroup, rsaType, "CN", false, nonce)

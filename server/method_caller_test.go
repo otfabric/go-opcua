@@ -10,6 +10,7 @@ import (
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 	"github.com/stretchr/testify/require"
 )
 
@@ -80,8 +81,12 @@ func TestSKSHelpers(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, 1500*time.Microsecond, d)
 	require.Equal(t, 1.5, durationMS(d))
-	require.Equal(t, ua.StatusBadTypeMismatch, checkArgs([]*ua.Variant{nil}, ua.TypeIDString))
-	require.Equal(t, ua.StatusBadTooManyArguments, checkArgs([]*ua.Variant{ua.MustVariant("a"), ua.MustVariant("b")}, ua.TypeIDString))
+	// The SKS handlers check their arguments with the generated contracts:
+	// a nil Variant is the null Variant, not a String (Bad_InvalidArgument,
+	// OPC 10000-4 §5.12.2.2), and a second argument is one too many.
+	var in uamethod.PubSubKeyServiceTypeGetSecurityGroupInput
+	require.Equal(t, ua.StatusBadInvalidArgument, uamethod.StatusOf(in.Unpack([]*ua.Variant{nil})))
+	require.Equal(t, ua.StatusBadTooManyArguments, uamethod.StatusOf(in.Unpack([]*ua.Variant{ua.MustVariant("a"), ua.MustVariant("b")})))
 	require.Equal(t, ua.StatusBadSecurityModeInsufficient, requireEncryption(nil))
 	require.Nil(t, sksCaller(context.Background()))
 }
