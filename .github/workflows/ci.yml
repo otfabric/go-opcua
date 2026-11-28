@@ -86,12 +86,12 @@ jobs:
   # that step, before any package had finished: bash ended with exit 143 and
   # "The runner has received a shutdown signal", or the runner never
   # reported again and the job ran into its limit with no log. The race and
-  # coverage runs, one package at a time, never were. Memory is the likely
-  # cause: locally the parallel tests of uafx/fxcm hold up to 8 GB at once
-  # (a parent test that waits for its parallel subtests gives up its
-  # -parallel slot but keeps its servers, so the fixtures of every parent
-  # add up) and those of uafx/fxserver about 4 GB, beside three links, on a
-  # 16 GB runner. The step
+  # coverage runs, one package at a time, never were. The cause is memory:
+  # run alone on this runner (4 CPUs, 16 GB, 3 GB swap; #72), the largest
+  # process of uafx/fxcm peaks at 8.0 to 8.5 GB, of uafx/fxserver at 7.6 to
+  # 7.8 GB and of server at 1.8 GB, 17 GB or more side by side. A parent
+  # test that waits for its parallel subtests gives up its -parallel slot
+  # but keeps its servers, so the fixtures of every parent add up. The step
   # timeouts end a step whose go test outlives its own -timeout and kill
   # (one minute after it); a VM that is shut down ends only at the job's
   # limit, which is short for the plain run. Each step prints its wall time
