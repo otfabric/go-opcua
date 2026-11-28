@@ -11,7 +11,18 @@ linters:
     - godot          # comment punctuation
     - nilerr         # return nil instead of err
     - exhaustive     # exhaustive switch on enums
+    - forbidigo      # t.Cleanup in tests (see the setting below)
   settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        # The testing package keeps a finished parallel test, with the
+        # functions it registered with Cleanup, until its parent ends: a
+        # cleanup that closes a server keeps the closed server reachable to
+        # the end of the binary. cleanup.Register drops the function once it
+        # has run (TESTING.md, "Fixtures of parallel tests").
+        - pattern: '^testing\.(T|B|F|TB)\.Cleanup$'
+          msg: "use cleanup.Register(t, f) of internal/testutil/cleanup: tb.Cleanup keeps what f captures reachable until the parent test ends"
     misspell:
       # Eclipse Mosquitto (the MQTT broker of the PubSub tests) is not a
       # misspelling of "mosquito"; --fix would rename its image.
@@ -22,6 +33,13 @@ linters:
     staticcheck:
       checks:
         - "all"
+
+  exclusions:
+    rules:
+      # The one place that has to call tb.Cleanup: Register itself.
+      - path: internal/testutil/cleanup/cleanup\.go
+        linters:
+          - forbidigo
 
 formatters:
   enable:

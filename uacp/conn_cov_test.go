@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -38,7 +39,7 @@ func fakeServer(t *testing.T, handle func(c net.Conn)) string {
 		_ = c.SetDeadline(time.Now().Add(testWait))
 		handle(c)
 	}()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		_ = ln.Close()
 		<-done
 	})
@@ -218,7 +219,7 @@ func tcpPair(t *testing.T) (*net.TCPConn, *net.TCPConn) {
 	require.NoError(t, err)
 	r := <-ch
 	require.NoError(t, r.err)
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		_ = client.Close()
 		_ = r.c.Close()
 	})

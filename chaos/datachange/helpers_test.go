@@ -19,6 +19,7 @@ import (
 	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
@@ -586,7 +587,7 @@ func newEnv(t *testing.T, seed int64, perKind int) *env {
 	}
 	e.proxy = testutil.NewChaosProxy(t, "", seed)
 	e.startServer()
-	t.Cleanup(func() { e.stopServer() })
+	cleanup.Register(t, func() { e.stopServer() })
 	return e
 }
 
@@ -936,7 +937,7 @@ func (e *env) connect(rec *chaoskit.StateRecorder, extra ...opcua.Option) *opcua
 		chaoskit.CloseClient(c, rec)
 		e.t.Fatalf("connect: %v", err)
 	}
-	e.t.Cleanup(func() { chaoskit.CloseClient(c, rec) })
+	cleanup.Register(e.t, func() { chaoskit.CloseClient(c, rec) })
 	return c
 }
 

@@ -30,6 +30,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 )
@@ -253,7 +254,7 @@ func NewWatchdog(t *testing.T) *Watchdog {
 		done:  make(chan struct{}),
 	}
 	go w.run()
-	t.Cleanup(w.Close)
+	cleanup.Register(t, w.Close)
 	return w
 }
 

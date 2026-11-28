@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/remote"
@@ -32,7 +33,7 @@ func TestPubSub_ConfigurationStoreRestart(t *testing.T) {
 	open := func() *pubsubstore.Store {
 		st, err := pubsubstore.OpenDir(ctx, dir, pubsubstore.Options{Owner: psStoreOwner})
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = st.Close() })
+		cleanup.Register(t, func() { _ = st.Close() })
 		return st
 	}
 	var x *server.Node

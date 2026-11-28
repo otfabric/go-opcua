@@ -15,6 +15,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -34,7 +35,7 @@ func subscribePeerBaseEvent(t *testing.T, endpoint string, withOfType, withMinSe
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	builder := ua.NewEventFilter().
 		Select("EventId", "EventType", "SourceName", "Message", "Severity", "Time")

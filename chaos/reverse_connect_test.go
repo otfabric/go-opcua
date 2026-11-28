@@ -13,6 +13,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -40,7 +41,7 @@ func newReverseEnv(t *testing.T, seed int64) *reverseEnv {
 	if err != nil {
 		t.Fatalf("chaos: reverse listener: %v", err)
 	}
-	t.Cleanup(func() { _ = l.Close() })
+	cleanup.Register(t, func() { _ = l.Close() })
 
 	r := &reverseEnv{listener: l}
 	r.rproxy = testutil.NewChaosProxy(t, l.Addr().String(), seed)
@@ -283,7 +284,7 @@ func TestReverseConnectShutdownLeavesNoGoroutines(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = l.Close() })
+		cleanup.Register(t, func() { _ = l.Close() })
 		return l
 	}
 	newServer := func(t *testing.T, clientURL string) *server.Server {
@@ -301,7 +302,7 @@ func TestReverseConnectShutdownLeavesNoGoroutines(t *testing.T) {
 		if err := srv.Start(context.Background()); err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = srv.Close() })
+		cleanup.Register(t, func() { _ = srv.Close() })
 		return srv
 	}
 	newClient := func(t *testing.T, opts ...opcua.Option) *opcua.Client {
@@ -315,7 +316,7 @@ func TestReverseConnectShutdownLeavesNoGoroutines(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = c.Close(context.Background()) })
+		cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 		return c
 	}
 	subscribe := func(t *testing.T, c *opcua.Client) {

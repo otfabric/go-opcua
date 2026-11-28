@@ -9,6 +9,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +44,7 @@ func TestClient_recreateSubscription_Live(t *testing.T) {
 		Interval: 100 * time.Millisecond,
 	}, notify)
 	require.NoError(t, err)
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx2, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = sub.Cancel(ctx2)
@@ -107,7 +108,7 @@ func TestClient_recreateSubscription_MonitoredItemFails(t *testing.T) {
 		Interval: 200 * time.Millisecond,
 	}, notify)
 	require.NoError(t, err)
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx2, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = sub.Cancel(ctx2)

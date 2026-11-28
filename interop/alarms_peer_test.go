@@ -32,6 +32,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -83,12 +84,12 @@ func newPeerAlarmSessionOn(t *testing.T, c *opcua.Client) *peerAlarmSession {
 	// The server container may be shared: re-arm the alarm first, and
 	// again at the end (re-enables a condition a failed run left disabled).
 	s.callReset(t)
-	t.Cleanup(func() { s.callReset(t) })
+	cleanup.Register(t, func() { s.callReset(t) })
 	sub, ch, err := c.NewSubscription().Interval(100 * time.Millisecond).Start(ctx)
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth, &ua.MonitoredItemCreateRequest{
 		ItemToMonitor:  &ua.ReadValueID{NodeID: ua.NewNumericNodeID(0, id.Server), AttributeID: ua.AttributeIDEventNotifier},
 		MonitoringMode: ua.MonitoringModeReporting,
@@ -327,7 +328,7 @@ func (s *peerAlarmSession) assertAudit(t *testing.T, p auditPeer) {
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	res, err := sub.Monitor(s.ctx, ua.TimestampsToReturnBoth, &ua.MonitoredItemCreateRequest{
 		ItemToMonitor:  &ua.ReadValueID{NodeID: ua.NewNumericNodeID(0, id.Server), AttributeID: ua.AttributeIDEventNotifier},
 		MonitoringMode: ua.MonitoringModeReporting,

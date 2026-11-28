@@ -11,6 +11,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uamethod"
@@ -30,7 +31,7 @@ func TestClientServerMethods(t *testing.T) {
 	notify := make(chan *opcua.PublishNotificationData, 16)
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 20 * time.Millisecond}, notify)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	hours, err := sub.SetDurable(ctx, 2)
 	require.NoError(t, err)

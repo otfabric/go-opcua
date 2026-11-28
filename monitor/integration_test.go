@@ -10,6 +10,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/monitor"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -29,7 +30,7 @@ func TestNodeMonitor_ChanSubscribeDataChange(t *testing.T) {
 		Interval: 100 * time.Millisecond,
 	}, ch)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe(ctx) })
+	cleanup.Register(t, func() { _ = sub.Unsubscribe(ctx) })
 
 	_, err = sub.AddMonitorItems(ctx, monitor.Request{NodeID: f.Int32})
 	require.NoError(t, err)
@@ -94,7 +95,7 @@ func TestNodeMonitor_PartialBatchItemError(t *testing.T) {
 		Interval: 100 * time.Millisecond,
 	}, ch)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe(ctx) })
+	cleanup.Register(t, func() { _ = sub.Unsubscribe(ctx) })
 
 	items, err := sub.AddMonitorItems(ctx,
 		monitor.Request{NodeID: f.Int32},
@@ -129,7 +130,7 @@ func TestNodeMonitor_CallbackSubscribe(t *testing.T) {
 		}
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe(ctx) })
+	cleanup.Register(t, func() { _ = sub.Unsubscribe(ctx) })
 
 	_, err = sub.AddMonitorItems(ctx, monitor.Request{NodeID: f.Int32})
 	require.NoError(t, err)
@@ -155,7 +156,7 @@ func TestNodeMonitor_SetMonitoringModeAndStats(t *testing.T) {
 		Interval: 100 * time.Millisecond,
 	}, ch)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe(ctx) })
+	cleanup.Register(t, func() { _ = sub.Unsubscribe(ctx) })
 
 	items, err := sub.AddMonitorItems(ctx, monitor.Request{NodeID: f.Int32})
 	require.NoError(t, err)
@@ -184,7 +185,7 @@ func TestNodeMonitor_StringNodeHelpers(t *testing.T) {
 		Interval: 100 * time.Millisecond,
 	}, ch)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe(ctx) })
+	cleanup.Register(t, func() { _ = sub.Unsubscribe(ctx) })
 
 	require.NoError(t, sub.AddNodes(ctx, f.Double.String()))
 	require.Equal(t, 1, sub.Subscribed())
@@ -213,7 +214,7 @@ func TestNodeMonitor_AddRemoveNodesByID(t *testing.T) {
 		Interval: 100 * time.Millisecond,
 	}, ch)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe(ctx) })
+	cleanup.Register(t, func() { _ = sub.Unsubscribe(ctx) })
 
 	require.NoError(t, sub.AddNodeIDs(ctx, f.Double))
 	require.Equal(t, 1, sub.Subscribed())

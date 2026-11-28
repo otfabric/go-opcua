@@ -12,6 +12,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -55,7 +56,7 @@ func startScriptedServer(t *testing.T, handlers map[uint16]server.Handler, opts 
 	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("start server: %v", err)
 	}
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return srv
 }
 
@@ -74,7 +75,7 @@ func newCovClient(t *testing.T, url string, opts ...opcua.Option) *opcua.Client 
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	return c
 }
 

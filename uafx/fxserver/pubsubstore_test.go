@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/server"
@@ -28,7 +29,7 @@ func newFXStored(t *testing.T, opts fxserver.ConnectionOptions, backend fxstore.
 	t.Helper()
 	st, err := pubsubstore.Open(context.Background(), backend, pubsubstore.Options{Owner: appURI})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = st.Close() })
+	cleanup.Register(t, func() { _ = st.Close() })
 	return newFX(t, opts, server.WithPubSubStore(st)), st
 }
 
@@ -141,7 +142,7 @@ func TestPubSubStoreCoexistenceErrors(t *testing.T) {
 	faulty := storetest.NewFaulty(&fxstore.MemoryStore{})
 	st, err := pubsubstore.Open(context.Background(), faulty, pubsubstore.Options{Owner: appURI})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = st.Close() })
+	cleanup.Register(t, func() { _ = st.Close() })
 	f := newFX(t, fxserver.ConnectionOptions{}, server.WithPubSubStore(st))
 	faulty.FailApply(storetest.FailNotCommitted)
 	res := f.establish(t, func() *uafx.EstablishConnectionsRequest {

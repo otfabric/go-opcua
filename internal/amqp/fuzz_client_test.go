@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"net"
 	"testing"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // fuzzClient returns a client with a connection whose session has a sender
@@ -18,7 +20,7 @@ func fuzzClient(t *testing.T) (*Client, *conn) {
 		t.Fatal(err)
 	}
 	a, b := net.Pipe()
-	t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
+	cleanup.Register(t, func() { _ = a.Close(); _ = b.Close() })
 	cs := &conn{
 		nc: a, dead: make(chan struct{}), writerDone: make(chan struct{}), wake: make(chan struct{}, 1),
 		maxFrame: 512, handleMax: 3, remoteIncomingWindow: 10, incomingWindow: DefaultSessionWindow,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -129,7 +130,7 @@ func TestAdversarial_MonitorUnknownNode(t *testing.T) {
 
 	sub, _, err := c.NewSubscription().Interval(100 * time.Millisecond).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	resp, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth,
 		opcua.NewMonitoredItemCreateRequestWithDefaults(

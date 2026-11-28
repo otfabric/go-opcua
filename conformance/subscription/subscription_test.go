@@ -8,6 +8,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ func TestSubscription_DataChangeNotification(t *testing.T) {
 		Start(ctx)
 	require.NoError(t, err)
 	require.NotZero(t, sub.SubscriptionID)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	// Change the value to trigger a data-change notification.
 	status, err := c.WriteValue(ctx, f.Int32, &ua.DataValue{
@@ -68,7 +69,7 @@ func TestSubscription_Lifecycle(t *testing.T) {
 
 	sub, _, err := c.NewSubscription().Interval(100 * time.Millisecond).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	// Create two monitored items and capture their server IDs.
 	monResp, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth,
@@ -161,7 +162,7 @@ func TestRepublish(t *testing.T) {
 		Interval: 100 * time.Millisecond,
 	}, notifyCh)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	_, err = sub.Monitor(ctx, ua.TimestampsToReturnNeither,
 		opcua.NewMonitoredItemCreateRequestWithDefaults(f.Int32, ua.AttributeIDValue, 1),
@@ -216,7 +217,7 @@ func TestTransferSubscriptions(t *testing.T) {
 		Interval: 200 * time.Millisecond,
 	}, notifyCh)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	resp, err := c.TransferSubscriptions(ctx, []uint32{sub.SubscriptionID}, false)
 	if errors.Is(err, ua.StatusBadServiceUnsupported) {

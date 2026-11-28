@@ -16,6 +16,7 @@ import (
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/remote"
 	"github.com/otfabric/go-opcua/server"
@@ -43,7 +44,7 @@ func startPSStore(t *testing.T, backend fxstore.Store, uris []string, opts ...se
 	t.Helper()
 	st, err := pubsubstore.Open(context.Background(), backend, pubsubstore.Options{Owner: psOwner})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = st.Close() })
+	cleanup.Register(t, func() { _ = st.Close() })
 	all := append([]server.Option{server.EndPoint("localhost", 0), server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous), server.WithPubSub(nil), server.WithPubSubStore(st)}, opts...)
 	srv, err := server.New(all...)
@@ -56,7 +57,7 @@ func startPSStore(t *testing.T, backend fxstore.Store, uris []string, opts ...se
 		return nil, p.fn(ctx)
 	})
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	p.url = fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 	return p
 }
@@ -685,7 +686,7 @@ func TestPubSubStoreRestoreErrors(t *testing.T) {
 	fl := &failingLoad{err: errors.New("disk gone")}
 	srv, err := server.New(server.EndPoint("localhost", 0), server.InsecureNoSecurity(), server.WithPubSub(nil), server.WithPubSubStore(fl))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	require.ErrorIs(t, srv.BuildPubSubModel(), fl.err)
 	require.ErrorIs(t, srv.Start(context.Background()), fl.err)
 	require.ErrorIs(t, srv.ChangePubSubConfiguration(func(*pubsub.PubSub) error { return nil }), fl.err)
@@ -717,7 +718,7 @@ func TestPubSubStoreRestoreErrors(t *testing.T) {
 	require.NoError(t, err)
 	srv2, err := server.New(server.EndPoint("localhost", 0), server.InsecureNoSecurity(), server.WithPubSub(nil), server.WithPubSubStore(st))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = srv2.Close() })
+	cleanup.Register(t, func() { _ = srv2.Close() })
 	require.ErrorIs(t, srv2.Start(context.Background()), pubsubstore.ErrNamespace)
 }
 

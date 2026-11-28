@@ -16,6 +16,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -68,7 +69,7 @@ func runReconnectRecovery(t *testing.T, peerEndpoint string) opcua.SubscriptionR
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 
 	_, nsIdx := findNS(t, c)
 	nodeID := ua.NewStringNodeID(nsIdx, "Dynamic.Counter")
@@ -78,7 +79,7 @@ func runReconnectRecovery(t *testing.T, peerEndpoint string) opcua.SubscriptionR
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	req := opcua.NewMonitoredItemCreateRequestWithDefaults(nodeID, ua.AttributeIDValue, 1)
 	if _, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth, req); err != nil {

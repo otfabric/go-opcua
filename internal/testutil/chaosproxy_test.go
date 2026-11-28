@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // sink is a TCP server that records everything it receives per connection
@@ -47,7 +49,7 @@ func newSink(t *testing.T, echo bool) *sink {
 			go s.serve(c, own)
 		}
 	}()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		_ = ln.Close()
 		s.mu.Lock()
 		for _, c := range s.conns {
@@ -138,7 +140,7 @@ func dialProxy(t *testing.T, p *ChaosProxy) net.Conn {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = c.Close() })
+	cleanup.Register(t, func() { _ = c.Close() })
 	return c
 }
 

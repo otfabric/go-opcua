@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/ua"
@@ -29,7 +30,7 @@ func TestParallelManyGroups(t *testing.T) {
 	if err := b.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 
 	chk := newChecker()
 	var pdss []*ua.PublishedDataSetDataType
