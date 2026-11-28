@@ -226,11 +226,24 @@ func (ns *MapNamespace) Attribute(n *ua.NodeID, a ua.AttributeID) *ua.DataValue 
 		dv.Status = ua.StatusOK
 		dv.EncodingMask |= ua.DataValueValue
 		dv.Value = ua.MustVariant(attrs.DisplayName(key, key))
-	case ua.AttributeIDAccessLevel:
+	case ua.AttributeIDAccessLevel, ua.AttributeIDUserAccessLevel:
+		// Every value of the map is read and written by every session.
 		dv.Status = ua.StatusOK
 		dv.EncodingMask |= ua.DataValueValue
-		level := byte(ua.AccessLevelExTypeCurrentWrite | ua.AccessLevelExTypeCurrentRead)
-		dv.Value = ua.MustVariant(level)
+		dv.Value = ua.MustVariant(defaultVariableAccessLevel)
+	case ua.AttributeIDAccessLevelEx:
+		// The AccessLevel as the first 8 bits, and nothing above them
+		// (Part 3 §8.58): a Write replaces a value of the map whole, also
+		// one of an IndexRange, which is merged into a copy.
+		dv.Status = ua.StatusOK
+		dv.EncodingMask |= ua.DataValueValue
+		dv.Value = ua.MustVariant(uint32(defaultVariableAccessLevel))
+	case ua.AttributeIDHistorizing:
+		// The Mandatory Historizing of a Variable (Part 3 §5.6.2): the
+		// server keeps no history of the map.
+		dv.Status = ua.StatusOK
+		dv.EncodingMask |= ua.DataValueValue
+		dv.Value = ua.MustVariant(false)
 
 	case ua.AttributeIDNodeClass:
 		dv.Status = ua.StatusOK

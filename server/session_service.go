@@ -670,6 +670,44 @@ func (s *Server) cancelPublishRequests(sess *session, handle uint32, fallback *u
 	return uint32(len(cancelled))
 }
 
+// publishTimedOut reports whether the TimeoutHint of the queued Publish
+// request pr has elapsed since it arrived, and then answers it with
+// Bad_Timeout: "The Server shall check the timeoutHint parameter of a
+// Publish request before processing a Publish response. If the request
+// timed out, a Bad_Timeout Service result is sent and another Publish
+// request is used." A TimeoutHint of 0 "indicates no timeout" (Part 4
+// §7.32). As for the other Publish requests answered with a ServiceFault
+// (Bad_TooManyPublishRequests, Bad_RequestCancelledByClient), its
+// SubscriptionAcknowledgements are not processed: the fault has no Results
+// for them, and the NotificationMessages stay available for Republish.
+func (s *Server) publishTimedOut(pr PubReq) bool {
+	if pr.received.IsZero() || pr.Req == nil || pr.Req.RequestHeader == nil || pr.Req.RequestHeader.TimeoutHint == 0 {
+		return false
+	}
+	if time.Since(pr.received) < time.Duration(pr.Req.RequestHeader.TimeoutHint)*time.Millisecond {
+		return false
+	}
+	s.faultPublishRequest(pr, nil, ua.StatusBadTimeout)
+	return true
+}
+
+// takePublishRequest takes the oldest queued Publish request of sess whose
+// TimeoutHint has not elapsed, answering those before it that timed out
+// (publishTimedOut). It reports false when there is none.
+func (s *Server) takePublishRequest(sess *session) (PubReq, bool) {
+	for {
+		select {
+		case pr := <-sess.PublishRequests:
+			if s.publishTimedOut(pr) {
+				continue
+			}
+			return pr, true
+		default:
+			return PubReq{}, false
+		}
+	}
+}
+
 // faultPublishRequest answers the queued Publish request pr with a
 // ServiceFault of the given status. fallback is the channel used when pr
 // does not name its own.

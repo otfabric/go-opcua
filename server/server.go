@@ -480,7 +480,9 @@ func New(opts ...Option) (*Server, error) {
 	s.bindMonitoredItemCapabilities()
 	s.bindContinuationPointCapabilities()
 	s.bindEstimatedReturnTime()
+	s.bindServerObject()
 	s.bindServerCapabilities()
+	s.bindModellingRules()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()

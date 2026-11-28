@@ -3,6 +3,7 @@
 package server
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/otfabric/go-opcua/ua"
@@ -29,6 +30,26 @@ func endpointsForURL(endpoints []*ua.EndpointDescription, requestURL string) []*
 	}
 	if len(matching) == 0 {
 		return append(matching, endpoints...)
+	}
+	return matching
+}
+
+// endpointsForProfiles returns the endpoints whose TransportProfileUri is
+// one of profileURIs, the "List of Transport Profile that the returned
+// Endpoints shall support", or all of them when the list is empty: "All
+// Endpoints are returned if the list is empty", and "The Server returns an
+// empty list if no Endpoints match the criteria specified by the Client"
+// (Part 4 §5.5.4.1, §5.5.4.2). The URIs are compared as they are: the
+// Transport Profiles of the server's endpoints carry no query string.
+func endpointsForProfiles(endpoints []*ua.EndpointDescription, profileURIs []string) []*ua.EndpointDescription {
+	if len(profileURIs) == 0 {
+		return endpoints
+	}
+	matching := make([]*ua.EndpointDescription, 0, len(endpoints))
+	for _, ep := range endpoints {
+		if slices.Contains(profileURIs, ep.TransportProfileURI) {
+			matching = append(matching, ep)
+		}
 	}
 	return matching
 }
