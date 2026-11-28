@@ -64,8 +64,15 @@ type Server struct {
 	// the server answers with a ServiceFault (tests).
 	publishFaulted func(pr PubReq, status ua.StatusCode)
 
-	mu         sync.Mutex
-	status     *ua.ServerStatusDataType
+	mu     sync.Mutex
+	status *ua.ServerStatusDataType
+	// shutdownAt is when a shutdown SetServerState announced takes place,
+	// from which Status counts SecondsTillShutdown down; zero for none.
+	// estimatedReturnTime is the EstimatedReturnTime Property of the
+	// Server Object. Guarded by mu.
+	shutdownAt          time.Time
+	estimatedReturnTime time.Time
+
 	endpoints  []*ua.EndpointDescription
 	namespaces []NameSpace
 	// nsView is the namespaces for readers that do not take mu (Node):
@@ -252,6 +259,12 @@ type serverConfig struct {
 	alarmClock Clock
 	// push is the configuration of WithPushManagement (nil: none).
 	push *PushManagement
+	// durable are the limits of durable subscriptions
+	// (WithDurableSubscriptions).
+	durable DurableSubscriptions
+	// stateChange carries out RequestServerStateChange
+	// (WithServerStateChange); nil refuses it.
+	stateChange ServerStateChangeFunc
 }
 
 var capabilities = ServerCapabilities{
@@ -378,6 +391,7 @@ func New(opts ...Option) (*Server, error) {
 	s.publishNamespaces()
 	s.disc = newDiscoveryManager(s)
 	s.registerAlarmMethods()
+	s.registerServerMethods()
 	if push != nil {
 		push.s = s
 		push.initFiles()
@@ -441,6 +455,7 @@ func New(opts ...Option) (*Server, error) {
 	s.bindSessionCapabilities()
 	s.bindMonitoredItemCapabilities()
 	s.bindContinuationPointCapabilities()
+	s.bindEstimatedReturnTime()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()
@@ -499,6 +514,7 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 	}
 	s.disc = newDiscoveryManager(s)
 	s.registerAlarmMethods()
+	s.registerServerMethods()
 	s.auditing.Store(cfg.auditing)
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.sb.removed = s.sessionRemoved
@@ -602,10 +618,12 @@ func (s *Server) Endpoints() []*ua.EndpointDescription {
 // Status returns the current server status.
 func (s *Server) Status() *ua.ServerStatusDataType {
 	status := new(ua.ServerStatusDataType)
+	now := time.Now()
 	s.mu.Lock()
 	*status = *s.status
+	status.SecondsTillShutdown = s.secondsTillShutdownLocked(now)
 	s.mu.Unlock()
-	status.CurrentTime = time.Now()
+	status.CurrentTime = now
 	return status
 }
 
