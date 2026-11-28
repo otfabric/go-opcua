@@ -172,3 +172,24 @@ func TestModelDefaultsRestoreOverTheWire(t *testing.T) {
 		})
 	}
 }
+
+// TestNamespaceMetadataBrowsable: an anonymous session browses every
+// NamespaceMetadata Object of a server with session diagnostics, whose
+// namespace names sessions by string NodeIds, and reads its Properties.
+func TestNamespaceMetadataBrowsable(t *testing.T) {
+	t.Parallel()
+	srv, url := testutil.NewTestServer(t)
+	c := testutil.NewTestClient(t, url)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	resp, err := c.Browse(ctx, &ua.BrowseRequest{NodesToBrowse: []*ua.BrowseDescription{{
+		NodeID: ua.NewNumericNodeID(0, id.ServerNamespaces), BrowseDirection: ua.BrowseDirectionForward,
+		ReferenceTypeID: ua.NewNumericNodeID(0, id.HasComponent), IncludeSubtypes: true, ResultMask: uint32(ua.BrowseResultMaskAll),
+	}}})
+	require.NoError(t, err)
+	require.Len(t, resp.Results[0].References, len(srv.Namespaces()), "one per namespace")
+	for _, r := range resp.Results[0].References {
+		props := metadataProperties(ctx, t, c, r.BrowseName.Name)
+		require.Equal(t, r.BrowseName.Name, readWire(ctx, t, c, props["NamespaceUri"]).Value.Value())
+	}
+}
