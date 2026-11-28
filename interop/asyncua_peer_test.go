@@ -18,6 +18,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -605,7 +606,7 @@ func TestAsyncuaServer_ClientRepublish(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Subscribe: %v", err)
 		}
-		t.Cleanup(func() { _ = sub.Cancel(ctx) })
+		cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 		_, err = c.Republish(ctx, sub.SubscriptionID, 4242)
 		if err == nil {
 			asyncuaDeviation(t, "Republish of unknown sequence number 4242 answered Good with an empty NotificationMessage "+

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -41,7 +42,7 @@ func TestGoServer_RepublishAvailableSequence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	// Wait for initial notification to populate sentMessages.
 	drainInitial(t, notifyCh)
@@ -92,7 +93,7 @@ func TestGoServer_RepublishMissingSequence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	repubResp, err := c.Republish(ctx, sub.SubscriptionID, 0xDEADBEEF)
 	// The client may surface the non-OK service result as an error.
@@ -150,7 +151,7 @@ func TestGoServer_TransferSubscription(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	drainInitial(t, notifyCh)
 	writeInt32(t, c, ctx, nodeID, 777)
@@ -213,7 +214,7 @@ func TestGoServer_ACKRemovesFromAvailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	drainInitial(t, notifyCh)
 

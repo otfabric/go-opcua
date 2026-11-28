@@ -35,6 +35,7 @@ import (
 	"time"
 
 	iamqp "github.com/otfabric/go-opcua/internal/amqp"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/pubsub/transport"
@@ -273,7 +274,7 @@ func startBrokerContainer(t *testing.T, suffix, image string, env []string, cont
 			t.Logf("a host port of %s was taken: other ones", suffix)
 			continue
 		}
-		t.Cleanup(func() {
+		cleanup.Register(t, func() {
 			dockerStop(name)
 			run.wait()
 			if t.Failed() {

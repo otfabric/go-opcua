@@ -14,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -92,7 +93,7 @@ func lifecycleRound(t *testing.T, wd *chaoskit.Watchdog, l *uacp.ReverseListener
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	markerID := ua.NewStringNodeID(populate(t, srv, 0, marker).ID(), "Marker")
 
 	var (

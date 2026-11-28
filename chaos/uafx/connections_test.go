@@ -19,6 +19,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
@@ -52,7 +53,7 @@ func newConnEnv(t *testing.T, opts ...server.Option) *connEnv {
 		e.conns, err = fxserver.EnableConnections(srv, e.ns, fxserver.ConnectionOptions{
 			Interval: 5 * time.Millisecond, Logger: slog.New(slog.DiscardHandler)})
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = e.conns.Close() })
+		cleanup.Register(t, func() { _ = e.conns.Close() })
 	}, append([]server.Option{
 		server.ApplicationURI(testpki.ServerAppURI),
 		server.WithPubSub(nil),

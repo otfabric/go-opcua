@@ -12,6 +12,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -189,7 +190,7 @@ func TestServiceFailureKeepsState(t *testing.T) {
 	require.NoError(t, err)
 	sub, err := m.ChanSubscribe(ctx, nil, make(chan *DataChangeMessage, 8))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe(ctx) })
+	cleanup.Register(t, func() { _ = sub.Unsubscribe(ctx) })
 	items, err := sub.AddMonitorItems(ctx, Request{NodeID: f.Int32}, Request{NodeID: f.Double})
 	require.NoError(t, err)
 	require.Equal(t, 2, sub.Subscribed())

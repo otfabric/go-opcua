@@ -39,6 +39,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -374,13 +375,13 @@ func assertPeerSetTriggering(t *testing.T, endpoint string) ua.StatusCode {
 	c := dialClient(t, endpoint)
 	_, nsIdx := findNS(t, c)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	t.Cleanup(cancel)
+	cleanup.Register(t, cancel)
 
 	sub, ch, err := c.NewSubscription().Interval(100 * time.Millisecond).Start(ctx)
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	item := func(name string, handle uint32, mode ua.MonitoringMode) *ua.MonitoredItemCreateRequest {
 		r := opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewStringNodeID(nsIdx, name), ua.AttributeIDValue, handle)
@@ -519,7 +520,7 @@ func transferBetween(t *testing.T, c1, c2 *opcua.Client) ua.StatusCode {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	resp, err := c2.TransferSubscriptions(ctx, []uint32{sub.SubscriptionID}, false)
 	if err != nil {
 		if sc, ok := serviceStatus(err); ok {

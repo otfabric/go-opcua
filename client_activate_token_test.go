@@ -10,6 +10,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -60,7 +61,7 @@ func TestActivateSession_DoesNotChangeTheConfiguredToken(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.NoError(t, c.Connect(ctx))
-		t.Cleanup(func() { _ = c.Close(context.Background()) })
+		cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 		return c
 	}
 

@@ -9,6 +9,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -559,7 +560,7 @@ func TestEvents_BuilderAndHighLevelAPI(t *testing.T) {
 		MonitorEvents(filter, f.EventObject).
 		Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	for _, s := range []uint16{100, 600, 400, 900} {
 		require.NoError(t, f.Srv.EmitBaseEvent(f.EventObject, &server.BaseEvent{

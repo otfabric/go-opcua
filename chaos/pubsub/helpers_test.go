@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
@@ -395,7 +396,7 @@ func startRuntime(t *testing.T, cfg *ua.PubSubConfigurationDataType, opts ...pub
 	if err := rt.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { closeRuntime(t, rt) })
+	cleanup.Register(t, func() { closeRuntime(t, rt) })
 	return rt
 }
 
@@ -559,7 +560,7 @@ func newRelay(t *testing.T, seed int64, destPort int) *relay {
 	r.f.Store(&faults{})
 	r.wg.Add(1)
 	go r.run()
-	t.Cleanup(r.close)
+	cleanup.Register(t, r.close)
 	return r
 }
 

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func wsListener(t *testing.T, path string) (*Listener, string) {
 	t.Helper()
 	l, err := ListenWebSocket(context.Background(), "opc.wss://localhost:0"+path, tlsPKI(t).ServerConfig(), nil)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = l.Close() })
+	cleanup.Register(t, func() { _ = l.Close() })
 	return l, fmt.Sprintf("opc.wss://localhost:%d%s", l.Addr().(*net.TCPAddr).Port, path)
 }
 
@@ -91,7 +92,7 @@ func TestWebSocketDialFailures(t *testing.T) {
 			}
 		}
 	}()
-	t.Cleanup(func() { _ = l.Close(); <-drained })
+	cleanup.Register(t, func() { _ = l.Close(); <-drained })
 
 	t.Run("untrusted server", func(t *testing.T) {
 		_, err := (&Dialer{}).Dial(ctx, url) // system roots do not know the test CA

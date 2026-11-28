@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // The tests in this file replace the operating system calls of conn_udp.go
@@ -48,7 +50,7 @@ func ipnet(t *testing.T, cidr string) *net.IPNet {
 // install replaces the OS calls with f until the test ends.
 func (f *fakeOS) install() {
 	oldIfaces, oldAddrs, oldListen := netInterfaces, interfaceAddrs, listenMulticastUDP
-	f.t.Cleanup(func() { netInterfaces, interfaceAddrs, listenMulticastUDP = oldIfaces, oldAddrs, oldListen })
+	cleanup.Register(f.t, func() { netInterfaces, interfaceAddrs, listenMulticastUDP = oldIfaces, oldAddrs, oldListen })
 
 	netInterfaces = func() ([]net.Interface, error) { return f.ifaces, f.ifacesErr }
 	interfaceAddrs = func(ifi *net.Interface) ([]net.Addr, error) {
@@ -286,7 +288,7 @@ func loopbackConn(t *testing.T, ip string, prefixes ...string) *udpConn {
 	if err != nil {
 		t.Skipf("cannot bind %s: %v", ip, err)
 	}
-	t.Cleanup(func() { _ = c.Close() })
+	cleanup.Register(t, func() { _ = c.Close() })
 	u := &udpConn{c: c, ifi: net.Interface{Name: "lo-test"}, prefixes: []netip.Prefix{}, fetched: time.Now().Add(time.Hour)}
 	for _, p := range prefixes {
 		u.prefixes = append(u.prefixes, netip.MustParsePrefix(p))

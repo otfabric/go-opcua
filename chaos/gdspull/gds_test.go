@@ -18,6 +18,7 @@ import (
 	"github.com/otfabric/go-opcua/gds"
 	"github.com/otfabric/go-opcua/gds/gdsserver"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -65,7 +66,7 @@ func newGDSEnv(t *testing.T, store gdsserver.Store) *gdsEnv {
 	if err := e.start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		e.mu.Lock()
 		defer e.mu.Unlock()
 		e.g.Close()

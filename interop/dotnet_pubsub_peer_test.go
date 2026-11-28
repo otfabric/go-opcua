@@ -41,6 +41,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/security"
@@ -296,7 +297,7 @@ func TestPubSubRuntime_ReceiveTimeout_DotnetPublisher(t *testing.T) {
 			}
 		}
 	}
-	t.Cleanup(unpause)
+	cleanup.Register(t, unpause)
 	waitState(t, "go-opcua reader after the publisher stopped", ua.PubSubStateError, 10*time.Second, state)
 	if st, err := p.Status(reader); err != nil || st.Counters.Timeouts == 0 {
 		t.Errorf("reader status %+v (%v): no timeout counted", st, err)
@@ -426,7 +427,7 @@ func TestPubSubChunk_GoPublishes_DotnetReassembles(t *testing.T) {
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan struct{})
-			t.Cleanup(func() { cancel(); <-done })
+			cleanup.Register(t, func() { cancel(); <-done })
 			go func() {
 				defer close(done)
 				seq, nonce := uint16(1), uint32(1)
@@ -482,7 +483,7 @@ func TestPubSubDiscovery_GoProbes_DotnetAnswers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = sock.Close() })
+	cleanup.Register(t, func() { _ = sock.Close() })
 	port := sock.LocalAddr().(*net.UDPAddr).Port
 	config := psPublisherConfig(c, psProfileUDP, fmt.Sprintf("opc.udp://host.docker.internal:%d", port), nil, false)
 	config["configuration"].(jobj)["Connections"].([]jobj)[0]["ReaderGroups"] = []jobj{{"Name": "InteropProbes", "Enabled": true}}

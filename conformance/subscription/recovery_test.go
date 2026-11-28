@@ -11,6 +11,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -55,7 +56,7 @@ func startServerOn(t *testing.T, port int) (*testutil.Fixture, func()) {
 	}, "server start")
 	var once sync.Once
 	stop := func() { once.Do(func() { _ = srv.Close() }) }
-	t.Cleanup(stop)
+	cleanup.Register(t, stop)
 	return f, stop
 }
 
@@ -83,7 +84,7 @@ func TestRecovery_ServerRestart(t *testing.T) {
 		}),
 	)
 	oldSession := c.Session().SessionID().String()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		if t.Failed() {
 			evMu.Lock()
 			defer evMu.Unlock()

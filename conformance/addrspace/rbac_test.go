@@ -15,6 +15,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -266,7 +267,7 @@ func TestServer_LoggerOptions(t *testing.T) {
 			)
 			require.NoError(t, err)
 			require.NoError(t, srv.Start(context.Background()))
-			t.Cleanup(func() { _ = srv.Close() })
+			cleanup.Register(t, func() { _ = srv.Close() })
 			f := testutil.AddFixture(t, srv)
 			require.NotZero(t, srv.Port(), "an OS-assigned port is reported after Start")
 

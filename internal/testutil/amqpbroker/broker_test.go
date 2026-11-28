@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/internal/amqp"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // rawConn is a client that speaks the frames itself: unlike the client of
@@ -31,7 +32,7 @@ func dialRaw(t *testing.T, b *Broker) *rawConn {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = nc.Close() })
+	cleanup.Register(t, func() { _ = nc.Close() })
 	r := &rawConn{t: t, nc: nc, br: bufio.NewReader(nc)}
 	if _, err := nc.Write(amqp.HeaderAMQP[:]); err != nil {
 		t.Fatal(err)
@@ -125,14 +126,14 @@ func startBroker(t *testing.T) (*Broker, *amqp.Client) {
 	if err := b.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	pub, err := amqp.Dial(ctx, amqp.Options{Server: b.URL(), IdleTimeout: -1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = pub.Close() })
+	cleanup.Register(t, func() { _ = pub.Close() })
 	return b, pub
 }
 

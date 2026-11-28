@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/jsonmsg"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/security"
@@ -368,7 +369,7 @@ func psSendLoop(t *testing.T, conn transport.Connection, opts transport.PublishO
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	errc := make(chan error, 1)
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		cancel()
 		<-done
 		select {

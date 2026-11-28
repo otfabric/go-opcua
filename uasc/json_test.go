@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -205,7 +206,7 @@ func newWSSJSONPeer(t *testing.T, serve func(c uacp.MessageConn)) *wssJSONPeer {
 			}
 		}
 	}()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		cancel()
 		_ = l.Close()
 		<-done
@@ -248,7 +249,7 @@ func (p *wssJSONPeer) channel(t *testing.T) (*SecureChannel, chan error) {
 	errCh := make(chan error, 1)
 	sc, err := NewWebSocketJSONChannel(p.url, &uacp.Dialer{TLSConfig: pki.ClientConfig()}, noneConfig(), errCh)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sc.Close() })
+	cleanup.Register(t, func() { _ = sc.Close() })
 	return sc, errCh
 }
 
@@ -316,7 +317,7 @@ func TestWebSocketJSONTimeoutAndCancel(t *testing.T) {
 		<-block
 		return nil
 	}))
-	t.Cleanup(func() { close(block) }) // before the peer's cleanup
+	cleanup.Register(t, func() { close(block) }) // before the peer's cleanup
 	sc, errCh := peer.channel(t)
 	h := func(ua.Response) error { return nil }
 
