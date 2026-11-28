@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -494,7 +495,7 @@ func TestOSDirectory(t *testing.T) {
 	require.NoError(t, os.Symlink(filepath.Join(dir, "etc", "a"), filepath.Join(dir, "link")))
 	d, err := NewOSDirectory(dir)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = d.Close() })
+	cleanup.Register(t, func() { _ = d.Close() })
 
 	es, err := d.ReadDir("")
 	require.NoError(t, err)

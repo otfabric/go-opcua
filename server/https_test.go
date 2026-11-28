@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
@@ -88,9 +89,9 @@ func startHTTPSServer(tb testing.TB) (*Server, string, *http.Client) {
 	)
 	require.NoError(tb, err)
 	require.NoError(tb, s.Start(context.Background()))
-	tb.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(tb, func() { _ = s.Close() })
 	c := uasc.NewHTTPSClient(pki.ClientConfig())
-	tb.Cleanup(c.CloseIdleConnections)
+	cleanup.Register(tb, c.CloseIdleConnections)
 	return s, "https://" + s.hs.ln.Addr().String() + "/", c
 }
 

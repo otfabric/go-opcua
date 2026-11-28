@@ -13,6 +13,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -231,7 +232,7 @@ func TestCloseSession_EndsTheSession(t *testing.T) {
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous), server.WithSessionObserver(obs))
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	c, err := opcua.NewClient(srv.Endpoints()[0].EndpointURL, opcua.InsecureNoSecurity(), opcua.AutoReconnect(false))
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -296,7 +297,7 @@ func TestClientCertificateValidator(t *testing.T) {
 		server.WithClientCertificateValidator(validate))
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	connect := func() error {
 		c, err := opcua.NewClient(srv.Endpoints()[0].EndpointURL,
 			opcua.SecurityPolicy("Basic256Sha256"), opcua.SecurityModeString("SignAndEncrypt"),

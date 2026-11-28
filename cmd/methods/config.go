@@ -36,4 +36,11 @@ var families = []family{
 		Out:     "uamethod/methods_gen.go",
 		Types:   []string{"FileType", "FileDirectoryType", "ServerType"},
 	},
+	// The RoleSet and Role Methods of OPC 10000-18 §4.2 and §4.4.
+	{
+		NodeSet: "internal/schema/Opc.Ua.NodeSet2.xml",
+		Package: "uamethod",
+		Out:     "uamethod/roles_gen.go",
+		Types:   []string{"RoleSetType", "RoleType"},
+	},
 }

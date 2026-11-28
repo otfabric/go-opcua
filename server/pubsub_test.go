@@ -14,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/pubsub/transport/eth"
@@ -304,7 +305,7 @@ func TestPubSubDataFlowAndEvents(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, srv.Start(ctx))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 
 	require.Eventually(t, func() bool {
 		dv := tgt.Value()
@@ -473,7 +474,7 @@ func TestPubSubTargetErrors(t *testing.T) {
 	_, err = ps.AddConnection(pubsub.AttachWriterGroups(pubsub.UDPConnection("pub", url, uint16(1)), pubsub.WriterGroup("wg", 1, 10*time.Millisecond, pubsub.DataSetWriter("w", 1, "p"))))
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	require.Eventually(t, func() bool {
 		st, err := ps.Status(pubsub.Root)
 		return err == nil && st.Counters.TargetWriteErrors >= 3

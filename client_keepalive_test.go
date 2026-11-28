@@ -65,7 +65,10 @@ func (ks *keepAliveServer) waitKeepAlives(t *testing.T, n int32) {
 // with the keep-alive off the server terminates it (Part 4 §5.7.2.1).
 func TestSessionKeepAliveKeepsIdleSessionOpen(t *testing.T) {
 	t.Parallel()
-	const timeout = 2 * time.Second
+	// The keep-alive interval is a twentieth of the session timeout: a stall
+	// of the race-instrumented process longer than the timeout (seen at 2 s
+	// on a CI runner) would expire the session it keeps.
+	const timeout = 4 * time.Second
 	_, url := newScriptedServer(t, nil)
 	ctx := context.Background()
 

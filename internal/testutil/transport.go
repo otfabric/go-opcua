@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -58,7 +59,7 @@ func NewTransportTestServer(t *testing.T, opts ...server.Option) (*server.Server
 	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("testutil: start server: %v", err)
 	}
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 
 	var urls TransportURLs
 	for _, u := range srv.URLs() {
@@ -92,6 +93,6 @@ func NewTransportTestClient(t *testing.T, url string, opts ...opcua.Option) *opc
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("testutil: connect %s: %v", url, err)
 	}
-	t.Cleanup(func() { _ = c.Close(ctx) })
+	cleanup.Register(t, func() { _ = c.Close(ctx) })
 	return c
 }

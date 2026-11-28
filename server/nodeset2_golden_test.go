@@ -17,6 +17,7 @@ import (
 
 	"github.com/otfabric/go-opcua/internal/nodeset"
 	"github.com/otfabric/go-opcua/internal/schema"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -107,7 +108,7 @@ func newGoldenServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	return s
 }
 

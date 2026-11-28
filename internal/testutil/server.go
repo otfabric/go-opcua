@@ -12,6 +12,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -37,7 +38,7 @@ func NewTestServer(t *testing.T, opts ...server.Option) (*server.Server, string)
 	if err := srv.Start(ctx); err != nil {
 		t.Fatalf("testutil: start server: %v", err)
 	}
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return srv, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 }
 
@@ -72,7 +73,7 @@ func NewTestClientWithACK(t *testing.T, url string, ack *uacp.Acknowledge) *opcu
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("testutil: connect: %v", err)
 	}
-	t.Cleanup(func() { _ = c.Close(ctx) })
+	cleanup.Register(t, func() { _ = c.Close(ctx) })
 	return c
 }
 

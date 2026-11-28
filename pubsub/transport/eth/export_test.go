@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // MemSegment is an in-memory Ethernet segment for the tests of package
@@ -58,7 +60,7 @@ func UseMemSegment(t testing.TB) *MemSegment {
 		}
 		return nil, errors.New("no such interface")
 	}
-	t.Cleanup(func() { openLink, interfaceByName = oldOpen, oldIf })
+	cleanup.Register(t, func() { openLink, interfaceByName = oldOpen, oldIf })
 	return seg
 }
 

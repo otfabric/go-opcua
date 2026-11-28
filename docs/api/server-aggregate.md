@@ -6,7 +6,7 @@
 import "github.com/otfabric/go-opcua/server/aggregate"
 ```
 
-Package aggregate calculates the standard Aggregates of OPC 10000-13 (Part 13 §5.4) over the raw values of a Variable: every Aggregate of Part 13 §5.4.3 but AnnotationCount, with the interval rules of §5.4.2, the bounding values of §3.1.8 and §3.1.9, the StatusCode calculation of §5.4.3.2 and the Aggregate bits of Part 4 §7.38.1 (Calculated, Interpolated, Partial, MultipleValues).
+Package aggregate calculates the standard Aggregates of OPC 10000-13 (Part 13 §5.4) over the raw values of a Variable: every Aggregate of Part 13 §5.4.3, AnnotationCount over the Annotations of the Variable (Part 11 §5.1.2, [Request.CalculateWithAnnotations](#func-request-calculatewithannotations)), with the interval rules of §5.4.2, the bounding values of §3.1.8 and §3.1.9, the StatusCode calculation of §5.4.3.2 and the Aggregate bits of Part 4 §7.38.1 (Calculated, Interpolated, Partial, MultipleValues).
 
 A [Request](#type-request) holds the time domain, the Aggregate and the [Config](#type-config); it is the ReadProcessedDetails of a HistoryRead (Part 11 §6.5.4) or the AggregateFilter of a MonitoredItem (Part 4 §7.22.4). [Request.Calculate](#func-request-calculate) returns one value per interval:
 
@@ -54,7 +54,15 @@ Description returns the Description of a supported AggregateFunction Object, the
 func Functions() []*ua.NodeID
 ```
 
-Functions returns the NodeIds of the AggregateFunction Objects (Part 13 §4.2.2) the package calculates, in the order of Part 13 §5.4.3. It holds every standard Aggregate but AnnotationCount (§5.4.3.20), which counts the Annotations of Part 11 §5.1.2 rather than values.
+Functions returns the NodeIds of the AggregateFunction Objects (Part 13 §4.2.2) the package calculates, in the order of Part 13 §5.4.3: every standard Aggregate.
+
+### func HistoricalOnly
+
+```go
+func HistoricalOnly(aggregateType *ua.NodeID) bool
+```
+
+HistoricalOnly reports whether a supported Aggregate applies to historical Aggregates only: AnnotationCount, "Retrieve the number of Annotations in the interval (applies to Historical Aggregates only)" (Part 13 §4.2.2.2, Table 5). An AggregateFilter of a MonitoredItem (Part 4 §7.22.4) cannot use it.
 
 ### func Name
 
@@ -177,6 +185,22 @@ func (r Request) CalculateIntervals(raw []*ua.DataValue, first, last int) ([]*ua
 ```
 
 CalculateIntervals is [Request.Calculate](#func-request-calculate) for the intervals first to last-1 only.
+
+#### func (Request) CalculateIntervalsWithAnnotations
+
+```go
+func (r Request) CalculateIntervalsWithAnnotations(raw, annotations []*ua.DataValue, first, last int) ([]*ua.DataValue, ua.StatusCode)
+```
+
+CalculateIntervalsWithAnnotations is [Request.CalculateWithAnnotations](#func-request-calculatewithannotations) for the intervals first to last-1 only.
+
+#### func (Request) CalculateWithAnnotations
+
+```go
+func (r Request) CalculateWithAnnotations(raw, annotations []*ua.DataValue) ([]*ua.DataValue, ua.StatusCode)
+```
+
+CalculateWithAnnotations is [Request.Calculate](#func-request-calculate) with the Annotations of the Variable (Part 11 §5.1.2), which the AnnotationCount Aggregate counts (Part 13 §5.4.3.20): the DataValues of its Annotation history, each with the SourceTimestamp of the value it annotates, any order. An entry with a Bad StatusCode is no Annotation. The other Aggregates ignore annotations, and [Request.Calculate](#func-request-calculate) is CalculateWithAnnotations without any: its AnnotationCount is 0 in every interval with data.
 
 #### func (Request) Check
 

@@ -59,7 +59,7 @@ func withMethodCaller(ctx context.Context, sess *session, sc *uasc.SecureChannel
 	if sess != nil {
 		c.SessionID = sess.ID
 		c.Identity = sess.identityToken
-		c.Roles = slices.Clone(sess.roles)
+		c.Roles = slices.Clone(sess.currentRoles())
 		sess.diag.mu.Lock()
 		if d := sess.diag.client; d != nil {
 			c.ClientApplicationURI = d.ApplicationURI

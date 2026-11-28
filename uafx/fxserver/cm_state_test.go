@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
@@ -73,7 +74,7 @@ func (d *gatedDialer) release() {
 func TestConnectionManagerStateOnReturn(t *testing.T) {
 	t.Parallel()
 	d := &gatedDialer{open: make(chan struct{})}
-	t.Cleanup(d.release)
+	cleanup.Register(t, d.release)
 	srv := newServer(t, server.WithRoleMapper(func(tok ua.IdentityToken) []*ua.NodeID {
 		return append(server.DefaultRoleMapper(tok), fxserver.ConfigureAdmin())
 	}))
@@ -81,12 +82,12 @@ func TestConnectionManagerStateOnReturn(t *testing.T) {
 	require.NoError(t, err)
 	m, err := fxcm.New(fxcm.Options{Dialer: d, ApplicationURI: "urn:test:cm", Logger: slog.New(slog.DiscardHandler)})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = m.Close() })
+	cleanup.Register(t, func() { _ = m.Close() })
 	_, err = m.Add(cmConf("Line1"))
 	require.NoError(t, err)
 	cm, err := fxserver.EnableConnectionManager(srv, ns, fxserver.ConnectionManagerOptions{Manager: m, Editable: true, Logger: slog.New(slog.DiscardHandler)})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = cm.Close() })
+	cleanup.Register(t, func() { _ = cm.Close() })
 	f := &cmFX{srv: srv, ns: ns, m: m, cm: cm}
 	f.c = start(t, srv)
 	f.set, _ = cm.SetNode(fxcm.SetKey{Folder: []string{"Plant"}, Name: "Line1"})
@@ -284,7 +285,7 @@ func TestConnectionManagerDrainUnderLoad(t *testing.T) {
 			}
 		})
 	}
-	t.Cleanup(func() { cancel(); wg.Wait() })
+	cleanup.Register(t, func() { cancel(); wg.Wait() })
 
 	// The slowest call of each Method, each timed on its own.
 	worst := map[string]time.Duration{}

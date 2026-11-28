@@ -24,6 +24,16 @@ func readCapability(t *testing.T, c *opcua.Client, n uint32) uint32 {
 	return dvs[0].Value.Value().(uint32)
 }
 
+// readContinuationCapability reads a continuation point limit, a UInt16
+// (Part 5 §6.3.2).
+func readContinuationCapability(t *testing.T, c *opcua.Client, n uint32) uint16 {
+	t.Helper()
+	dvs, err := c.ReadValues(context.Background(), ua.NewNumericNodeID(0, n))
+	require.NoError(t, err)
+	require.Equal(t, ua.StatusOK, dvs[0].Status)
+	return dvs[0].Value.Value().(uint16)
+}
+
 func reads(n int, node *ua.NodeID) []*ua.ReadValueID {
 	out := make([]*ua.ReadValueID, n)
 	for i := range out {
@@ -120,7 +130,7 @@ func TestBrowseContinuationPoints_SessionBound(t *testing.T) {
 	c, _, _, url := setupWith(t, nil, server.WithMaxBrowseContinuationPoints(1))
 	other := testutil.NewTestClient(t, url)
 	ctx := context.Background()
-	require.Equal(t, uint32(1), readCapability(t, c, id.ServerServerCapabilitiesMaxBrowseContinuationPoints))
+	require.Equal(t, uint16(1), readContinuationCapability(t, c, id.ServerServerCapabilitiesMaxBrowseContinuationPoints))
 
 	browse := func(c *opcua.Client) *ua.BrowseResult {
 		resp, err := c.Browse(ctx, &ua.BrowseRequest{
@@ -152,7 +162,7 @@ func TestQuery_ContinuationPointsSessionBound(t *testing.T) {
 	c, f, _, url := setupWith(t, nil, server.WithQuery(true), server.WithMaxQueryContinuationPoints(1))
 	other := testutil.NewTestClient(t, url)
 	ctx := context.Background()
-	require.Equal(t, uint32(1), readCapability(t, c, id.ServerServerCapabilitiesMaxQueryContinuationPoints))
+	require.Equal(t, uint16(1), readContinuationCapability(t, c, id.ServerServerCapabilitiesMaxQueryContinuationPoints))
 
 	resp, err := queryByType(ctx, c, f.CustomVarType, true, nil, 1)
 	require.NoError(t, err)
@@ -173,4 +183,40 @@ func TestQuery_DisabledByDefault(t *testing.T) {
 	c, f, ctx := setup(t)
 	_, err := queryByType(ctx, c, f.CustomVarType, true, nil, 0)
 	require.True(t, errors.Is(err, ua.StatusBadServiceUnsupported), "got %v", err)
+}
+
+// TestServerCapabilities_Mandatory: a client reads every Mandatory
+// Property of the ServerCapabilities with its DataType (Part 5 §6.3.2):
+// the ServerProfileArray and LocaleIdArray of the options,
+// MinSupportedSampleRate 0, the continuation point limits as UInt16 and
+// no SoftwareCertificates.
+func TestServerCapabilities_Mandatory(t *testing.T) {
+	const profile = "http://opcfoundation.org/UA-Profile/Server/MicroEmbeddedDevice2017"
+	c, _, _, _ := setupWith(t, nil, server.WithServerProfiles(profile), server.WithLocaleIDs("en", "de"))
+	nodes := []uint32{
+		id.ServerServerCapabilitiesServerProfileArray,
+		id.ServerServerCapabilitiesLocaleIDArray,
+		id.ServerServerCapabilitiesMinSupportedSampleRate,
+		id.ServerServerCapabilitiesMaxBrowseContinuationPoints,
+		id.ServerServerCapabilitiesMaxQueryContinuationPoints,
+		id.ServerServerCapabilitiesMaxHistoryContinuationPoints,
+		id.ServerServerCapabilitiesSoftwareCertificates,
+	}
+	ids := make([]*ua.NodeID, len(nodes))
+	for i, n := range nodes {
+		ids[i] = ua.NewNumericNodeID(0, n)
+	}
+	dvs, err := c.ReadValues(context.Background(), ids...)
+	require.NoError(t, err)
+	for i, dv := range dvs {
+		require.Equal(t, ua.StatusOK, dv.Status, "node %d", nodes[i])
+	}
+	require.Equal(t, []string{profile}, dvs[0].Value.Value())
+	require.Equal(t, []string{"en", "de"}, dvs[1].Value.Value())
+	require.Equal(t, float64(0), dvs[2].Value.Value())
+	require.Equal(t, uint16(10), dvs[3].Value.Value())
+	require.Equal(t, uint16(5), dvs[4].Value.Value())
+	require.Equal(t, uint16(0), dvs[5].Value.Value())
+	require.Equal(t, ua.TypeIDExtensionObject, dvs[6].Value.Type())
+	require.Equal(t, int32(0), dvs[6].Value.ArrayLength())
 }

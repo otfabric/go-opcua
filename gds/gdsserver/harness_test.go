@@ -17,6 +17,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/gds"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/leakcheck"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
@@ -117,7 +118,7 @@ func (e *env) start() {
 	require.NoError(t, err)
 	g.Store(gd)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	e.srv, e.gds = srv, gd
 	e.url = fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 }
@@ -194,7 +195,7 @@ func (e *env) tryDial(o dialOpts) (*opcua.Client, error) {
 		_ = c.Close(context.Background())
 		return nil, err
 	}
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	return c, nil
 }
 
@@ -247,7 +248,7 @@ func selfAdminAll(*gds.ApplicationRecord, *x509.Certificate) bool { return true 
 
 func ctxT(t *testing.T) context.Context {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	t.Cleanup(cancel)
+	cleanup.Register(t, cancel)
 	return ctx
 }
 

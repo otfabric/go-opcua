@@ -222,7 +222,7 @@ func (s *AttributeService) HistoryRead(ctx context.Context, sc *uasc.SecureChann
 		} else if st := s.srv.checkDataHistory(ctx, sc, sess, n.NodeID, false); st != ua.StatusOK {
 			result = &ua.HistoryReadResult{StatusCode: st}
 		} else {
-			result, err = s.dispatchHistoryRead(historian, req, i, details, n.NodeID, providerCP)
+			result, err = s.historyReadData(ctx, sc, sess, historian, req, i, details, n.NodeID, providerCP)
 			if err != nil {
 				results[i] = &ua.HistoryReadResult{StatusCode: ua.StatusBadInternalError}
 				continue
@@ -268,6 +268,43 @@ func unsupportedHistoryRead(req *ua.HistoryReadRequest) *ua.HistoryReadResponse 
 		Results:         results,
 		DiagnosticInfos: []*ua.DiagnosticInfo{},
 	}
+}
+
+// historyReadData reads the data history of operation i of req, nodeID:
+// the Annotations of the node for ReadAnnotationDataDetails and for the
+// ReadRawModifiedDetails of its Annotations Property (Part 11 §5.1.2,
+// §6.5.6), when the provider keeps them; the values of the node otherwise
+// (dispatchHistoryRead).
+func (s *AttributeService) historyReadData(ctx context.Context, sc *uasc.SecureChannel, sess *session, h HistoryProvider, req *ua.HistoryReadRequest, i int, details any, nodeID *ua.NodeID, continuationPoint []byte) (*ua.HistoryReadResult, error) {
+	if d := annotationReadDetails(details); d != nil {
+		return s.readAnnotations(ctx, sc, sess, h, d, nodeID)
+	}
+	if p, ok := h.(AnnotationHistoryProvider); ok {
+		if d := rawModifiedDetails(details); d != nil {
+			if owner := s.srv.annotationsPropertyOwner(nodeID); owner != nil {
+				if st := s.srv.checkDataHistory(ctx, sc, sess, owner, false); st != ua.StatusOK {
+					return &ua.HistoryReadResult{StatusCode: st}, nil
+				}
+				if d.IsReadModified {
+					return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
+				}
+				return p.ReadRawAnnotations(owner, d.StartTime, d.EndTime, d.NumValuesPerNode, continuationPoint)
+			}
+		}
+	}
+	return s.dispatchHistoryRead(h, req, i, details, nodeID, continuationPoint)
+}
+
+// rawModifiedDetails returns the ReadRawModifiedDetails of a HistoryRead,
+// nil for other details.
+func rawModifiedDetails(details any) *ua.ReadRawModifiedDetails {
+	switch v := details.(type) {
+	case *ua.ReadRawModifiedDetails:
+		return v
+	case ua.ReadRawModifiedDetails:
+		return &v
+	}
+	return nil
 }
 
 // dispatchHistoryRead reads the history of operation i of req, nodeID.
@@ -343,6 +380,12 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
 
 	status := make([]ua.StatusCode, len(req.NodesToWrite))
+	// old holds the values the writes replace, for their audit events.
+	audit := s.srv.auditsChanges()
+	var old []*ua.Variant
+	if audit {
+		old = make([]*ua.Variant, len(req.NodesToWrite))
+	}
 	var jobs []valueWriteJob
 	// The OperationGuards learn that the writes are over when the request
 	// is: the writes of ValueWriters run after the loop, off the dispatcher
@@ -379,6 +422,11 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 		if err != nil {
 			status[i] = ua.StatusBadNodeNotInView
 			continue
+		}
+		remember := func() {
+			if audit {
+				old[i] = writeOldValue(ns, n)
+			}
 		}
 
 		// Whether the Value may be written at all comes before what the
@@ -434,6 +482,7 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 				status[i] = st
 				continue
 			}
+			remember()
 			if writer != nil {
 				deferWrite(&ua.DataValue{EncodingMask: ua.DataValueValue, Value: merged})
 				continue
@@ -453,6 +502,7 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 			}
 		}
 
+		remember()
 		if writer != nil {
 			if n.Value == nil {
 				status[i] = ua.StatusBadTypeMismatch
@@ -473,6 +523,7 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 			answeredLater = true
 			s.srv.runValueWriters(ctx, sess, req.RequestHeader, jobs, status, func(results []ua.StatusCode) {
 				finish()
+				s.srv.auditWrite(sess, req, old, results)
 				reply(req, writeResponse(req, results))
 			})
 			return nil, nil
@@ -482,6 +533,7 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 			status[j.index] = s.srv.callValueWriter(ctx, j)
 		}
 	}
+	s.srv.auditWrite(sess, req, old, status)
 	return writeResponse(req, status), nil
 }
 
@@ -723,7 +775,11 @@ func (s *AttributeService) HistoryUpdate(ctx context.Context, sc *uasc.SecureCha
 	historian, _ := s.srv.history()
 	results := make([]*ua.HistoryUpdateResult, len(req.HistoryUpdateDetails))
 	for i, detailEO := range req.HistoryUpdateDetails {
-		results[i] = s.dispatchHistoryUpdate(ctx, sc, sess, historian, detailEO)
+		var a historyUpdateAudit
+		results[i] = s.dispatchHistoryUpdate(ctx, sc, sess, historian, detailEO, &a)
+		if s.srv.auditsChanges() {
+			s.srv.auditHistoryUpdate(sess, req.RequestHeader, historyDetails(detailEO), results[i], a)
+		}
 	}
 
 	return &ua.HistoryUpdateResponse{
@@ -743,7 +799,10 @@ func isEventUpdateDetails(v any) bool {
 	return false
 }
 
-func (s *AttributeService) dispatchHistoryUpdate(ctx context.Context, sc *uasc.SecureChannel, sess *session, h HistoryProvider, detailEO *ua.ExtensionObject) *ua.HistoryUpdateResult {
+// dispatchHistoryUpdate serves one HistoryUpdateDetails. When the server
+// audits it, a holds what the audit event needs that the result does not
+// tell: the values the update replaces or deletes, read before it.
+func (s *AttributeService) dispatchHistoryUpdate(ctx context.Context, sc *uasc.SecureChannel, sess *session, h HistoryProvider, detailEO *ua.ExtensionObject, a *historyUpdateAudit) *ua.HistoryUpdateResult {
 	unsupported := &ua.HistoryUpdateResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}
 	if detailEO == nil || detailEO.Value == nil || h == nil {
 		return unsupported
@@ -753,19 +812,21 @@ func (s *AttributeService) dispatchHistoryUpdate(ctx context.Context, sc *uasc.S
 			return &ua.HistoryUpdateResult{StatusCode: st}
 		}
 	}
-	switch v := detailEO.Value.(type) {
+	audit := s.srv.auditsChanges()
+	switch v := historyDetails(detailEO).(type) {
 	case *ua.UpdateDataDetails:
 		updater, ok := h.(HistoryDataUpdater)
 		if !ok {
 			return unsupported
 		}
-		return updater.UpdateData(v.NodeID, v.PerformInsertReplace, v.UpdateValues)
-	case ua.UpdateDataDetails:
-		updater, ok := h.(HistoryDataUpdater)
-		if !ok {
-			return unsupported
+		if audit && v.PerformInsertReplace != ua.PerformUpdateTypeInsert {
+			a.oldValues = oldRawValues(h, v.NodeID, valueTimes(v.UpdateValues))
 		}
 		return updater.UpdateData(v.NodeID, v.PerformInsertReplace, v.UpdateValues)
+	case *ua.UpdateStructureDataDetails:
+		var res *ua.HistoryUpdateResult
+		res, a.newValues, a.oldValues = s.updateAnnotations(ctx, sc, sess, h, v)
+		return res
 	case *ua.DeleteRawModifiedDetails:
 		deleter, ok := h.(RawHistoryDeleter)
 		if !ok {
@@ -774,14 +835,8 @@ func (s *AttributeService) dispatchHistoryUpdate(ctx context.Context, sc *uasc.S
 		if st := checkDeleteRawRange(v.StartTime, v.EndTime); st != ua.StatusOK {
 			return &ua.HistoryUpdateResult{StatusCode: st}
 		}
-		return deleter.DeleteRawModified(v.NodeID, v.IsDeleteModified, v.StartTime, v.EndTime)
-	case ua.DeleteRawModifiedDetails:
-		deleter, ok := h.(RawHistoryDeleter)
-		if !ok {
-			return unsupported
-		}
-		if st := checkDeleteRawRange(v.StartTime, v.EndTime); st != ua.StatusOK {
-			return &ua.HistoryUpdateResult{StatusCode: st}
+		if audit && !v.IsDeleteModified {
+			a.oldValues = oldRawRange(h, v.NodeID, v.StartTime, v.EndTime)
 		}
 		return deleter.DeleteRawModified(v.NodeID, v.IsDeleteModified, v.StartTime, v.EndTime)
 	case *ua.DeleteAtTimeDetails:
@@ -789,21 +844,16 @@ func (s *AttributeService) dispatchHistoryUpdate(ctx context.Context, sc *uasc.S
 		if !ok {
 			return unsupported
 		}
-		return deleter.DeleteAtTime(v.NodeID, v.ReqTimes)
-	case ua.DeleteAtTimeDetails:
-		deleter, ok := h.(AtTimeHistoryDeleter)
-		if !ok {
-			return unsupported
+		if audit {
+			a.oldValues = oldRawValues(h, v.NodeID, v.ReqTimes)
 		}
 		return deleter.DeleteAtTime(v.NodeID, v.ReqTimes)
 	case *ua.UpdateEventDetails:
-		return s.updateEventHistory(ctx, sc, sess, h, v)
-	case ua.UpdateEventDetails:
-		return s.updateEventHistory(ctx, sc, sess, h, &v)
+		var res *ua.HistoryUpdateResult
+		res, a.inserted = s.updateEventHistory(ctx, sc, sess, h, v)
+		return res
 	case *ua.DeleteEventDetails:
 		return s.deleteEventHistory(ctx, sc, sess, h, v)
-	case ua.DeleteEventDetails:
-		return s.deleteEventHistory(ctx, sc, sess, h, &v)
 	default:
 		return unsupported
 	}

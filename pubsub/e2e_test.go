@@ -10,6 +10,7 @@ import (
 
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -23,11 +24,11 @@ func runPair(t *testing.T, pubCfg, subCfg *ua.PubSubConfigurationDataType, ds *M
 	sub, err := New(subCfg, WithDataSetHandler(rec.handler))
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	pub, err := New(pubCfg, WithDataSource(ds))
 	require.NoError(t, err)
 	require.NoError(t, pub.Start(context.Background()))
-	t.Cleanup(func() { _ = pub.Close() })
+	cleanup.Register(t, func() { _ = pub.Close() })
 	return rec
 }
 
@@ -70,7 +71,7 @@ func TestE2EMQTT(t *testing.T) {
 	t.Parallel()
 	b := mqttbroker.New(mqttbroker.Options{})
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	for _, m := range []MessageMapping{MappingJSON, MappingUADP} {
 		t.Run(fmt.Sprint(m), func(t *testing.T) {
 			t.Parallel()

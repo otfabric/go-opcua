@@ -16,6 +16,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
@@ -111,14 +112,14 @@ func newCMFX(t *testing.T, opts fxserver.ConnectionManagerOptions, srvOpts ...se
 	require.NoError(t, err)
 	m, err := fxcm.New(fxcm.Options{Dialer: offlineDialer{}, ApplicationURI: "urn:test:cm", Logger: slog.New(slog.DiscardHandler)})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = m.Close() })
+	cleanup.Register(t, func() { _ = m.Close() })
 	_, err = m.Add(cmConf("Line1"))
 	require.NoError(t, err)
 	opts.Manager = m
 	opts.Logger = slog.New(slog.DiscardHandler)
 	cm, err := fxserver.EnableConnectionManager(srv, ns, opts)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = cm.Close() })
+	cleanup.Register(t, func() { _ = cm.Close() })
 	f := &cmFX{srv: srv, ns: ns, m: m, cm: cm, noAdmin: noAdmin}
 	f.c = start(t, srv)
 	f.set, _ = cm.SetNode(fxcm.SetKey{Folder: []string{"Plant"}, Name: "Line1"})
@@ -136,7 +137,7 @@ func (f *cmFX) client(t *testing.T, uri string, admin bool) *opcua.Client {
 	c, err := opcua.NewClient(fmt.Sprintf("opc.tcp://localhost:%d", f.srv.Port()), opcua.InsecureNoSecurity(), opcua.ApplicationURI(uri))
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(ctx))
-	t.Cleanup(func() { _ = c.Close(ctx) })
+	cleanup.Register(t, func() { _ = c.Close(ctx) })
 	return c
 }
 
@@ -780,7 +781,7 @@ func TestEnableConnectionManagerErrors(t *testing.T) {
 	ns2.DI = 0
 	cm, err := fxserver.EnableConnectionManager(srv2, ns2, fxserver.ConnectionManagerOptions{Manager: f.m, Logger: slog.New(slog.DiscardHandler)})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = cm.Close() })
+	cleanup.Register(t, func() { _ = cm.Close() })
 	_, ok = cm.SetNode(fxcm.SetKey{Folder: []string{"Plant"}, Name: "Line1"})
 	assert.False(t, ok)
 
@@ -796,10 +797,10 @@ func watchEvents(t *testing.T, c *opcua.Client, n *ua.NodeID, paths ...string) <
 	b := ua.NewEventFilter().SelectPaths(paths...)
 	sub, ch, err := c.NewSubscription().Interval(20*time.Millisecond).MonitorEvents(b.Build(), n).Start(context.Background())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	out := make(chan []*ua.Variant, 64)
 	done, exited := make(chan struct{}), make(chan struct{})
-	t.Cleanup(func() { close(done); <-exited })
+	cleanup.Register(t, func() { close(done); <-exited })
 	go func() {
 		defer close(exited)
 		for {

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxcm"
@@ -278,7 +279,7 @@ func TestCrash(t *testing.T) {
 			runCMCrashChild(t, name, dir, sc.point)
 			store, err := fxstore.OpenFile(dir, fxstore.Limits{})
 			require.NoError(t, err)
-			t.Cleanup(func() { _ = store.Close() })
+			cleanup.Register(t, func() { _ = store.Close() })
 			m := newManager(t, fxcm.Options{Store: store})
 			ss, _ := m.StoreStatus()
 			require.Empty(t, ss.Failed)

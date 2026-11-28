@@ -10,6 +10,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -67,7 +68,7 @@ func TestNamespaceDefaultsOverTheWire(t *testing.T) {
 	v := ns.AddNewVariableStringNode("v", int32(7))
 	ns.Objects().AddRef(v, id.HasComponent, true)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	c := testutil.NewTestClient(t, srv.Endpoints()[0].EndpointURL)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -154,7 +155,7 @@ func TestModelDefaultsRestoreOverTheWire(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, srv.ImportNodeSetXML([]byte(modelDefaultsDoc)))
 			require.NoError(t, srv.Start(context.Background()))
-			t.Cleanup(func() { _ = srv.Close() })
+			cleanup.Register(t, func() { _ = srv.Close() })
 			c := testutil.NewTestClient(t, srv.Endpoints()[0].EndpointURL)
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()

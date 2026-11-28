@@ -17,6 +17,7 @@ import (
 	"github.com/otfabric/go-opcua/gds"
 	"github.com/otfabric/go-opcua/gds/gdsid"
 	"github.com/otfabric/go-opcua/gds/gdsserver"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -57,7 +58,7 @@ func gdsServer(t *testing.T, cfg gdsserver.Config) (*gdsserver.GDS, string) {
 	require.NoError(t, err)
 	g.Store(gd)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return gd, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 }
 
@@ -71,7 +72,7 @@ func pullClient(t *testing.T, url, user, pass string) *gds.PullClient {
 
 func ctxOf(t *testing.T) context.Context {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	t.Cleanup(cancel)
+	cleanup.Register(t, cancel)
 	return ctx
 }
 
@@ -137,7 +138,7 @@ func TestPull_EnrollAndApply(t *testing.T) {
 	)...)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(ctx))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	surl := fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 
 	eps, err := opcua.GetEndpoints(ctx, surl)
@@ -333,7 +334,7 @@ func fakeGDS(t *testing.T, hs map[uint32]pullHandler) *gds.PullClient {
 			})
 	}
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	c, err := dial(t, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()), ua.MessageSecurityModeSignAndEncrypt, identity{p.ClientCert, p.ClientKey}, "", "")
 	require.NoError(t, err)
 	return gds.NewPullClient(c)

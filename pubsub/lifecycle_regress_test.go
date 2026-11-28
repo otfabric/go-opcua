@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +23,7 @@ func TestRegressionStartAfterCancel(t *testing.T) {
 		AttachWriterGroups(memConnection("c", url, uint16(1)), WriterGroup("wg", 1, 5*time.Millisecond, DataSetWriter("w", 1, "pds")))),
 		withFakeCodec())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = p.Close() })
+	cleanup.Register(t, func() { _ = p.Close() })
 	conn := mustID(t, p, KindConnection, Root, "c")
 	for i := range 50 {
 		ctx, cancel := context.WithCancel(context.Background())

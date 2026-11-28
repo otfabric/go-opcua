@@ -42,6 +42,15 @@ func filled() []args {
 		&uamethod.FileDirectoryTypeDeleteInput{ObjectToDelete: n},
 		&uamethod.FileDirectoryTypeMoveOrCopyInput{ObjectToMoveOrCopy: n, TargetDirectory: n, CreateCopy: true, NewName: "x"},
 		&uamethod.FileDirectoryTypeMoveOrCopyOutput{NewNodeID: n},
+		&uamethod.RoleSetTypeAddRoleInput{RoleName: "r", NamespaceURI: "urn:x"},
+		&uamethod.RoleSetTypeAddRoleOutput{RoleNodeID: n},
+		&uamethod.RoleSetTypeRemoveRoleInput{RoleNodeID: n},
+		&uamethod.RoleTypeAddIdentityInput{Rule: rule},
+		&uamethod.RoleTypeRemoveIdentityInput{Rule: rule},
+		&uamethod.RoleTypeAddApplicationInput{ApplicationURI: "urn:app"},
+		&uamethod.RoleTypeRemoveApplicationInput{ApplicationURI: "urn:app"},
+		&uamethod.RoleTypeAddEndpointInput{Endpoint: ep},
+		&uamethod.RoleTypeRemoveEndpointInput{Endpoint: ep},
 		&uamethod.ServerTypeGetMonitoredItemsInput{SubscriptionID: 3},
 		&uamethod.ServerTypeGetMonitoredItemsOutput{ServerHandles: []uint32{1, 2}, ClientHandles: []uint32{7, 8}},
 		&uamethod.ServerTypeResendDataInput{SubscriptionID: 3},
@@ -52,6 +61,41 @@ func filled() []args {
 			SecondsTillShutdown: 60, Reason: ua.NewLocalizedText("update"), Restart: true,
 		},
 	}
+}
+
+var (
+	rule = &ua.IdentityMappingRuleType{CriteriaType: ua.IdentityCriteriaTypeUserName, Criteria: "u"}
+	ep   = &ua.EndpointType{EndpointURL: "opc.tcp://h:4840", SecurityMode: ua.MessageSecurityModeSign}
+)
+
+// The contracts of the RoleSet and Role Methods (OPC 10000-18 §4.2, §4.4):
+// those of RoleType are Optional in the NodeSet.
+func TestRoleContracts(t *testing.T) {
+	for _, c := range []struct {
+		m         *uamethod.Method
+		id, typID uint32
+		clause    string
+		mandatory bool
+		in, out   int
+	}{
+		{uamethod.RoleSetTypeAddRole, id.RoleSetTypeAddRole, id.RoleSetType, "OPC 10000-18 §4.2.2", true, 2, 1},
+		{uamethod.RoleSetTypeRemoveRole, id.RoleSetTypeRemoveRole, id.RoleSetType, "OPC 10000-18 §4.2.3", true, 1, 0},
+		{uamethod.RoleTypeAddIdentity, id.RoleTypeAddIdentity, id.RoleType, "OPC 10000-18 §4.4.5", false, 1, 0},
+		{uamethod.RoleTypeRemoveIdentity, id.RoleTypeRemoveIdentity, id.RoleType, "OPC 10000-18 §4.4.6", false, 1, 0},
+		{uamethod.RoleTypeAddApplication, id.RoleTypeAddApplication, id.RoleType, "OPC 10000-18 §4.4.7", false, 1, 0},
+		{uamethod.RoleTypeRemoveApplication, id.RoleTypeRemoveApplication, id.RoleType, "OPC 10000-18 §4.4.8", false, 1, 0},
+		{uamethod.RoleTypeAddEndpoint, id.RoleTypeAddEndpoint, id.RoleType, "OPC 10000-18 §4.4.9", false, 1, 0},
+		{uamethod.RoleTypeRemoveEndpoint, id.RoleTypeRemoveEndpoint, id.RoleType, "OPC 10000-18 §4.4.10", false, 1, 0},
+	} {
+		require.Equal(t, c.id, c.m.ID, c.m.String())
+		require.Equal(t, c.typID, c.m.ObjectTypeID, c.m.String())
+		require.Equal(t, c.clause, c.m.Clause, c.m.String())
+		require.Equal(t, c.mandatory, c.m.Mandatory, c.m.String())
+		require.Len(t, c.m.InputArguments(), c.in, c.m.String())
+		require.Len(t, c.m.OutputArguments(), c.out, c.m.String())
+	}
+	require.Equal(t, ua.NewNumericNodeID(0, id.IdentityMappingRuleType), uamethod.RoleTypeAddIdentity.InputArguments()[0].DataType)
+	require.Equal(t, ua.NewNumericNodeID(0, id.EndpointType), uamethod.RoleTypeAddEndpoint.InputArguments()[0].DataType)
 }
 
 func fresh(a args) args { return reflect.New(reflect.TypeOf(a).Elem()).Interface().(args) }
@@ -147,6 +191,8 @@ func arrayOf(v *ua.Variant) *ua.Variant {
 		return ua.MustVariant([][]byte{x})
 	case *ua.NodeID:
 		return ua.MustVariant([]*ua.NodeID{x})
+	case *ua.ExtensionObject:
+		return ua.MustVariant([]*ua.ExtensionObject{x})
 	case time.Time:
 		return ua.MustVariant([]time.Time{x})
 	case *ua.LocalizedText:
@@ -375,6 +421,14 @@ func TestCallAll(t *testing.T) {
 		func() error { _, err := uamethod.CallFileDirectoryTypeCreateFile(ctx, c, obj, nil, nil); return err },
 		func() error { return uamethod.CallFileDirectoryTypeDelete(ctx, c, obj, nil, nil) },
 		func() error { _, err := uamethod.CallFileDirectoryTypeMoveOrCopy(ctx, c, obj, nil, nil); return err },
+		func() error { _, err := uamethod.CallRoleSetTypeAddRole(ctx, c, obj, nil, nil); return err },
+		func() error { return uamethod.CallRoleSetTypeRemoveRole(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeAddIdentity(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeRemoveIdentity(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeAddApplication(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeRemoveApplication(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeAddEndpoint(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeRemoveEndpoint(ctx, c, obj, nil, nil) },
 	} {
 		require.ErrorIs(t, call(), ua.StatusBadNotFound)
 	}
@@ -400,6 +454,9 @@ func TestCallAll(t *testing.T) {
 		func() error { _, err := uamethod.CallFileDirectoryTypeCreateFile(ctx, c, obj, nil, nil); return err },
 		func() error { return uamethod.CallFileDirectoryTypeDelete(ctx, c, obj, nil, nil) },
 		func() error { _, err := uamethod.CallFileDirectoryTypeMoveOrCopy(ctx, c, obj, nil, nil); return err },
+		func() error { _, err := uamethod.CallRoleSetTypeAddRole(ctx, c, obj, nil, nil); return err },
+		func() error { return uamethod.CallRoleSetTypeRemoveRole(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallRoleTypeAddIdentity(ctx, c, obj, nil, nil) },
 	} {
 		require.ErrorIs(t, call(), ua.StatusBadTooManyArguments)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/gds"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -76,7 +77,7 @@ func newServer(t *testing.T, pm server.PushManagement, extra ...server.Option) (
 	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return srv, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 }
 
@@ -131,7 +132,7 @@ func dial(t *testing.T, url string, mode ua.MessageSecurityMode, id identity, us
 		_ = c.Close(context.Background())
 		return nil, err
 	}
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	return c, nil
 }
 

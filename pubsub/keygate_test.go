@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/security"
 )
 
@@ -84,7 +85,7 @@ func gated(t *testing.T) (*PubSub, *gateSource) {
 	t.Helper()
 	p, err := New(nil)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = p.Close() })
+	cleanup.Register(t, func() { _ = p.Close() })
 	src := &gateSource{}
 	p.SetKeySource("g", src)
 	p.GateSecurityGroup("g")
@@ -362,7 +363,7 @@ func TestKeyGateReplacedDuringObservation(t *testing.T) {
 	t.Parallel()
 	p, err := New(nil)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = p.Close() })
+	cleanup.Register(t, func() { _ = p.Close() })
 	old := newBlockingSource()
 	p.SetKeySource("g", old)
 	p.GateSecurityGroup("g")
@@ -431,7 +432,7 @@ func TestKeyGateRotationBetweenReads(t *testing.T) {
 	t.Parallel()
 	p, err := New(nil)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = p.Close() })
+	cleanup.Register(t, func() { _ = p.Close() })
 	src := &rotatingSource{gateSource: &gateSource{}}
 	p.SetKeySource("g", src)
 	p.GateSecurityGroup("g")
