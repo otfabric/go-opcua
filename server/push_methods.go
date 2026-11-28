@@ -830,18 +830,18 @@ func (m *pushManager) resetToServerDefaults(ctx context.Context, c *MethodCaller
 			}
 		}
 	}
-	if sc := m.storeLocked(ctx, trust, certs); sc != ua.StatusOK {
+	now := time.Now()
+	if sc := m.storeLocked(ctx, trust, certs, true, now); sc != ua.StatusOK {
 		return nil, sc
 	}
 	if m.tx != nil {
 		m.tx = nil
 		m.endDiagnostics(ua.StatusBadRequestCancelledByClient)
 	}
-	now := time.Now().UnixNano()
 	for k, tl := range trust {
 		g := m.groups[k]
 		g.trust.Store(tl)
-		g.lastUpdate.Store(now)
+		g.lastUpdate.Store(now.UnixNano())
 		g.file.CloseAll()
 	}
 	clear(m.csrKeys)

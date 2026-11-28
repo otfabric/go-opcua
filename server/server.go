@@ -395,6 +395,9 @@ func New(opts ...Option) (*Server, error) {
 	if push != nil {
 		push.s = s
 		push.initFiles()
+		if err := push.restore(context.Background()); err != nil {
+			return nil, err
+		}
 		s.push = push
 	}
 

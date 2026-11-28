@@ -147,9 +147,11 @@ One persistence package for the server, PubSub and UAFX, from
 `uafx/fxstore` (Store, Batch, Domain):
 
 - a file store for push certificate management, with an ApplyChanges that is
-  atomic in the store too (today it writes group by group,
-  `server/push.go:659-706`, and a failed group leaves the earlier ones
-  written);
+  atomic in the store too: done in v1.43.0. `server/pushstore` writes each
+  ApplyChanges and ResetToServerDefaults in one `fxstore.Domain.Apply`,
+  `server.New` restores it, and a failed ApplyChanges applies nothing and
+  discards its transaction (Part 12 §7.10.2); the persistence package stays
+  at `uafx/fxstore` (docs/architecture.md, Persistence);
 - persistence of the PubSub configuration of the server, with NotPersisted
   (Part 14 §9.1.2), for the Go API, the configuration Methods and the
   configuration file;

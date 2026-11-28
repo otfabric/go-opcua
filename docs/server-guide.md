@@ -1646,23 +1646,59 @@ srv, _ := server.New(
 |-----------|--------|
 | Validation | New channels and sessions validate the client application certificate against the trust list (Part 4 §6.1.3): a chain to a trusted certificate, issuer certificates as intermediates, CRLs of the CAs (`Bad_CertificateRevoked`, `Bad_CertificateIssuerRevoked`). It replaces `WithClientCertificateTrustList` (`New` refuses both) |
 | Trust list input | CloseAndUpdate decodes the TrustListDataType exactly; every certificate and CRL must parse, a CRL must be signed by a CA of the lists; at most 1024 entries and `MaxTrustListSize` bytes (default 1 MiB; `Bad_EncodingLimitsExceeded` beyond) |
-| Transactions | AddCertificate, RemoveCertificate, CloseAndUpdate and UpdateCertificate collect their changes in a transaction of the calling session (Part 12 §7.10.2); they take effect at ApplyChanges, CancelChanges drops them, another session gets `Bad_TransactionPending`. The end of the session cancels its transaction at once and discards the pending changes (§7.10.2, §7.10.9), with the handles of its TrustList files and what they hold without CloseAndUpdate. `ApplyImmediately` applies every change when its method returns |
+| Transactions | AddCertificate, RemoveCertificate, CloseAndUpdate and UpdateCertificate collect their changes in a transaction of the calling session (Part 12 §7.10.2); they take effect at ApplyChanges, CancelChanges drops them, another session gets `Bad_TransactionPending`. The end of the session cancels its transaction at once and discards the pending changes (§7.10.2, §7.10.9), with the handles of its TrustList files and what they hold without CloseAndUpdate. An ApplyChanges that fails (a certificate to delete that is in use, a `Store` that cannot write) applies nothing and discards the transaction: "If any errors are found then all changes are discarded" (§7.10.2). `ApplyImmediately` applies every change when its method returns |
 | UpdateCertificate | Replaces the certificate of its group and type: an application instance certificate (RSA, ECDSA on NIST and Brainpool curves, Ed25519, Ed448) or the HTTPS certificate of the DefaultHttpsGroup. The key is the one of the last CreateSigningRequest or CreateSelfSignedCertificate, the current key, or a `PEM` or `PFX` (PKCS #12, password from `PFXPassword`; a wrong one is `Bad_SecurityChecksFailed`) private key. The certificate must carry the server's ApplicationUri and be issued by one of the issuer certificates when they are given |
 | After ApplyChanges | New channels and the endpoints use the new certificate, new TLS handshakes the new HTTPS certificate; channels and connections already open keep theirs and keep working |
 | CreateSigningRequest | PKCS #10 for the current key or, with `regeneratePrivateKey`, a new key of the certificate type: RSA (2048, 3072 or 4096 bits), ECDSA P-256 / P-384, brainpoolP256r1 / brainpoolP384r1, Ed25519 or Ed448 (nonce of at least 32 bytes) |
 | CreateSelfSignedCertificate | A new key and a self-signed certificate for a group and type (subject, DNS names and IP addresses default to those of the current certificate, 365 days by default, the ApplicationUri as SAN); it takes effect at ApplyChanges |
-| DeleteCertificate | Removes the certificate of a group and type at ApplyChanges (Part 12 1.05 §7.10); `Bad_InvalidState` if there is none, counting the transaction. ApplyChanges refuses (`Bad_InvalidState`, in the TransactionDiagnostics) to delete the certificate the endpoints advertise, or the HTTPS certificate while there are opc.https / opc.wss endpoints. A deleted type stays in CertificateTypes: CreateSigningRequest with a new key, UpdateCertificate or CreateSelfSignedCertificate fill it again, also in the same transaction. A `CertificateDeleteStore` persists deletions |
+| DeleteCertificate | Removes the certificate of a group and type at ApplyChanges (Part 12 1.05 §7.10); `Bad_InvalidState` if there is none, counting the transaction. ApplyChanges refuses (`Bad_InvalidState`, in the TransactionDiagnostics, and discards the transaction) to delete the certificate the endpoints advertise, or the HTTPS certificate while there are opc.https / opc.wss endpoints. A deleted type stays in CertificateTypes: CreateSigningRequest with a new key, UpdateCertificate or CreateSelfSignedCertificate fill it again, also in the same transaction. A `CertificateDeleteStore` persists deletions |
 | GetCertificates | The certificate types and certificates of a group |
-| ResetToServerDefaults | Back to the trust lists, certificates and keys the server started with (stored through `Store`), the groups of the application included; certificates the server did not start with are deleted. `Bad_TransactionPending` while another session has a transaction |
+| ResetToServerDefaults | Back to the trust lists, certificates and keys the server was configured with (stored through `Store`; `pushstore` empties itself), the groups of the application included; certificates the configuration does not have are deleted. `Bad_TransactionPending` while another session has a transaction; `Bad_InternalError`, with nothing changed, when the `Store` cannot write |
 | Group trust lists | The DefaultUserTokenGroup trust list validates X.509 user tokens before a `WithX509UserValidator` is asked; the DefaultHttpsGroup trust list validates TLS client certificates when `HTTPSClientCertificates` is `HTTPSClientCertificatesVerifyIfGiven` or `HTTPSClientCertificatesRequire` |
 | Alarms | `Alarms: &server.CertificateAlarms{ExpirationLimit, CheckInterval}` adds CertificateExpired (active from `ExpirationLimit`, default 14 days, before the group certificate expires; severity 900 once expired) and TrustListOutOfDate (active when a trust list was not updated for `TrustListUpdateFrequency`) conditions in the namespace `server.CertificateAlarmsNamespaceURI`, evaluated every `CheckInterval` (default 1 minute) and on every change |
 | GetRejectedList | The most recent `MaxRejectedCertificates` (default 64) client certificates validation rejected |
 | Access | SignAndEncrypt only (`Bad_SecurityModeInsufficient`), and the SecurityAdmin role (`Bad_UserAccessDenied`), unless `Authorizer` decides otherwise |
-| Persistence | None by default: the server writes no files. A `CertificateStore` gets the trust list and the new certificate with its issuers and key at ApplyChanges, before they take effect; an error fails ApplyChanges with `Bad_InternalError` and keeps the change pending |
+| Persistence | None by default: the server writes no files. `pushstore.OpenDir` keeps every group in a directory, one atomic write per ApplyChanges, restored by `New` (see below). A `CertificateStore` gets the changes at ApplyChanges, before they take effect; an error fails ApplyChanges with `Bad_InternalError`, applies nothing and discards the transaction |
 
 `Server.TrustList()`, `Server.GroupTrustList(group)`,
 `Server.HTTPSCertificate()` and `Server.RejectedCertificates()` return the
 trust lists in effect, the HTTPS certificate and the rejected certificates.
+
+### Persisting push certificate management
+
+Package `server/pushstore` is a `PushManagement.Store` on a directory: the
+trust lists of every group (with their LastUpdateTime), the certificates with
+their issuers and private keys, and the deleted certificates. Open it before
+`New`, which restores what it holds on top of the configuration, and close it
+after the server:
+
+```go
+st, err := pushstore.OpenDir(ctx, "/var/lib/myserver/push", pushstore.Options{
+    Owner: "urn:example:myserver", // the ApplicationUri: another owner's store is refused
+})
+if err != nil {
+    return err
+}
+defer st.Close()
+
+srv, err := server.New(
+    server.Certificate(certDER), server.PrivateKey(key), // the defaults
+    server.WithPushManagement(server.PushManagement{
+        TrustList: &ua.TrustListDataType{TrustedCertificates: [][]byte{caDER}},
+        Store:     st,
+    }),
+)
+```
+
+| Behaviour | Detail |
+|-----------|--------|
+| One write per ApplyChanges | `StoreChanges` (`server.CertificateBatchStore`) gets every trust list and certificate of the transaction and writes them in one `fxstore.Domain.Apply`; ResetToServerDefaults is one write that deletes every record, so the next start has the configuration |
+| Restore | `New` calls `LoadCertificates` (`server.CertificateLoadStore`): a stored trust list replaces that of `PushManagement`, a stored certificate the configured one of its type (or is added), a deleted one is removed. The configuration stays what ResetToServerDefaults returns to. A record of a group or type the server no longer has is ignored with a warning; one that is not valid fails `New` |
+| Failed write | ApplyChanges is `Bad_InternalError`, nothing is applied, the transaction is discarded (Part 12 §7.10.2) and every trust list and group of it has an error in the TransactionDiagnostics |
+| Unknown outcome | A failed rename or directory fsync leaves the write's outcome unknown: the store is fenced (`Status().Fenced`) and refuses writes until `Settle`, which the next write runs first. If the write landed, `Settle` writes the state before it back. An application may also call `Settle` with a backoff |
+| Directory | Created 0700, the lock file and the data file 0600; group- or world-writable directories are refused; one process at a time (`fxstore.ErrLocked`). Local file systems only (`fxstore.FileStore`) |
+| Keys | Unencrypted PKCS #8 DER; see [security.md](security.md#push-certificate-management). `pushstore.Open` takes any `fxstore.Store`, for a backend of the application (an encrypting wrapper, a database) |
+| Limits | `Options.Limits` (`fxstore.Limits`): a record (a trust list) of at most 4 MiB by default |
 
 ### Certificate groups of the application
 
@@ -1703,7 +1739,8 @@ The groups are String NodeIds (`CertificateGroups.<Name>` and
 `server.CertificateAlarmsNamespaceURI`; `gds.Client.CertificateGroups` finds
 them. The server itself does not use them. A `CertificateStore` gets their
 changes through `StoreGroupTrustList` and `StoreGroupCertificate` (a
-`CertificateGroupStore`).
+`CertificateGroupStore`), or by their name in `StoreChanges` (a
+`CertificateBatchStore`, such as `pushstore`).
 
 A Global Discovery Server (the pull model) is the subject of the next section.
 
