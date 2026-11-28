@@ -305,6 +305,7 @@ This creates a server with:
 | `WithAuditing(enabled)`, `WithAlarmClock(clock)` | Audit events of the condition methods and of the GDS; the clock of the alarm timers ([Alarms and Conditions](#alarms-and-conditions)) |
 | `WithPushManagement(pm)` | ServerConfiguration push model ([Certificate Management](#certificate-management-push-model)) |
 | `WithPubSub(cfg, opts...)` | PubSub runtime with the PublishSubscribe information model ([PubSub](pubsub.md)) |
+| `WithPubSubStore(st)` | Persist the PubSub configuration ([PubSub configuration persistence](#pubsub-configuration-persistence)) |
 
 The full list is in [API.md](../API.md#server-configuration-options).
 
@@ -1578,6 +1579,40 @@ SHUTDOWN_4 as before.
 
 ---
 
+## PubSub configuration persistence
+
+"The latest configuration shall be persisted by the OPC UA Server and shall
+be available after a restart of the OPC UA Server" (OPC 10000-14 §9.1.2).
+`server.WithPubSubStore` does that for the PubSub runtime of `WithPubSub`;
+`server/pubsubstore` is the store, on `uafx/fxstore`:
+
+```go
+st, err := pubsubstore.OpenDir(ctx, "/var/lib/myserver/pubsub", pubsubstore.Options{Owner: appURI})
+if err != nil { /* the directory, its lock, or records that do not decode */ }
+defer st.Close() // after srv.Close
+srv, err := server.New(
+    server.WithPubSub(initial), // the configuration of an empty store
+    server.WithPubSubStore(st),
+    // ...
+)
+```
+
+| | Behaviour |
+|---|---|
+| Restore | Once, in the PubSub transaction, before the first change, `BuildPubSubModel` or `Start`: the stored configuration replaces that of `WithPubSub`, which only an empty store keeps. A store that does not load, a configuration that is not valid, or a NodeId in a namespace the server does not have (`pubsubstore.ErrNamespace`; the namespace indexes are mapped by URI) fail them all until the restore succeeds; nothing runs on a partial configuration |
+| What is written | Each change, in the transaction, after the `PubSubConfigurationHook` accepted it: the configuration Methods (§9.1.3, Enable and Disable of PublishSubscribe and of each component included), CloseAndUpdate of the PubSubConfiguration file (§9.1.3.7.6), `UpdatePubSubConfiguration` and `Revert`, `ChangePubSubConfiguration` and `ChangePubSubConfigurationThen`. One `fxstore.Domain.Apply` of the records that change, the PublishSubscribe Enabled and one record per PublishedDataSet and PubSubConnection with its groups, writers and readers |
+| A write that fails | The runtime goes back to the configuration before the change and the change fails with `Bad_InternalError` (none of the result codes of §9.1.3 is for a store failure); a hook sees the undo as a Revert. A write with an unknown outcome fences the store: `Store.Settle`, or the next change, finds what landed and writes the configuration the server has back, so a restart never brings a change the server did not apply |
+| Not written | A component with 0:NotPersisted TRUE (§6.2.2 Table 4: the Boolean in namespace 0 in its ConnectionProperties, GroupProperties, DataSetWriterProperties or DataSetReaderProperties), with what is below it, and a DataSetWriter of a PublishedDataSet that is not written. A configuration that is not valid without them (an Action WriterGroup with a PublishingInterval of 0 whose writers are all NotPersisted) is refused with `Bad_ConfigurationError` |
+| Owned elsewhere | The components a `server.PubSubComponentOwner` keeps (`Server.SetPubSubComponentOwner`). `uafx/fxserver.EnableConnections` registers the `Connections`: the components EstablishConnections creates are theirs (restored from `ConnectionOptions.Store` with a persistent ConnectionEndpoint, gone with a non-persistent one) ([uafx.md](uafx.md#persistence)) |
+| Changes on the runtime | `Server.PubSub()` changes outside the transaction; the next change in it writes them, or `Server.PersistPubSubConfiguration` |
+| Security | Secured WriterGroups, ReaderGroups and DataSetReaders of a restored configuration gate their SecurityGroup until a key newer than the restart is current ([security.md](security.md#pubsub-configuration-store)) |
+
+`pubsubstore.Open` takes any `fxstore.Store` (a database, an encrypting
+wrapper); its namespace `pubsub` must be the only one in it. `Store.Status`
+reports the revision and whether the store is fenced.
+
+---
+
 ## Discovery
 
 Clients find servers in three steps of growing reach: `GetEndpoints` on a
@@ -1746,7 +1781,7 @@ srv, _ := server.New(
 |-----------|--------|
 | Validation | New channels and sessions validate the client application certificate against the trust list (Part 4 §6.1.3): a chain to a trusted certificate, issuer certificates as intermediates, CRLs of the CAs (`Bad_CertificateRevoked`, `Bad_CertificateIssuerRevoked`). It replaces `WithClientCertificateTrustList` (`New` refuses both) |
 | Trust list input | CloseAndUpdate decodes the TrustListDataType exactly; every certificate and CRL must parse, a CRL must be signed by a CA of the lists; at most 1024 entries and `MaxTrustListSize` bytes (default 1 MiB; `Bad_EncodingLimitsExceeded` beyond) |
-| Transactions | AddCertificate, RemoveCertificate, CloseAndUpdate and UpdateCertificate collect their changes in a transaction of the calling session (Part 12 §7.10.2); they take effect at ApplyChanges, CancelChanges drops them, another session gets `Bad_TransactionPending`. The end of the session cancels its transaction at once and discards the pending changes (§7.10.2, §7.10.9), with the handles of its TrustList files and what they hold without CloseAndUpdate. An ApplyChanges that fails (a certificate to delete that is in use, a `Store` that cannot write) applies nothing and discards the transaction: "If any errors are found then all changes are discarded" (§7.10.2). `ApplyImmediately` applies every change when its method returns |
+| Transactions | AddCertificate, RemoveCertificate, CloseAndUpdate and UpdateCertificate collect their changes in a transaction of the calling session (Part 12 §7.10.2); they take effect at ApplyChanges, CancelChanges drops them, another session gets `Bad_TransactionPending` for a change and `Bad_SessionIdInvalid` for ApplyChanges and CancelChanges (§7.10.9, §7.10.11). Without an active transaction ApplyChanges and CancelChanges are `Bad_NothingToDo`, and ApplyChanges is `Bad_InvalidState` while a TrustList is open for writing: nothing is applied, and it can be called again once the TrustList is closed (§7.10.9). The end of the session cancels its transaction at once and discards the pending changes (§7.10.2, §7.10.9), with the handles of its TrustList files and what they hold without CloseAndUpdate. An ApplyChanges that fails (a certificate to delete that is in use, a `Store` that cannot write) applies nothing and discards the transaction: "If any errors are found then all changes are discarded" (§7.10.2). `ApplyImmediately` applies every change when its method returns |
 | UpdateCertificate | Replaces the certificate of its group and type: an application instance certificate (RSA, ECDSA on NIST and Brainpool curves, Ed25519, Ed448) or the HTTPS certificate of the DefaultHttpsGroup. The key is the one of the last CreateSigningRequest or CreateSelfSignedCertificate, the current key, or a `PEM` or `PFX` (PKCS #12, password from `PFXPassword`; a wrong one is `Bad_SecurityChecksFailed`) private key. The certificate must carry the server's ApplicationUri and be issued by one of the issuer certificates when they are given |
 | After ApplyChanges | New channels and the endpoints use the new certificate, new TLS handshakes the new HTTPS certificate; channels and connections already open keep theirs and keep working |
 | CreateSigningRequest | PKCS #10 for the current key or, with `regeneratePrivateKey`, a new key of the certificate type: RSA (2048, 3072 or 4096 bits), ECDSA P-256 / P-384, brainpoolP256r1 / brainpoolP384r1, Ed25519 or Ed448 (nonce of at least 32 bytes) |

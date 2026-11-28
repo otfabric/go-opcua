@@ -393,6 +393,14 @@ func (c *Connections) Endpoints() []*ua.NodeID
 
 Endpoints returns the NodeIds of the ConnectionEndpoints the connections manage.
 
+#### func (Connections) OwnsPubSubComponent
+
+```go
+func (c *Connections) OwnsPubSubComponent(ch *server.PubSubChange, kind pubsub.ComponentKind, path []string) bool
+```
+
+OwnsPubSubComponent reports whether the component of kind at path is the Connections': it is added by a change of an EstablishConnections call itself (until the call ends: PersistPubSubConfiguration then hands what no endpoint uses over to the store of the server), it is a PubSubConnection, group or PublishedDataSet a call created, or a DataSetReader or DataSetWriter an endpoint owns, or a component record says a call created it. It is called in the PubSub transaction.
+
 #### func (Connections) Persistence
 
 ```go

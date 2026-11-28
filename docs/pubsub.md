@@ -345,8 +345,11 @@ ActiveMQ Artemis.
   keeps the real value. The PubSubConfiguration file returns the full
   configuration: restrict it with RBAC or `WithPubSubAuthorizer`.
 
-The configuration lives in memory: what clients change with these Methods or
-the PubSubConfiguration file is gone after a restart (see LIMITATIONS.md).
+By default the configuration lives in memory: what clients change with these
+Methods or the PubSubConfiguration file is gone after a restart.
+`server.WithPubSubStore` with `server/pubsubstore` persists it (Part 14
+§9.1.2): every change, one atomic write each, restored when the server starts
+([server-guide.md](server-guide.md#pubsub-configuration-persistence)).
 `server.SetPubSubConfigurationHook` sees every change, in its transaction, for
 an application that stores it itself.
 

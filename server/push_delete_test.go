@@ -143,7 +143,7 @@ func TestPushDeleteCertificate(t *testing.T) {
 	require.True(t, d.errs[0].TargetID.Equal(defaultGroup))
 	require.Nil(t, s.push.tx)
 	_, sc = pushCall(t, s, ctx, scObj, mCancel)
-	require.Equal(t, ua.StatusOK, sc)
+	require.Equal(t, ua.StatusBadNothingToDo, sc, "no active transaction (Part 12 §7.10.11)")
 	cert, _, _ = s.cfg.identityFor(ua.SecurityPolicyURIBasic256Sha256)
 	require.Equal(t, p.ServerCert, cert)
 
@@ -174,7 +174,7 @@ func TestPushDeleteCertificate(t *testing.T) {
 	st.derr = nil
 	st.dmu.Unlock()
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
-	require.Equal(t, ua.StatusOK, sc)
+	require.Equal(t, ua.StatusBadNothingToDo, sc, "the failed ApplyChanges ended the transaction")
 	_, ok = func() ([]byte, bool) { c, _, ok := s.cfg.identityFor(ua.SecurityPolicyURIECCNistP256); return c, ok }()
 	require.True(t, ok)
 }

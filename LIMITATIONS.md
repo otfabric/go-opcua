@@ -16,9 +16,7 @@ behaviour you may notice, and the deviations of peers are in
   0600 files. It does not keep the pending transaction, the rejected list or
   the key a CreateSigningRequest generated: after a restart UpdateCertificate
   with the certificate of such a request fails (`Bad_SecurityChecksFailed`)
-  unless it brings its key. ApplyChanges does not return `Bad_InvalidState`
-  for a TrustList still open for writing (Part 12 §7.10.9), and returns
-  Good, not `Bad_NothingToDo`, without a transaction.
+  unless it brings its key.
 - Dynamic decoding of custom structures (`opcua.DynamicTypeDecoding`) reads
   the DataTypeDefinition Attribute only: a server that describes its types
   with a DataTypeDictionary (OPC 10000-5 Annex D, the 1.03 mechanism) and not
@@ -78,9 +76,22 @@ behaviour you may notice, and the deviations of peers are in
   implements UAFX, so it is tested against go-opcua only (see [docs/uafx.md](docs/uafx.md#limits)).
 - Time-scheduled Ethernet (TSN) and AMQP over WebSockets.
 - The PubSub configuration of a server (`server.WithPubSub`, the configuration
-  Methods and the PubSubConfiguration file) lives in memory: it is not
-  persisted across a restart (Part 14 §9.1.2), outside the components UAFX
-  persists.
+  Methods and the PubSubConfiguration file) lives in memory unless
+  `server.WithPubSubStore` persists it (Part 14 §9.1.2, `server/pubsubstore`,
+  v1.43.0). The store keeps the configuration of PublishSubscribe, its
+  PublishedDataSets and PubSubConnections with their groups, writers and
+  readers; not the SecurityGroups, their keys and the PubSubKeyPushTargets
+  (§8), and not the ID reservations of ReserveIds, which end with their
+  session (§9.1.3.7.5). A change made on the runtime directly
+  (`Server.PubSub()`) is written with the next change made through the
+  server, or by `Server.PersistPubSubConfiguration`. A component another
+  mechanism adds below a component a UAFX EstablishConnections call created
+  is persisted by neither store (docs/uafx.md). A restored secured group
+  gates its SecurityGroup until a newer key is current, so a SecurityGroup
+  with static keys stays closed after a restart. With `ua.StatusBadInternalError`
+  for a store that does not write, the Methods of §9.1.3 answer with a code
+  their tables do not list (none of them covers a store failure): a library
+  interpretation.
 - mDNS has no probing or conflict resolution.
 - History Annotations (Part 11 §5.1.2): the SourceTimestamp identifies an
   Annotation, so a node has at most one per time (§6.9.3 leaves the choice to

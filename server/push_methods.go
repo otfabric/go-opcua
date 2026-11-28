@@ -756,39 +756,70 @@ func (m *pushManager) getRejectedList(_ context.Context, _ *MethodCaller, _ []*u
 	return []*ua.Variant{ua.MustVariant(certs)}, ua.StatusOK
 }
 
-// applyChanges is ApplyChanges (Part 12 §7.10.6): applies the transaction
-// of the session.
+// applyChanges is ApplyChanges (Part 12 §7.10.9): applies the transaction
+// of the session. "If ApplyChanges is called and there is no active
+// transaction then the Server returns Bad_NothingToDo"; a session other
+// than the one that created the transaction gets Bad_SessionIdInvalid ("The
+// session is not valid for the active transaction"); and "ApplyChanges
+// returns Bad_InvalidState if any TrustList is still open for writing. No
+// changes are applied and ApplyChanges can be called again after the
+// TrustList is closed" (all §7.10.9).
 func (m *pushManager) applyChanges(ctx context.Context, c *MethodCaller, _ []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.tx == nil {
-		return nil, ua.StatusOK
-	}
-	if _, sc := m.txLocked(c.SessionID); sc != ua.StatusOK {
+	if sc := m.ownTxLocked(c.SessionID); sc != ua.StatusOK {
 		return nil, sc
+	}
+	if m.writingLocked() {
+		return nil, ua.StatusBadInvalidState
 	}
 	return nil, m.applyLocked(ctx)
 }
 
-// cancelChanges is CancelChanges (Part 12 §7.10.10): drops the
-// transaction of the session.
+// cancelChanges is CancelChanges (Part 12 §7.10.11): drops the
+// transaction of the session, with the result codes of ApplyChanges:
+// Bad_NothingToDo without an active transaction, Bad_SessionIdInvalid for
+// another session.
 func (m *pushManager) cancelChanges(_ context.Context, c *MethodCaller, _ []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.tx == nil {
-		return nil, ua.StatusOK
+	if sc := m.ownTxLocked(c.SessionID); sc != ua.StatusOK {
+		return nil, sc
 	}
-	if m.otherTxLocked(c.SessionID) {
-		return nil, ua.StatusBadTransactionPending
-	}
-	if m.tx != nil && m.tx.session.Equal(c.SessionID) {
+	m.tx = nil
+	m.endDiagnostics(ua.StatusBadRequestCancelledByClient)
+	return nil, ua.StatusOK
+}
+
+// ownTxLocked checks that session may end the active transaction (Part 12
+// §7.10.9, §7.10.11): Bad_NothingToDo when there is none, and
+// Bad_SessionIdInvalid when another session created it. A transaction of a
+// session that is gone is dropped, which leaves none ("Transactions are
+// automatically cancelled when the Session that created it is closed",
+// §7.10.2).
+func (m *pushManager) ownTxLocked(session *ua.NodeID) ua.StatusCode {
+	if m.tx != nil && !m.tx.session.Equal(session) && !m.otherTxLocked(session) {
 		m.tx = nil
-		m.endDiagnostics(ua.StatusBadRequestCancelledByClient)
-	} else {
-		m.tx = nil // of a closed session
 		m.endDiagnostics(ua.StatusBadSessionClosed)
 	}
-	return nil, ua.StatusOK
+	switch {
+	case m.tx == nil:
+		return ua.StatusBadNothingToDo
+	case !m.tx.session.Equal(session):
+		return ua.StatusBadSessionIDInvalid
+	}
+	return ua.StatusOK
+}
+
+// writingLocked reports whether a TrustList of the groups is open for
+// writing.
+func (m *pushManager) writingLocked() bool {
+	for _, g := range m.groups {
+		if g.file != nil && g.file.openForWriting() {
+			return true
+		}
+	}
+	return false
 }
 
 // resetToServerDefaults is ResetToServerDefaults (Part 12 §7.10.13): the
