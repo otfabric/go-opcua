@@ -20,7 +20,7 @@ The Methods of FileType and FileDirectoryType (OPC 10000-20 §4.2, §4.3) are th
 func StatusOf(err error) ua.StatusCode
 ```
 
-StatusOf returns the status an error of Unpack stands for, so a Method handler can return it: the Status of an \*ArgumentError, else Bad\_InvalidArgument. It returns StatusOK for nil.
+StatusOf returns the operation level status an error of Unpack stands for, so a Method handler can return it (OPC 10000-4 §5.12.2.2 and Table 61): Bad\_ArgumentsMissing or Bad\_TooManyArguments for the number of input arguments, Bad\_InvalidArgument for an input argument that "broke a constraint (e.g. wrong data type ...)", whose own Bad\_TypeMismatch (Table 62) is the Status of the \*ArgumentError; the Status of an \*ArgumentError of an output argument; Bad\_InvalidArgument for any other error. It returns StatusOK for nil.
 
 ## Types
 
