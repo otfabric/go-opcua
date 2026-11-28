@@ -488,6 +488,34 @@ GetRejectedList.
   certificate expires and TrustListOutOfDate when a trust list has not been
   updated for `TrustListUpdateFrequency`.
 
+### PubSub configuration store
+
+`server.WithPubSubStore` with `server/pubsubstore` writes the PubSub
+configuration of the server to disk (Part 14 §9.1.2):
+
+- **Secrets.** The records hold the configuration as the runtime has it,
+  ConnectionProperties, GroupProperties, DataSetWriterProperties and
+  DataSetReaderProperties included: the broker password of an MQTT or AMQP
+  connection, which the address space shows as null, is in them in clear
+  (Part 14 §6.2.2: properties "may contain information that should not be
+  visible outside the configuration tools"). SecurityGroups, their keys and
+  the PubSubKeyPushTargets are not in the records.
+- **Files.** `pubsubstore.OpenDir` creates its directory 0700 and its files
+  0600 (`fxstore.FileStore`), refuses a directory the group or others may
+  write, and holds an exclusive lock on it. For encryption at rest, pass
+  `pubsubstore.Open` an `fxstore.Store` that encrypts.
+- **Restarts.** A restored WriterGroup, ReaderGroup or DataSetReader with a
+  SecurityMode above None gates its SecurityGroup
+  (`pubsub.PubSub.GateSecurityGroup`): it neither secures nor accepts
+  messages until a key newer than the restart is current (Part 14 §7.2.3,
+  §7.2.4.4.3), so that a key in use before the restart is not used again.
+  A SecurityGroup whose key never changes (static keys of the application)
+  therefore stays closed after a restore: it needs a key source that
+  rotates, such as an SKS.
+- **Integrity.** A record that does not decode, a configuration that is not
+  valid, or a store of another `Owner` fails `Open`; the server does not start
+  on a configuration it cannot restore completely.
+
 ---
 
 ## Authentication Modes

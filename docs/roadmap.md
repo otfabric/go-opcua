@@ -163,7 +163,12 @@ One persistence package for the server, PubSub and UAFX, from
   at `uafx/fxstore` (docs/architecture.md, Persistence);
 - persistence of the PubSub configuration of the server, with NotPersisted
   (Part 14 §9.1.2), for the Go API, the configuration Methods and the
-  configuration file;
+  configuration file: done in v1.43.0. `server.WithPubSubStore` with
+  `server/pubsubstore` writes each change of any of them in one
+  `fxstore.Domain.Apply` and restores it when the server starts; a write
+  that fails undoes the change (`Bad_InternalError`). The components
+  EstablishConnections creates stay with `uafx/fxserver`
+  (`server.PubSubComponentOwner`; docs/architecture.md, Persistence);
 - persistence of the managed RoleSet (`server.WithRoleManagement`): the
   roles AddRole added and the Identities, Applications and Endpoints of
   every role, kept in memory since v1.43.0: done in v1.43.0.

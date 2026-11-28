@@ -65,6 +65,7 @@ Packages are tiered by intended audience and stability commitment:
 | `uafx/fxdataid/`, `uafx/fxacid/`, `uafx/fxcmid/`, `di/diid/` | NodeIds of the UAFX namespaces and of the DI model |
 | `uafx/fxstore/`, `uafx/fxstore/storetest/` | The persistence of the library: a byte key-value `Store` with an atomic `Apply`, the `Domain` written through it (revision, batch identity, fence until `Settle`), `MemoryStore`, `FileStore`, and the contract tests (see [Persistence](#persistence)) |
 | `server/pushstore/` | The store of push certificate management on a `Domain` of `uafx/fxstore`: one atomic write per ApplyChanges, restored by `server.New` |
+| `server/pubsubstore/` | The store of the PubSub configuration of the server on a `Domain` of `uafx/fxstore`: one atomic write per change, restored when the server starts (see [PubSub configuration persistence](#pubsub-configuration-persistence)) |
 | `server/rolestore/` | The store of the managed RoleSet on a `Domain` of `uafx/fxstore`: one atomic write per change of a role, restored at `Server.Start` (see [RoleSet persistence](#roleset-persistence)) |
 
 **Tier 3 — Internal.** Not part of the supported public API. May change without notice.
@@ -93,8 +94,10 @@ The design is [docs/design/uafx-persistent-connections.md](design/uafx-persisten
 
 Its users are the UAFX AutomationComponent and ConnectionManager
 (`uafx/fxserver`, `uafx/fxcm`) and the push certificate management of the
-server (`server/pushstore`, namespace `push`, from v1.43.0) and the managed
-RoleSet (`server/rolestore`, namespace `roles`, from v1.43.0, below). The server
+server (`server/pushstore`, namespace `push`, from v1.43.0), the PubSub
+configuration of the server (`server/pubsubstore`, namespace `pubsub`, from
+v1.43.0, below) and the managed RoleSet (`server/rolestore`, namespace
+`roles`, from v1.43.0, below). The server
 package itself does not import it: `server` defines the interfaces of its
 store (`CertificateStore`, `CertificateBatchStore`, `CertificateLoadStore`)
 and `server/pushstore` implements them on `fxstore`, so the dependencies run
@@ -107,9 +110,46 @@ to a neutral path with type aliases left behind is an incompatible change to
 type becomes "changed from `Store` to `<new path>.Store`" (checked against
 an alias of every kind of declaration of the package before this choice).
 Wrappers instead of aliases would duplicate every type. The path can move
-with the next major version; until then a new user (the PubSub configuration
-of phase 4 of [roadmap.md](roadmap.md)) imports `uafx/fxstore` the same way,
-as `server/rolestore` does.
+with the next major version; until then a new user imports `uafx/fxstore`
+the same way, as `server/pubsubstore` and `server/rolestore` do.
+
+### PubSub configuration persistence
+
+"The latest configuration shall be persisted by the OPC UA Server and shall
+be available after a restart" (Part 14 §9.1.2). `server.WithPubSubStore`
+takes a `server.PubSubConfigurationStore`; `server/pubsubstore` implements
+it on one `fxstore.Domain` (namespace `pubsub`), so the dependencies run
+`server/pubsubstore` → `server` and → `uafx/fxstore`, never `server` →
+`uafx`.
+
+Every mechanism that changes the configuration already runs in the PubSub
+transaction of the server (`Server.ChangePubSubConfiguration` and its
+variants, the Methods of §9.1.3, CloseAndUpdate of the PubSubConfiguration
+file, §9.1.3.7.6, `PubSubConfigurationUpdate.Revert`), which §9.1.2 asks
+for: "all mechanisms coordinate access to the configuration". The store is
+written there, once per change, after the `PubSubConfigurationHook`
+accepted it: one `Domain.Apply` of the records that change. A write that
+fails reconciles the runtime back to the configuration before the change
+(the hook sees that as a Revert) and fails the change with
+`Bad_InternalError`, which none of the result codes of the Methods covers;
+an unknown outcome fences the store, and `Settle` (or the next change)
+writes the configuration the server has back. The restore runs once, in
+the transaction, before the first change, `BuildPubSubModel` or `Start`,
+and fails them while it cannot run (fail closed).
+
+What is not written: the components with 0:NotPersisted TRUE (§6.2.2
+Table 4) and what is below them, and the components a
+`server.PubSubComponentOwner` keeps. Each component has one store:
+`uafx/fxserver` registers its `Connections` as the owner of the
+components its EstablishConnections calls created, which its own records
+restore for a persistent ConnectionEndpoint and which go with a
+non-persistent one, as the endpoint does (Part 81 §5.5.5). The components
+an endpoint references but did not create, preconfigured or added by
+another mechanism, stay with the server's store, which restores them
+first; the endpoint restore then adopts them as it adopts any existing
+component (docs/design/uafx-persistent-connections.md §5). After each call
+`uafx/fxserver` hands the components of the call that no endpoint uses to
+the server's store (`Server.PersistPubSubConfiguration`).
 
 ### RoleSet persistence
 

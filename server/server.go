@@ -254,6 +254,8 @@ type serverConfig struct {
 	pubsub *pubsubConfig
 	// pubsubAuth authorises the PubSub configuration methods.
 	pubsubAuth PubSubAuthorizer
+	// pubsubStore persists the PubSub configuration (WithPubSubStore).
+	pubsubStore PubSubConfigurationStore
 
 	// diagnosticsOff starts the server with EnabledFlag false
 	// (WithServerDiagnostics).
@@ -347,6 +349,9 @@ func New(opts ...Option) (*Server, error) {
 	}
 	if cfg.accessController == nil {
 		cfg.accessController = DefaultAccessController{}
+	}
+	if cfg.pubsubStore != nil && cfg.pubsub == nil {
+		return nil, stderrors.New("server: WithPubSubStore needs WithPubSub")
 	}
 	if cfg.roleSetStore != nil && cfg.roleMgmt == nil {
 		return nil, stderrors.New("server: WithRoleSetStore needs WithRoleManagement")

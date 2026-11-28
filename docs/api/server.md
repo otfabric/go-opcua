@@ -4080,6 +4080,20 @@ WithPubSubAuthorizer restricts the PubSub configuration methods. Without it ever
 
 Whatever the authorizer, a session that configures a reader must be allowed to write its TargetVariables (CheckWrite and AccessLevel for the Value, CheckWrite and WriteMask for other Attributes), and one that adds published variables must be allowed to read them (CheckRead): Bad\_UserAccessDenied, Bad\_NotWritable otherwise. The runtime writes a target Attribute other than the Value only where its WriteMask allows it.
 
+#### func WithPubSubStore
+
+```go
+func WithPubSubStore(st PubSubConfigurationStore) Option
+```
+
+WithPubSubStore persists the PubSub configuration of [WithPubSub](#func-withpubsub) in st (OPC 10000-14 §9.1.2). Once st holds a configuration it is the configuration of the server: the server restores it before it builds the PubSub information model ([Server.BuildPubSubModel](#func-server-buildpubsubmodel) or Start, or the first [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration) before them), in place of the configuration given to WithPubSub, which is the configuration of an empty store only. A store that cannot be loaded, or a configuration that is not valid, fails the restore: BuildPubSubModel and Start return the error and the server does not start (fail closed). Register the namespaces the configuration uses before.
+
+Every change of the configuration made in the PubSub transaction is written in one call of st before the Method or function that made it returns; a write that fails undoes the change and fails it with Bad\_InternalError. A change made on the runtime directly ([Server.PubSub](#func-server-pubsub)) is outside the transaction: it is written with the next change made in it, or by [Server.PersistPubSubConfiguration](#func-server-persistpubsubconfiguration).
+
+A restored WriterGroup, ReaderGroup or DataSetReader with a SecurityMode above None gates its SecurityGroup in the runtime ([pubsub.PubSub.GateSecurityGroup](https://pkg.go.dev/github.com/otfabric/go-opcua/pubsub#PubSub.GateSecurityGroup)): it neither secures nor accepts messages under a key that may have been in use before the restart (Part 14 §7.2.3, §7.2.4.4.3).
+
+It needs WithPubSub.
+
 #### func WithPushManagement
 
 ```go
@@ -4280,6 +4294,21 @@ type PubSubComponentMove struct {
 
 PubSubComponentMove is a component a refused change brought back under a new ComponentID and node: the same kind and path of names (its PubSubConnection, group and own Name; a PublishedDataSet's Name).
 
+### type PubSubComponentOwner
+
+```go
+type PubSubComponentOwner interface {
+	// OwnsPubSubComponent reports whether the owner keeps the component of
+	// kind at path: the names from its PubSubConnection down (a
+	// PublishedDataSet: its Name), in the configuration ch.After. It is
+	// called in the PubSub transaction, after the PubSubConfigurationHook
+	// accepted ch; it must not change the configuration.
+	OwnsPubSubComponent(ch *PubSubChange, kind pubsub.ComponentKind, path []string) bool
+}
+```
+
+PubSubComponentOwner is a part of the application that persists some PubSub components itself, or keeps them in memory on purpose: the [PubSubConfigurationStore](#type-pubsubconfigurationstore) of the server leaves them out, with what is below them. The persistent ConnectionEndpoints of OPC UA FX (package uafx/fxserver) own the components their EstablishConnections calls created, so that each component has one store that restores it.
+
 ### type PubSubConfigurationHook
 
 ```go
@@ -4312,6 +4341,34 @@ type PubSubConfigurationRestorer interface {
 ```
 
 PubSubConfigurationRestorer is a [PubSubConfigurationHook](#type-pubsubconfigurationhook) that follows the components a refused change brings back. The runtime is reconciled back to the configuration before the change by name, so a component the change removed or changed comes back under a new ComponentID and node: PubSubConfigurationRestored is called with those moves, in the PubSub transaction, after the runtime was reconciled back and before anything else changes the configuration. It must not change the configuration.
+
+### type PubSubConfigurationStore
+
+```go
+type PubSubConfigurationStore interface {
+	// LoadPubSubConfiguration returns the stored configuration with its
+	// NodeIds in the namespaces of namespaces, the NamespaceArray of the
+	// server, or nil when the store holds no configuration. An error, a
+	// NodeId in a namespace the server does not have included, fails the
+	// restore: the server does not start with a configuration other than
+	// the latest one.
+	LoadPubSubConfiguration(ctx context.Context, namespaces []string) (*ua.PubSubConfigurationDataType, error)
+	// StorePubSubConfiguration makes cfg, whose NodeIds are in the
+	// namespaces of namespaces, the stored configuration, all or nothing.
+	// It returns nil when cfg is durable. On an error the server does not
+	// apply the change: it undoes it and fails it with
+	// Bad_InternalError. After an error the store must hold the
+	// configuration it held before, or refuse later writes until it does,
+	// so that a restarted server never starts with a change it did not
+	// apply. cfg leaves out the components with 0:NotPersisted TRUE and
+	// those a [PubSubComponentOwner] keeps; the store does not keep it.
+	StorePubSubConfiguration(ctx context.Context, cfg *ua.PubSubConfigurationDataType, namespaces []string) error
+}
+```
+
+PubSubConfigurationStore persists the PubSub configuration of a server: "The latest configuration shall be persisted by the OPC UA Server and shall be available after a restart of the OPC UA Server. PubSub components are not persisted, if the component has the optional NotPersisted property set with a value of true" (OPC 10000-14 §9.1.2). Package server/pubsubstore implements it on a directory.
+
+The server calls StorePubSubConfiguration in the PubSub transaction after each change, whatever makes it (the Methods of Part 14 §9.1.3, CloseAndUpdate, [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration), [PubSubConfigurationUpdate.Revert](#func-pubsubconfigurationupdate-revert), [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration) and [Server.PersistPubSubConfiguration](#func-server-persistpubsubconfiguration)), and LoadPubSubConfiguration once, before the PubSub information model is built ([WithPubSubStore](#func-withpubsubstore)).
 
 ### type PubSubConfigurationUpdate
 
@@ -5365,7 +5422,7 @@ Auditing reports whether the server reports audit events.
 func (s *Server) BuildPubSubModel() error
 ```
 
-BuildPubSubModel publishes the PubSub runtime in the address space now, as Start does: the PublishSubscribe Object, its Methods and the Objects of the components, which then have their NodeIds ([Server.PubSubNodeID](#func-server-pubsubnodeid)). An application that needs those NodeIds before Start (a companion specification that restores References to components, as the persistent ConnectionEndpoints of OPC UA FX do) calls it; Start does not build the model again. It needs a server with a PubSub runtime (WithPubSub).
+BuildPubSubModel publishes the PubSub runtime in the address space now, as Start does: the PublishSubscribe Object, its Methods and the Objects of the components, which then have their NodeIds ([Server.PubSubNodeID](#func-server-pubsubnodeid)). An application that needs those NodeIds before Start (a companion specification that restores References to components, as the persistent ConnectionEndpoints of OPC UA FX do) calls it; Start does not build the model again. It needs a server with a PubSub runtime (WithPubSub). With [WithPubSubStore](#func-withpubsubstore) it restores the stored configuration first, and fails when that fails.
 
 #### func (Server) CertificateGroupID
 
@@ -5588,6 +5645,14 @@ NewFile returns a FileObject of the server that is not in the address space: see
 func (s *Server) Node(nid *ua.NodeID) *Node
 ```
 
+#### func (Server) PersistPubSubConfiguration
+
+```go
+func (s *Server) PersistPubSubConfiguration(ctx context.Context) error
+```
+
+PersistPubSubConfiguration writes the PubSub configuration of the runtime to the store of [WithPubSubStore](#func-withpubsubstore) now, in the PubSub transaction: for changes made on the runtime directly ([Server.PubSub](#func-server-pubsub)), and for components a [PubSubComponentOwner](#type-pubsubcomponentowner) no longer keeps. It restores the store first when that has not happened yet. It does nothing without a store, and returns ua.StatusBadNotSupported without PubSub. An error changes nothing in the runtime: the store follows it with the next write.
+
 #### func (Server) Port
 
 ```go
@@ -5797,6 +5862,14 @@ func (s *Server) SetNamespaceDefaults(namespaceURI string, d NamespaceDefaults) 
 ```
 
 SetNamespaceDefaults sets the default permissions of the namespace with the URI namespaceURI: the DefaultRolePermissions, DefaultUserRolePermissions and DefaultAccessRestrictions Properties of its NamespaceMetadata Object, which apply to the nodes of the namespace that have no RolePermissions or AccessRestrictions of their own (Part 3 §4.9.3, §5.2.9, §5.2.11). The RolePermissions take effect under the [RBACAccessController](#type-rbacaccesscontroller); the AccessRestrictions under every AccessController. A zero NamespaceDefaults removes the defaults. It replaces the defaults of an imported NodeSet Model. It returns an error when the server has no such namespace.
+
+#### func (Server) SetPubSubComponentOwner
+
+```go
+func (s *Server) SetPubSubComponentOwner(o PubSubComponentOwner)
+```
+
+SetPubSubComponentOwner sets the owner of components the store of [WithPubSubStore](#func-withpubsubstore) leaves out; nil removes it. One owner at a time: a second call replaces the first.
 
 #### func (Server) SetPubSubConfigurationHook
 
