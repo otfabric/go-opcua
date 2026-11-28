@@ -15,12 +15,27 @@ import (
 func sessionRoles(sess *session) []*ua.NodeID {
 	var roles []*ua.NodeID
 	if sess != nil {
-		roles = sess.roles
+		roles = sess.currentRoles()
 	}
 	if len(roles) == 0 {
 		roles = []*ua.NodeID{ua.RoleAnonymous.NodeID()}
 	}
 	return roles
+}
+
+// currentRoles returns the roles granted to s. The slice is shared: a
+// change of the roles replaces it (setRoles), so callers do not modify it.
+func (s *session) currentRoles() []*ua.NodeID {
+	s.rolesMu.RLock()
+	defer s.rolesMu.RUnlock()
+	return s.roles
+}
+
+// setRoles replaces the roles granted to s.
+func (s *session) setRoles(roles []*ua.NodeID) {
+	s.rolesMu.Lock()
+	s.roles = roles
+	s.rolesMu.Unlock()
 }
 
 // readsSessionRoles reports whether Read reduces the attribute attr of the

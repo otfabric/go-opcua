@@ -740,8 +740,9 @@ func read(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Varia
 }
 ```
 
-The contracts are those of FileType and FileDirectoryType today; the
-families are chosen in `cmd/methods/config.go`.
+The contracts are those of FileType and FileDirectoryType, and of
+RoleSetType and RoleType (OPC 10000-18); the families are chosen in
+`cmd/methods/config.go`.
 
 ---
 
@@ -1971,6 +1972,50 @@ defaults of their namespace. Reading the RolePermissions,
 UserRolePermissions or AccessRestrictions Attribute of a node without its
 own answers as before; the defaults are read from the NamespaceMetadata
 Object.
+
+### Role management (RoleSet, OPC 10000-18)
+
+By default the roles of a session come from the `RoleMapper`
+(`WithRoleMapper`, `DefaultRoleMapper` without one). `WithRoleManagement`
+adds the managed RoleSet of OPC 10000-18: the server keeps the
+configuration of its roles in memory and serves it through the RoleSet
+Object (`Server.ServerCapabilities.RoleSet`, §4.3), whose roles a
+certificate or user manager changes over the wire with the RoleSet and
+Role Methods, and the application with `Server.RoleSet()`:
+
+```go
+srv, _ := server.New(
+    server.ApplicationIdentity(cert, key),
+    server.EnableSecurity(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt),
+    server.EnableAuthMode(ua.UserTokenTypeUserName),
+    server.WithUsernameValidator(checkPassword),
+    server.WithClientCertificateTrustList(clientCA), // Applications need trusted certificates
+    server.WithAccessController(server.NewRBACAccessController(nil)),
+    server.WithRoleManagement(server.RoleManagement{}),
+)
+// The first administrator: the RoleSet Methods need SecurityAdmin.
+err := srv.RoleSet().AddIdentity(ua.RoleSecurityAdmin.NodeID(),
+    &ua.IdentityMappingRuleType{CriteriaType: ua.IdentityCriteriaTypeUserName, Criteria: "secadmin"})
+maintainer, err := srv.RoleSet().AddRole("Maintainer", "") // in server.RolesNamespaceURI
+```
+
+| Topic | Behaviour |
+|-------|-----------|
+| Roles | The 12 well-known roles of the NodeSet (Anonymous, AuthenticatedUser, Observer, Operator, Engineer, Supervisor, ConfigureAdmin, SecurityAdmin, SecurityKeyServerAdmin, TrustedApplication and the SKS roles), and up to `MaxRoles` (default 64) added by AddRole (§4.2.2) as Objects of RoleType below the RoleSet, with the String NodeId `<namespace index of the BrowseName>:<RoleName>` in the namespace `server.RolesNamespaceURI` (added at the first AddRole). An empty NamespaceUri qualifies the BrowseName with that namespace, any other must be in the NamespaceArray (`Bad_InvalidArgument`); a well-known name with the OPC UA namespace URI is `Bad_AlreadyExists` |
+| Defaults | §4.3: Anonymous has the rules Anonymous and AuthenticatedUser, AuthenticatedUser the rule AuthenticatedUser, TrustedApplication the rule TrustedApplication; these three cannot be changed (`Bad_RequestNotAllowed`; their NodeSet Objects have no Methods). The other roles start without Identities, and with ApplicationsExclude and EndpointsExclude TRUE |
+| Methods | AddRole, RemoveRole (§4.2.3); AddIdentity, RemoveIdentity, AddApplication, RemoveApplication, AddEndpoint, RemoveEndpoint (§4.4.5 to §4.4.10), with their results: `Bad_InvalidArgument`, `Bad_AlreadyExists`, `Bad_NotFound`, `Bad_NodeIdUnknown`, `Bad_RequestNotAllowed`, `Bad_NotSupported` (no more roles), `Bad_ResourceUnavailable` (more than `MaxEntries`, default 256, Identities, Applications or Endpoints of a role) |
+| Properties | Identities, Applications, ApplicationsExclude, Endpoints, EndpointsExclude and CustomConfiguration (FALSE) show the configuration (§4.4.1) and report a data change when it changes; ApplicationsExclude and EndpointsExclude are written with the Write service |
+| Access | A SignAndEncrypt channel (`Bad_SecurityModeInsufficient`) and the SecurityAdmin role (`Bad_UserAccessDenied`), or what `RoleManagement.Authorizer` allows, for the Methods and the Writes. The RolePermissions of the NodeSet limit the Properties to SecurityAdmin under the `RBACAccessController`; an added role takes those of Observer |
+| Granting | At ActivateSession a session gets the roles of the `RoleMapper`, then every role whose Identities match its identity token and whose Applications and Endpoints allow its Client Certificate and Endpoint (§4.4.1), each role once. A change of a role is applied at once to the active sessions (§4.4.1); the `RoleMapper` is not called again for them |
+| Identity rules | UserName (the user name), Thumbprint (SHA-1 of the user certificate, upper-case hex), X509Subject (the subject or the issuer name of the user certificate, `CN="..."/O="..."` in the order of §4.4.3 Table 10), Application (the ApplicationUri of a trusted Client Certificate), Anonymous, AuthenticatedUser, TrustedApplication, Role and GroupId (the `roles` and `groups` claims of a JWT, prefixed with `iss/`, with `WithIssuedTokenPolicy(server.IssuedTokenTypeJWT, …)` only, `Bad_NotSupported` without). A rule of another form is `Bad_InvalidArgument`; an Anonymous rule for SecurityAdmin, ConfigureAdmin or SecurityKeyServerAdmin is `Bad_RequestNotAllowed` |
+| Applications and Endpoints | An include list grants the role only to those, an exclude list to all others; a role with Applications needs a signed channel and a Client Certificate the server validated (a trust list, a validator or push management). An Endpoint matches the endpointUrl of CreateSession and the SecurityPolicy and SecurityMode of the channel; fields left at their default are ignored (§4.4.2) |
+| RemoveRole | Removes the role's nodes, its RolePermissions on every node and in the DefaultRolePermissions of every namespace (§4.2.3), and the role from the sessions. Roles of namespace 0 are not removable (`Bad_RequestNotAllowed`) |
+| Audit | With auditing on, a change by a Role Method reports a RoleMappingRuleChangedAuditEventType event (§4.5); AddRole, RemoveRole and refused calls an AuditUpdateMethodEventType event |
+| Persistence | None: the configuration starts from the defaults with each `New` and is lost when the process ends |
+
+Without `WithRoleManagement` the roles come from the `RoleMapper` alone,
+the RoleSet Methods are not served (`Bad_MethodInvalid`) and the
+Properties have the values of the NodeSet, as in v1.42 and earlier.
 
 ---
 

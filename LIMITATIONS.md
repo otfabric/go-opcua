@@ -128,6 +128,23 @@ behaviour you may notice, and the deviations of peers are in
   AccessRestrictions Attribute of a node without its own does not answer
   with the defaults of its namespace, which are read from the
   NamespaceMetadata Object.
+- Managed RoleSet (`server.WithRoleManagement`, OPC 10000-18): the
+  configuration of the roles lives in memory and is lost when the process
+  ends (persistence is phase 4 of docs/roadmap.md). The roles of namespace 0
+  cannot be removed; Anonymous, AuthenticatedUser and TrustedApplication
+  cannot be changed. Browse and Read of the role Properties are limited to
+  administrators only by the `RBACAccessController` (or an own
+  `AccessController`), through the RolePermissions of the nodes, not by the
+  RoleSet itself (§4.4.1). CustomConfiguration is always FALSE: no vendor-specific
+  mapping. The RoleMapper is not called again when a role changes: an active
+  session keeps the RoleMapper roles of its last ActivateSession. Thumbprint
+  rules use SHA-1 (Part 6 §3.1.1, the hash where no SecurityPolicy
+  applies). Role and GroupId rules need JWT issued tokens and read the
+  `roles`, `groups` and `iss` claims only. A session whose endpointUrl
+  names no configured Endpoint gets no role that has Endpoints. The added
+  role nodes have no NodeVersion, so AddRole and RemoveRole report no
+  GeneralModelChangeEvent (Part 3 §9.32.2). RoleSet and `rolemgmt` are tested against go-opcua only: no peer of the
+  pinned opcua-interop release manages roles.
 - Durable subscriptions (`server`, SetSubscriptionDurable, OPC 10000-5 §9.3):
   the subscription, its MonitoredItems and their queues live in memory. They
   outlive the session for the revised lifetime and another session takes
@@ -140,7 +157,8 @@ behaviour you may notice, and the deviations of peers are in
   ServerStatus only: the application's `server.ServerStateChangeFunc` decides
   whether to accept a change, and stops or restarts the server itself;
   without one every request is Bad_InvalidState. Administrative rights are
-  the ConfigureAdmin and SecurityAdmin roles of the RoleMapper.
+  the ConfigureAdmin and SecurityAdmin roles of the session (from the
+  RoleMapper and, with `server.WithRoleManagement`, the RoleSet).
 - The Methods of the Server Object (GetMonitoredItems, ResendData,
   SetSubscriptionDurable, RequestServerStateChange) are tested against
   go-opcua only.

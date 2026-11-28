@@ -17,6 +17,7 @@
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` | Fully implemented |
 | **Method** | `Call`, `CallMethod`; typed contracts of package `uamethod` | Fully implemented |
 | **Files** (Part 20, over Method + Call) | package `filetransfer`: FileType (`Open`, `Read`, `Write`, `Position`, `SetPosition`, `Close`, `ReadAll`, `WriteAll`, `Info`, `io.Reader` / `io.Writer`) and FileDirectoryType (`Entries`, `CreateDirectory`, `CreateFile`, `Delete`, `MoveOrCopy`) | Implemented; see [Files](#files-part-20) |
+| **Role management** (Part 18, over Method + Call, Read, Write) | package `rolemgmt`: RoleSet (`Roles`, `AddRole`, `RemoveRole`) and roles (`Config`, `AddIdentity`, `RemoveIdentity`, `AddApplication`, `RemoveApplication`, `AddEndpoint`, `RemoveEndpoint`, `SetApplicationsExclude`, `SetEndpointsExclude`) | Implemented; see [Role management](#role-management-opc-10000-18) |
 | **Subscription** | `Subscribe`, `SubscriptionBuilder`, `SetPublishingMode`, `Republish`, `TransferSubscriptions` | Fully implemented; reconnect recovery via `WithSubscriptionRecoveryHandler` |
 | **Monitored Items** | `Monitor`, `ModifyMonitoredItems`, `Unmonitor`, `SetMonitoringMode`, `SetTriggering` | Fully implemented (exact queues / Overflow on go-opcua servers) |
 | **Query** | `QueryFirst`, `QueryNext` | Fully implemented (server-dependent) |
@@ -1176,7 +1177,7 @@ result, err := c.Call(ctx, req)
 ### Typed calls
 
 Package `uamethod` has generated contracts of Methods of namespace 0
-(FileType and FileDirectoryType today): typed inputs and outputs and a
+(FileType, FileDirectoryType, RoleSetType and RoleType): typed inputs and outputs and a
 call function that checks the outputs against the declaration. A nil
 method NodeId calls the declaration of the type, which a server maps to
 the Method of the Object (Part 4 §5.12.2.2 in 1.05.06):
@@ -1220,6 +1221,33 @@ obj, file, err := d.Directory(logs).CreateFile(ctx, "today", true) // opened wit
 newID, err := d.MoveOrCopy(ctx, obj.NodeID(), logs, true, "copy") // copy into logs
 err = d.Delete(ctx, logs)
 ```
+
+## Role management (OPC 10000-18)
+
+Package `rolemgmt` configures the roles of a server through its RoleSet
+Object (OPC 10000-18 §4.3): AddRole and RemoveRole (§4.2.2, §4.2.3), the
+Properties of a role (§4.4.1) and its Methods AddIdentity, RemoveIdentity,
+AddApplication, RemoveApplication, AddEndpoint and RemoveEndpoint (§4.4.5
+to §4.4.10). The server requires a SignAndEncrypt channel and a user with
+administrator rights such as the SecurityAdmin role.
+
+```go
+rs := rolemgmt.New(c) // Server.ServerCapabilities.RoleSet
+roles, err := rs.Roles(ctx)                  // the role Objects, with their BrowseNames
+role, err := rs.AddRole(ctx, "Maintainer", "") // "": the namespace the server chooses
+err = role.AddIdentity(ctx, &ua.IdentityMappingRuleType{
+    CriteriaType: ua.IdentityCriteriaTypeUserName, Criteria: "bob"})
+err = role.AddApplication(ctx, "urn:example:hmi")
+err = role.SetApplicationsExclude(ctx, false)  // Applications become an include list
+cfg, err := role.Config(ctx)                    // Identities, Applications, Endpoints, ...
+err = rs.RemoveRole(ctx, role.NodeID)
+
+observer := rs.Role(ua.RoleObserver.NodeID())   // a well-known role
+```
+
+A Bad result is an `*uamethod.CallError` (`errors.Is(err,
+ua.StatusBadUserAccessDenied)` holds); a refused Read or Write of a
+Property wraps its StatusCode.
 
 ---
 
