@@ -132,6 +132,23 @@ behaviour you may notice, and the deviations of peers are in
   role nodes have no NodeVersion, so AddRole and RemoveRole report no
   GeneralModelChangeEvent (Part 3 §9.32.2). RoleSet and `rolemgmt` are tested against go-opcua only: no peer of the
   pinned opcua-interop release manages roles.
+- Durable subscriptions (`server`, SetSubscriptionDurable, OPC 10000-5 §9.3):
+  the subscription, its MonitoredItems and their queues live in memory. They
+  outlive the session for the revised lifetime and another session takes
+  them over with TransferSubscriptions, but a restart of the server loses
+  them (OPC 10000-4 §6.8 lets a Server store them; this one does not). The
+  retransmission queue for Republish keeps the last 10 NotificationMessages,
+  as for every subscription. Limits: `server.DurableSubscriptions` (24 hours
+  and 10000 values by default).
+- RequestServerStateChange (`server`, OPC 10000-5 §9.4) changes the
+  ServerStatus only: the application's `server.ServerStateChangeFunc` decides
+  whether to accept a change, and stops or restarts the server itself;
+  without one every request is Bad_InvalidState. Administrative rights are
+  the ConfigureAdmin and SecurityAdmin roles of the session (from the
+  RoleMapper and, with `server.WithRoleManagement`, the RoleSet).
+- The Methods of the Server Object (GetMonitoredItems, ResendData,
+  SetSubscriptionDurable, RequestServerStateChange) are tested against
+  go-opcua only.
 
 ## Verification
 

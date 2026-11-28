@@ -270,8 +270,8 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 		func() *ua.DataValue { return DataValueFromValue(time.Now()) },
 	)
 
-	//Server_ServerStatus_SecondsTillShutdown                                                                                                                               = 2992
-	//Server_ServerStatus_ShutdownReason                                                                                                                                    = 2993
+	// SecondsTillShutdown (UInt32) and ShutdownReason (LocalizedText) of
+	// the ServerStatus (OPC 10000-5 §12.10), which SetServerState sets.
 	sTillShutdown := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusSecondsTillShutdown),
 		map[ua.AttributeID]*ua.DataValue{
@@ -281,7 +281,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
-		func() *ua.DataValue { return DataValueFromValue(int32(0)) },
+		func() *ua.DataValue { return DataValueFromValue(s.Status().SecondsTillShutdown) },
 	)
 	sReason := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusShutdownReason),
@@ -292,7 +292,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
-		func() *ua.DataValue { return DataValueFromValue(int32(0)) },
+		func() *ua.DataValue { return DataValueFromValue(s.Status().ShutdownReason) },
 	)
 
 	nodes := []*Node{sState, mName, pName, pURI, sVersion, bNumber, bDate, timeStart, timeCurrent, bInfo, sTillShutdown, sReason}
