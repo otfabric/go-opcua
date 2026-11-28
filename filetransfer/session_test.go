@@ -12,9 +12,11 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/filetransfer"
+	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 )
 
 // TestFileHandleSurvivesChannel: a file handle belongs to the session, not
@@ -81,4 +83,36 @@ func TestFileHandleSurvivesChannel(t *testing.T) {
 	h, err := filetransfer.NewObject(other, wid).Open(ctx, ua.OpenFileModeWrite)
 	require.NoError(t, err)
 	require.NoError(t, h.Close(ctx))
+}
+
+// TestInfoReadFails: a Read the server refuses fails Info with the status.
+func TestInfoReadFails(t *testing.T) {
+	ctx := context.Background()
+	srv, url := testutil.NewTestServer(t, server.WithOperationLimits(server.OperationalLimits{MaxNodesPerRead: 2}))
+	ns := server.NewNodeNameSpace(srv, "urn:test:filetransfer:limits")
+	e := &env{srv: srv, ns: ns, url: url, c: testutil.NewTestClient(t, url)}
+	nid, _ := e.addFile(t, "f", server.FileConfig{Backend: server.NewMemoryFile([]byte("abc"))})
+	_, err := filetransfer.NewObject(e.c, nid).Info(ctx)
+	require.ErrorIs(t, err, ua.StatusBadTooManyOperations)
+	require.ErrorContains(t, err, "filetransfer: reading the Properties")
+}
+
+// TestDirectoryOutputs: a Directory Method whose result lacks its output
+// arguments is an error of the call.
+func TestDirectoryOutputs(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	obj := ua.NewNumericNodeID(0, id.ObjectsFolder) // no Methods: the declarations are called
+	for _, m := range []*uamethod.Method{uamethod.FileDirectoryTypeCreateDirectory, uamethod.FileDirectoryTypeCreateFile, uamethod.FileDirectoryTypeMoveOrCopy} {
+		e.srv.RegisterMethod(obj, ua.NewNumericNodeID(0, m.ID), func(context.Context, *ua.NodeID, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+			return nil, ua.StatusOK
+		})
+	}
+	d := filetransfer.NewDirectory(e.c, obj)
+	_, err := d.CreateDirectory(ctx, "d")
+	require.ErrorIs(t, err, ua.StatusBadArgumentsMissing)
+	_, _, err = d.CreateFile(ctx, "f", false)
+	require.ErrorIs(t, err, ua.StatusBadArgumentsMissing)
+	_, err = d.MoveOrCopy(ctx, obj, obj, false, "")
+	require.ErrorIs(t, err, ua.StatusBadArgumentsMissing)
 }

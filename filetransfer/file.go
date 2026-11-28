@@ -137,11 +137,24 @@ func (o *Object) Info(ctx context.Context) (*Info, error) {
 	if err != nil {
 		return nil, fmt.Errorf("filetransfer: browsing %v: %w", o.id, err)
 	}
-	info := &Info{}
+	nodes, names := infoReads(refs)
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("filetransfer: %v has no Properties of FileType: %w", o.id, ua.StatusBadNotFound)
+	}
+	res, err := o.c.Read(ctx, &ua.ReadRequest{NodesToRead: nodes, TimestampsToReturn: ua.TimestampsToReturnNeither})
+	if err != nil {
+		return nil, fmt.Errorf("filetransfer: reading the Properties of %v: %w", o.id, err)
+	}
+	return infoOf(names, res.Results)
+}
+
+// infoReads returns the Values to read of the FileType Properties among
+// the HasProperty references refs, and their names.
+func infoReads(refs []*ua.ReferenceDescription) ([]*ua.ReadValueID, []string) {
 	var nodes []*ua.ReadValueID
 	var names []string
 	for _, r := range refs {
-		if r.BrowseName == nil || r.BrowseName.NamespaceIndex != 0 || r.NodeID == nil {
+		if r == nil || r.BrowseName == nil || r.BrowseName.NamespaceIndex != 0 || r.NodeID == nil {
 			continue
 		}
 		switch r.BrowseName.Name {
@@ -150,17 +163,17 @@ func (o *Object) Info(ctx context.Context) (*Info, error) {
 			names = append(names, r.BrowseName.Name)
 		}
 	}
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("filetransfer: %v has no Properties of FileType: %w", o.id, ua.StatusBadNotFound)
+	return nodes, names
+}
+
+// infoOf returns the Info of the values read for the Properties names. A
+// value that is missing or of another type leaves its field zero.
+func infoOf(names []string, results []*ua.DataValue) (*Info, error) {
+	if len(results) != len(names) {
+		return nil, fmt.Errorf("filetransfer: %d results for %d Properties: %w", len(results), len(names), ua.StatusBadUnknownResponse)
 	}
-	res, err := o.c.Read(ctx, &ua.ReadRequest{NodesToRead: nodes, TimestampsToReturn: ua.TimestampsToReturnNeither})
-	if err != nil {
-		return nil, fmt.Errorf("filetransfer: reading the Properties of %v: %w", o.id, err)
-	}
-	if len(res.Results) != len(nodes) {
-		return nil, fmt.Errorf("filetransfer: %d results for %d Properties: %w", len(res.Results), len(nodes), ua.StatusBadUnknownResponse)
-	}
-	for i, dv := range res.Results {
+	info := &Info{}
+	for i, dv := range results {
 		if dv == nil || dv.Value == nil {
 			continue
 		}

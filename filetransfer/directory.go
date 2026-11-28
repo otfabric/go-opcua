@@ -50,21 +50,30 @@ func (d *Directory) Entries(ctx context.Context) ([]Entry, error) {
 	}
 	var out []Entry
 	for _, r := range refs {
-		if r.NodeID == nil || r.BrowseName == nil || r.TypeDefinition == nil || r.TypeDefinition.NodeID == nil {
-			continue
-		}
-		td := r.TypeDefinition.NodeID
-		if td.Namespace() != 0 {
-			continue
-		}
-		switch td.IntID() {
-		case id.FileDirectoryType:
-			out = append(out, Entry{NodeID: r.NodeID.NodeID, Name: r.BrowseName.Name, Dir: true})
-		case id.FileType:
-			out = append(out, Entry{NodeID: r.NodeID.NodeID, Name: r.BrowseName.Name})
+		if e, ok := entryOf(r); ok {
+			out = append(out, e)
 		}
 	}
 	return out, nil
+}
+
+// entryOf returns the Entry of a reference of Entries, false for one that
+// is no FileDirectoryType or FileType Object or lacks a field.
+func entryOf(r *ua.ReferenceDescription) (Entry, bool) {
+	if r == nil || r.NodeID == nil || r.BrowseName == nil || r.TypeDefinition == nil || r.TypeDefinition.NodeID == nil {
+		return Entry{}, false
+	}
+	td := r.TypeDefinition.NodeID
+	if td.Namespace() != 0 {
+		return Entry{}, false
+	}
+	switch td.IntID() {
+	case id.FileDirectoryType:
+		return Entry{NodeID: r.NodeID.NodeID, Name: r.BrowseName.Name, Dir: true}, true
+	case id.FileType:
+		return Entry{NodeID: r.NodeID.NodeID, Name: r.BrowseName.Name}, true
+	}
+	return Entry{}, false
 }
 
 // Directory returns the directory of a NodeId of an Entry.

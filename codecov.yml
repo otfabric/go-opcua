@@ -8,7 +8,9 @@ coverage:
         threshold: 1%
     patch:
       default:
-        target: 70%
+        # The patch of a pull request is held to the per-package minimum
+        # (COVER_PKG_MIN, 90 %), not below it.
+        target: 90%
 
 ignore:
   - "examples/**"
