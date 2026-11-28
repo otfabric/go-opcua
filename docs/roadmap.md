@@ -99,6 +99,11 @@ alarms and UAFX.
 | Client session keepalive while idle | only silent subscriptions are found |
 | ServerProfileArray | no value; Read returns Bad_AttributeIdInvalid |
 
+Done in v1.43.0: the DataTypeDefinition Attribute of every Structure, Union,
+Enumeration and OptionSet DataType of namespace 0 and of the imported models,
+from the NodeSet Definition with the fields of the supertypes (Part 3 §5.8.3,
+Part 6 §F.12); see docs/server-guide.md.
+
 ## Phase 4: durable administration
 
 One persistence package for the server, PubSub and UAFX, from

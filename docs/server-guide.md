@@ -705,6 +705,7 @@ The importer handles:
   [JSON and XML Data Encodings](encodings.md)), `DataType` (NodeId or alias),
   `ValueRank`, `ArrayDimensions`, `AccessLevel` and `UserAccessLevel`
 - Aliases
+- For DataTypes: the `DataTypeDefinition` Attribute (see below)
 
 `DataType` and `ValueRank` get the defaults of the NodeSet schema
 (`BaseDataType`, scalar) when the attribute is absent, and so do
@@ -717,6 +718,44 @@ whose structure type is not registered - is logged and skipped; it does not
 fail the import.
 
 The standard OPC-UA NodeSet is imported automatically on server startup.
+
+### DataTypeDefinition
+
+Every DataType derived from Structure, Union, Enumeration or OptionSet, and
+every subtype of UInteger whose `Definition` is an OptionSet, gets the
+`DataTypeDefinition` Attribute (AttributeId 23) from the `Definition` of
+its NodeSet, in namespace 0 and in every imported model; the Attribute is
+mandatory for these DataTypes (Part 3 §5.8.3, Table 16). A client reads it
+to decode structures it has no type for.
+
+- A Structure or Union gets a `StructureDefinition` (Part 3 §8.48): the
+  fields of its supertype followed by its own, as the NodeSet lists only
+  its own and "Applications ingest a UANodeSet ... follow the HasSubtype
+  References between DataType Nodes to collect all of the fields" (Part 6
+  §F.12); the supertype as `BaseDataType`; the `Default Binary` encoding as
+  `DefaultEncodingId`, null for an abstract DataType; and the
+  `StructureType` of Part 6 Table F.13 from `IsUnion`, `IsOptional` and
+  `AllowSubTypes`. A subtype of a structure with optional fields has
+  optional fields too (Part 6 §5.2.7). A field's `IsOptional` says
+  "optional" in a `StructureWithOptionalFields` and "allows subtypes" in a
+  `StructureWithSubtypedValues` or `UnionWithSubtypedValues` (Part 3 §8.51).
+- An Enumeration or OptionSet gets an `EnumDefinition` (Part 3 §8.50): an
+  `EnumField` per field with its name, value (the bit number for an
+  OptionSet, §8.52), display name and description. A subtype of an
+  Enumeration without fields of its own has the fields of its supertype.
+
+BaseDataType, the built-in and simple DataTypes, and Structure and
+Enumeration themselves have no `DataTypeDefinition`: Read returns
+`Bad_AttributeIdInvalid`, as for any optional Attribute a node does not
+have. A Definition that cannot be mapped (a combination of flags Table F.13
+does not list, a field DataType that is neither a NodeId nor an alias, a
+ValueRank other than -1 or ≥ 1, ArrayDimensions of another rank, fields on
+a DataType that is not a Structure, Enumeration or OptionSet, or a
+supertype without a StructureDefinition) is logged and left out; it does
+not fail the import. A DataType a program adds itself gets the Attribute
+with `Node.SetAttribute(ua.AttributeIDDataTypeDefinition, ...)`; the
+importer gives a NodeSet DataType derived from it the fields of that
+Attribute.
 
 ---
 
