@@ -105,11 +105,26 @@ Phase 2 of docs/roadmap.md and items of phase 3.
   length is `Bad_InvalidArgument` (§4.2.4), not `Bad_InvalidState`; an Open
   outside a session is `Bad_SessionIdInvalid`. A client that matched
   `Bad_InvalidState` matches the new codes.
-- The handles of the TrustList, push and PubSubConfiguration files are
-  closed when their session ends, as those of the ConnectionManager file
-  were; before, a handle of a closed session was found and dropped at the
-  next Open or OpenCount. OpenCount is the same; there is no option to keep
-  the old timing.
+- Specification and resource-lifecycle fix, with no option to restore the
+  old behaviour: the end of a session closes its file handles and cancels
+  its push transaction at once. "When a client opens a file it gets a file
+  handle that is valid while the session is open" (OPC 10000-20 §4.2.2),
+  and OpenCount is "the number of currently valid file handles" (§4.2.1);
+  "Transactions are automatically cancelled when the Session that created
+  it is closed" (OPC 10000-12 §7.10.2), and "all pending changes are
+  discarded" (§7.10.9). The TrustList, push and PubSubConfiguration files
+  kept the handles of an ended session, with their buffers and the lock of
+  a writer, until the next Open or OpenCount found them; a push transaction
+  of an ended session stayed in the TransactionDiagnostics until another
+  session started one. Neither was ever applied. Now a CloseSession, a
+  session timeout, `Server.CloseSession`, a session the server reclaims and
+  the shutdown of the server release the handles, buffers and locks of
+  every FileType object of the server (TrustLists, push certificate groups,
+  PubSubConfiguration, ConnectionManagerConfiguration, `AddFile`,
+  `AddFileDirectory`), discard what was written without CloseAndUpdate,
+  and end the push transaction with `Bad_SessionClosed`. A renewed
+  SecureChannel and a broken connection after which the client activates
+  the session again keep its handles.
 - The `gds` and `pubsub/remote` clients check the output arguments of the
   FileType Methods against their declarations: an Open whose FileHandle is
   not a UInt32, or a Read whose Data is not a ByteString, is an
@@ -149,6 +164,16 @@ Phase 2 of docs/roadmap.md and items of phase 3.
   `TestMemoryDirectory`, `TestOSDirectory`).
 - `filetransfer`: the client against a server (`TestFile`,
   `TestFileOfType`, `TestDirectory`) and `TestObjectFunc`.
+- The end of a session (`server`): `TestFileSessionEndPaths` and
+  `TestPushSessionEndCancelsTransaction` run each end (CloseSession,
+  timeout, `Server.CloseSession`, reclaim, shutdown) and check the handles,
+  the count, the lock of a writer and the push transaction right after it,
+  without another Open, and that nothing written without CloseAndUpdate is
+  applied; `TestFileSessionEndConcurrent` ends sessions concurrently with
+  CloseAll, Close and Open of other sessions (`-race`).
+  `TestFileHandleSurvivesChannel` (`filetransfer`): handles stay valid
+  across a token renewal and a dropped connection the client recovers
+  from, and the writer keeps its lock.
 - `cmd/methods`: the committed output, the next families
   (`TestNextFamilies`), load errors and clauses. CI and the release
   workflow run the tests of `cmd/` (policy CI-005); they excluded it.

@@ -854,6 +854,8 @@ func (s *Server) sessionRemoved(sess *session, reason SessionCloseReason) {
 	s.observeSessionClosed(sess, reason)
 	// OPC 10000-20 §4.2.2: a fileHandle is valid in its session only.
 	s.files.sessionEnded(sess.ID)
+	// OPC 10000-12 §7.10.2: so is the push transaction of the session.
+	s.push.sessionEnded(sess.ID)
 	s.guardSessionEnded(sess)
 	s.auditSessionEnd(sess, reason)
 }

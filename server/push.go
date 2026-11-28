@@ -604,6 +604,23 @@ func (m *pushManager) txLocked(session *ua.NodeID) (*pushTx, ua.StatusCode) {
 	return m.tx, ua.StatusOK
 }
 
+// sessionEnded cancels the transaction of a session that ended:
+// "Transactions are automatically cancelled when the Session that created it
+// is closed" (OPC 10000-12 §7.10.2) and "all pending changes are discarded"
+// (§7.10.9). The server tells it every end of a session (sessionRemoved);
+// txLocked still drops a transaction whose session is gone.
+func (m *pushManager) sessionEnded(session *ua.NodeID) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.tx != nil && m.tx.session.Equal(session) {
+		m.tx = nil
+		m.endDiagnostics(ua.StatusBadSessionClosed)
+	}
+}
+
 // otherTxLocked reports whether a session other than session, which is
 // still open, has a transaction.
 func (m *pushManager) otherTxLocked(session *ua.NodeID) bool {
