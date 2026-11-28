@@ -60,13 +60,79 @@ func filled() []args {
 			State: int32(ua.ServerStateShutdown), EstimatedReturnTime: time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC),
 			SecondsTillShutdown: 60, Reason: ua.NewLocalizedText("update"), Restart: true,
 		},
+		&uamethod.TrustListTypeOpenWithMasksInput{Masks: uint32(ua.TrustListMasksAll)},
+		&uamethod.TrustListTypeOpenWithMasksOutput{FileHandle: 7},
+		&uamethod.TrustListTypeCloseAndUpdateInput{FileHandle: 7},
+		&uamethod.TrustListTypeCloseAndUpdateOutput{ApplyChangesRequired: true},
+		&uamethod.TrustListTypeAddCertificateInput{Certificate: []byte{0x30}, IsTrustedCertificate: true},
+		&uamethod.TrustListTypeRemoveCertificateInput{Thumbprint: "AB", IsTrustedCertificate: true},
+		&uamethod.PubSubConfigurationTypeReserveIDsInput{TransportProfileURI: "urn:p", NumReqWriterGroupIDs: 2, NumReqDataSetWriterIDs: 3},
+		&uamethod.PubSubConfigurationTypeReserveIDsOutput{DefaultPublisherID: ua.MustVariant(uint16(1)), WriterGroupIDs: []uint16{1}, DataSetWriterIDs: []uint16{2}},
+		&uamethod.PubSubConfigurationTypeCloseAndUpdateInput{FileHandle: 7, RequireCompleteUpdate: true, ConfigurationReferences: []*ua.PubSubConfigurationRefDataType{ref}},
+		&uamethod.PubSubConfigurationTypeCloseAndUpdateOutput{
+			ChangesApplied: true, ReferencesResults: []ua.StatusCode{ua.StatusOK},
+			ConfigurationValues:  []*ua.PubSubConfigurationValueDataType{{ConfigurationElement: ref, Name: "c", Identifier: ua.MustVariant(uint16(1))}},
+			ConfigurationObjects: []*ua.NodeID{ua.NewNumericNodeID(1, 42)},
+		},
+		&uamethod.PubSubKeyServiceTypeGetSecurityKeysInput{SecurityGroupID: "sg", StartingTokenID: 1, RequestedKeyCount: 2},
+		&uamethod.PubSubKeyServiceTypeGetSecurityKeysOutput{SecurityPolicyURI: "urn:policy", FirstTokenID: 1, Keys: [][]byte{{1}}, TimeToNextKey: 10, KeyLifetime: 20},
+		&uamethod.PubSubKeyServiceTypeGetSecurityGroupInput{SecurityGroupID: "sg"},
+		&uamethod.PubSubKeyServiceTypeGetSecurityGroupOutput{SecurityGroupNodeID: n},
 	}
 }
 
 var (
 	rule = &ua.IdentityMappingRuleType{CriteriaType: ua.IdentityCriteriaTypeUserName, Criteria: "u"}
 	ep   = &ua.EndpointType{EndpointURL: "opc.tcp://h:4840", SecurityMode: ua.MessageSecurityModeSign}
+	ref  = &ua.PubSubConfigurationRefDataType{ConfigurationMask: ua.PubSubConfigurationRefMaskElementAdd, ConnectionIndex: 1}
 )
+
+// baseDataType reports the arguments of BaseDataType, which take a Variant
+// of any built-in type: DefaultPublisherId of ReserveIds.
+func baseDataType(a args, i int) bool {
+	_, ok := a.(*uamethod.PubSubConfigurationTypeReserveIDsOutput)
+	return ok && i == 0
+}
+
+// The contracts of the TrustList Methods (OPC 10000-12 §7.8.2), of the
+// PubSub configuration file (OPC 10000-14 §9.1.3.7) and of the Security Key
+// Service (§8.3): the Methods of PubSubKeyServiceType are Optional.
+func TestTrustListAndPubSubContracts(t *testing.T) {
+	for _, c := range []struct {
+		m         *uamethod.Method
+		id, typID uint32
+		clause    string
+		mandatory bool
+		in, out   int
+	}{
+		{uamethod.TrustListTypeOpenWithMasks, id.TrustListTypeOpenWithMasks, id.TrustListType, "OPC 10000-12 §7.8.2.3", true, 1, 1},
+		{uamethod.TrustListTypeCloseAndUpdate, id.TrustListTypeCloseAndUpdate, id.TrustListType, "OPC 10000-12 §7.8.2.5", true, 1, 1},
+		{uamethod.TrustListTypeAddCertificate, id.TrustListTypeAddCertificate, id.TrustListType, "OPC 10000-12 §7.8.2.6", true, 2, 0},
+		{uamethod.TrustListTypeRemoveCertificate, id.TrustListTypeRemoveCertificate, id.TrustListType, "OPC 10000-12 §7.8.2.7", true, 2, 0},
+		{uamethod.PubSubConfigurationTypeReserveIDs, id.PubSubConfigurationTypeReserveIDs, id.PubSubConfigurationType, "OPC 10000-14 §9.1.3.7.5", true, 3, 3},
+		{uamethod.PubSubConfigurationTypeCloseAndUpdate, id.PubSubConfigurationTypeCloseAndUpdate, id.PubSubConfigurationType, "OPC 10000-14 §9.1.3.7.6", true, 3, 4},
+		{uamethod.PubSubKeyServiceTypeGetSecurityKeys, id.PubSubKeyServiceTypeGetSecurityKeys, id.PubSubKeyServiceType, "OPC 10000-14 §8.3.2", false, 3, 5},
+		{uamethod.PubSubKeyServiceTypeGetSecurityGroup, id.PubSubKeyServiceTypeGetSecurityGroup, id.PubSubKeyServiceType, "OPC 10000-14 §8.3.3", false, 1, 1},
+	} {
+		require.Equal(t, c.id, c.m.ID, c.m.String())
+		require.Equal(t, c.typID, c.m.ObjectTypeID, c.m.String())
+		require.Equal(t, c.clause, c.m.Clause, c.m.String())
+		require.Equal(t, c.mandatory, c.m.Mandatory, c.m.String())
+		require.Len(t, c.m.InputArguments(), c.in, c.m.String())
+		require.Len(t, c.m.OutputArguments(), c.out, c.m.String())
+	}
+	// BaseDataType, a structure array, an array of NodeIds.
+	require.Equal(t, ua.NewNumericNodeID(0, id.BaseDataType), uamethod.PubSubConfigurationTypeReserveIDs.OutputArguments()[0].DataType)
+	require.Equal(t, ua.NewNumericNodeID(0, id.PubSubConfigurationRefDataType), uamethod.PubSubConfigurationTypeCloseAndUpdate.InputArguments()[2].DataType)
+	require.Equal(t, int32(1), uamethod.PubSubConfigurationTypeCloseAndUpdate.OutputArguments()[3].ValueRank)
+
+	// A nil NodeId of ConfigurationObjects is the null NodeId; nil is the
+	// null array.
+	out := &uamethod.PubSubConfigurationTypeCloseAndUpdateOutput{ConfigurationObjects: []*ua.NodeID{nil}}
+	require.Equal(t, []*ua.NodeID{ua.NewTwoByteNodeID(0)}, out.Pack()[3].Value())
+	out.ConfigurationObjects = nil
+	require.Equal(t, []*ua.NodeID(nil), out.Pack()[3].Value())
+}
 
 // The contracts of the RoleSet and Role Methods (OPC 10000-18 §4.2, §4.4):
 // those of RoleType are Optional in the NodeSet.
@@ -149,8 +215,16 @@ func TestUnpackTypeMismatch(t *testing.T) {
 			vs := a.Pack()
 			for i := range vs {
 				bad := a.Pack()
-				bad[i] = other(vs[i])
 				got := fresh(a)
+				if baseDataType(a, i) {
+					// Any built-in type, a scalar.
+					bad[i] = other(vs[i])
+					require.NoError(t, got.Unpack(bad), "argument %d", i)
+					bad[i] = arrayOf(vs[i])
+					require.ErrorIs(t, fresh(a).Unpack(bad), ua.StatusBadTypeMismatch, "argument %d as array", i)
+					continue
+				}
+				bad[i] = other(vs[i])
 				err := got.Unpack(bad)
 				require.ErrorIs(t, err, ua.StatusBadTypeMismatch, "argument %d", i)
 				require.Equal(t, fresh(a), got)
@@ -177,8 +251,12 @@ func arrayOf(v *ua.Variant) *ua.Variant {
 	switch x := v.Value().(type) {
 	case uint8:
 		return ua.MustVariant([]uint8{x}) // a ByteString, of another type
+	case uint16:
+		return ua.MustVariant([]uint16{x})
 	case uint32:
 		return ua.MustVariant([]uint32{x})
+	case float64:
+		return ua.MustVariant([]float64{x})
 	case int32:
 		return ua.MustVariant([]int32{x})
 	case uint64:
@@ -200,6 +278,16 @@ func arrayOf(v *ua.Variant) *ua.Variant {
 	case []uint32:
 		// A scalar is another ValueRank than an array.
 		return ua.MustVariant(uint32(1))
+	case []uint16:
+		return ua.MustVariant(uint16(1))
+	case []ua.StatusCode:
+		return ua.MustVariant(ua.StatusOK)
+	case []*ua.NodeID:
+		return ua.MustVariant(ua.NewTwoByteNodeID(0))
+	case []*ua.ExtensionObject:
+		return ua.MustVariant(ua.NewExtensionObject(nil))
+	case [][]byte:
+		return ua.MustVariant([]byte{1})
 	}
 	panic("unexpected type")
 }
@@ -458,6 +546,84 @@ func TestCallAll(t *testing.T) {
 		func() error { return uamethod.CallRoleSetTypeRemoveRole(ctx, c, obj, nil, nil) },
 		func() error { return uamethod.CallRoleTypeAddIdentity(ctx, c, obj, nil, nil) },
 	} {
+		require.ErrorIs(t, call(), ua.StatusBadTooManyArguments)
+	}
+}
+
+// TestCallTrustListAndPubSub calls the TrustList, PubSub configuration and
+// SKS Methods: their outputs, a Bad result and outputs of the wrong count.
+func TestCallTrustListAndPubSub(t *testing.T) {
+	ctx := context.Background()
+	obj := ua.NewNumericNodeID(1, 5)
+	c := &caller{}
+	ok := func(out ...any) {
+		c.res = &ua.CallMethodResult{}
+		for _, o := range out {
+			c.res.OutputArguments = append(c.res.OutputArguments, ua.MustVariant(o))
+		}
+	}
+
+	ok(uint32(4))
+	h, err := uamethod.CallTrustListTypeOpenWithMasks(ctx, c, obj, nil, &uamethod.TrustListTypeOpenWithMasksInput{Masks: 1})
+	require.NoError(t, err)
+	require.Equal(t, uint32(4), h.FileHandle)
+	require.Equal(t, ua.NewNumericNodeID(0, id.TrustListTypeOpenWithMasks), c.req.MethodID)
+	ok(true)
+	cu, err := uamethod.CallTrustListTypeCloseAndUpdate(ctx, c, obj, nil, nil)
+	require.NoError(t, err)
+	require.True(t, cu.ApplyChangesRequired)
+	ok()
+	require.NoError(t, uamethod.CallTrustListTypeAddCertificate(ctx, c, obj, nil, nil))
+	require.NoError(t, uamethod.CallTrustListTypeRemoveCertificate(ctx, c, obj, nil, nil))
+	ok(uint16(1), []uint16{2}, []uint16{3})
+	r, err := uamethod.CallPubSubConfigurationTypeReserveIDs(ctx, c, obj, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, []uint16{2}, r.WriterGroupIDs)
+	require.Equal(t, uint16(1), r.DefaultPublisherID.Value())
+	ok(true, []ua.StatusCode{ua.StatusOK}, []*ua.ExtensionObject{}, []*ua.NodeID{obj})
+	u, err := uamethod.CallPubSubConfigurationTypeCloseAndUpdate(ctx, c, obj, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, []*ua.NodeID{obj}, u.ConfigurationObjects)
+	require.Equal(t, []*ua.Variant{ua.MustVariant(uint32(0)), ua.MustVariant(false), ua.MustVariant([]*ua.ExtensionObject(nil))}, c.req.InputArguments,
+		"nil references are the null array")
+	ok("urn:p", uint32(1), [][]byte{{1}}, 1.0, 2.0)
+	k, err := uamethod.CallPubSubKeyServiceTypeGetSecurityKeys(ctx, c, obj, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{{1}}, k.Keys)
+	require.Equal(t, 2.0, k.KeyLifetime)
+	ok(obj)
+	g, err := uamethod.CallPubSubKeyServiceTypeGetSecurityGroup(ctx, c, obj, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, obj, g.SecurityGroupNodeID)
+
+	calls := []func() error{
+		func() error { _, err := uamethod.CallTrustListTypeOpenWithMasks(ctx, c, obj, nil, nil); return err },
+		func() error { _, err := uamethod.CallTrustListTypeCloseAndUpdate(ctx, c, obj, nil, nil); return err },
+		func() error { return uamethod.CallTrustListTypeAddCertificate(ctx, c, obj, nil, nil) },
+		func() error { return uamethod.CallTrustListTypeRemoveCertificate(ctx, c, obj, nil, nil) },
+		func() error {
+			_, err := uamethod.CallPubSubConfigurationTypeReserveIDs(ctx, c, obj, nil, nil)
+			return err
+		},
+		func() error {
+			_, err := uamethod.CallPubSubConfigurationTypeCloseAndUpdate(ctx, c, obj, nil, nil)
+			return err
+		},
+		func() error {
+			_, err := uamethod.CallPubSubKeyServiceTypeGetSecurityKeys(ctx, c, obj, nil, nil)
+			return err
+		},
+		func() error {
+			_, err := uamethod.CallPubSubKeyServiceTypeGetSecurityGroup(ctx, c, obj, nil, nil)
+			return err
+		},
+	}
+	c.res = &ua.CallMethodResult{StatusCode: ua.StatusBadNotFound}
+	for _, call := range calls {
+		require.ErrorIs(t, call(), ua.StatusBadNotFound)
+	}
+	ok(int32(1), int32(2), int32(3), int32(4), int32(5), int32(6))
+	for _, call := range calls {
 		require.ErrorIs(t, call(), ua.StatusBadTooManyArguments)
 	}
 }

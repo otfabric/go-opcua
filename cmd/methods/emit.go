@@ -105,6 +105,10 @@ func (a *arg) packer() string {
 		return fmt.Sprintf("packStructures(%s)", f)
 	case a.structure != "":
 		return fmt.Sprintf("ua.MustVariant(ua.NewExtensionObject(%s))", f)
+	case a.valueRank == 1 && a.kind.packArray != "":
+		return fmt.Sprintf(a.kind.packArray, f)
+	case a.valueRank == 1:
+		return fmt.Sprintf("ua.MustVariant(%s)", f)
 	}
 	return fmt.Sprintf(a.kind.pack, f)
 }

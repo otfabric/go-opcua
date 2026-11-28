@@ -15,6 +15,7 @@ import (
 	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 )
 
 type handler = func(args []*ua.Variant) ([]*ua.Variant, ua.StatusCode)
@@ -95,7 +96,11 @@ func TestMisbehavingServer(t *testing.T) {
 	_, err = g.GetRejectedList(ctx)
 	require.ErrorContains(t, err, "want a ByteString array")
 	_, err = g.ReadTrustList(ctx, ua.TrustListMasksAll)
-	require.ErrorContains(t, err, "want a UInt32")
+	require.ErrorContains(t, err, "want a Uint32")
+	require.ErrorIs(t, err, ua.StatusBadTypeMismatch)
+	var ae *uamethod.ArgumentError
+	require.ErrorAs(t, err, &ae)
+	require.True(t, ae.Output)
 	_, err = g.WriteTrustList(ctx, &ua.TrustListDataType{SpecifiedLists: 1})
 	require.ErrorIs(t, err, ua.StatusBadInvalidState)
 	_, err = g.WriteTrustList(ctx, nil)
@@ -156,6 +161,11 @@ func TestMisbehavingServer(t *testing.T) {
 	require.ErrorIs(t, err, ua.StatusBadNotWritable)
 	_, err = g4.ReadTrustList(ctx, ua.TrustListMasksAll)
 	require.ErrorIs(t, err, ua.StatusBadNotReadable)
+	// CloseAndUpdate with an output of another type (Part 12 §7.8.2.5).
+	c5 := fakeServer(t, nil, map[uint32]handler{tOpen: out(uint32(3)), tWrite: out(), tCloseUpd: out("required")})
+	_, err = gds.New(c5).WriteTrustList(ctx, &ua.TrustListDataType{})
+	require.ErrorIs(t, err, ua.StatusBadTypeMismatch)
+	require.ErrorContains(t, err, "ApplyChangesRequired")
 
 	// A closed client: browsing for the method fails, and so does reading.
 	require.NoError(t, c4.Close(ctx))

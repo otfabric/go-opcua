@@ -15,6 +15,7 @@ import (
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 	"github.com/otfabric/go-opcua/uapolicy"
 )
 
@@ -244,11 +245,11 @@ func (t *TrustListObject) open(ctx context.Context, _ *MethodCaller, args []*ua.
 }
 
 func (t *TrustListObject) openWithMasks(ctx context.Context, _ *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	masks, ok := argValue[uint32](args, 0)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
+	var in uamethod.TrustListTypeOpenWithMasksInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
-	b, sc := t.readContent(ua.TrustListMasks(masks))
+	b, sc := t.readContent(ua.TrustListMasks(in.Masks))
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -258,7 +259,8 @@ func (t *TrustListObject) openWithMasks(ctx context.Context, _ *MethodCaller, ar
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	return []*ua.Variant{ua.MustVariant(h)}, ua.StatusOK
+	out := uamethod.TrustListTypeOpenWithMasksOutput{FileHandle: h}
+	return out.Pack(), ua.StatusOK
 }
 
 // fileMethod returns a Method of FileType of the TrustList.
@@ -286,13 +288,13 @@ func (t *TrustListObject) updateLocked(ctx context.Context, c *MethodCaller, d *
 }
 
 func (t *TrustListObject) closeAndUpdate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	h, ok := argValue[uint32](args, 0)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
+	var in uamethod.TrustListTypeCloseAndUpdateInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	b, sc := t.file.CloseAndTake(ctx, h, nil)
+	b, sc := t.file.CloseAndTake(ctx, in.FileHandle, nil)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -303,15 +305,16 @@ func (t *TrustListObject) closeAndUpdate(ctx context.Context, c *MethodCaller, a
 	if sc := t.updateLocked(ctx, c, mergeTrustList(t.load(), upd)); sc != ua.StatusOK {
 		return nil, sc
 	}
-	return []*ua.Variant{ua.MustVariant(false)}, ua.StatusOK
+	out := uamethod.TrustListTypeCloseAndUpdateOutput{ApplyChangesRequired: false}
+	return out.Pack(), ua.StatusOK
 }
 
 func (t *TrustListObject) addCertificate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	der, ok1 := argValue[[]byte](args, 0)
-	trusted, ok2 := argValue[bool](args, 1)
-	if !ok1 || !ok2 {
-		return nil, ua.StatusBadTypeMismatch
+	var in uamethod.TrustListTypeAddCertificateInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
+	der, trusted := in.Certificate, in.IsTrustedCertificate
 	if t.cfg.Update == nil {
 		return nil, ua.StatusBadNotWritable
 	}
@@ -334,11 +337,11 @@ func (t *TrustListObject) addCertificate(ctx context.Context, c *MethodCaller, a
 }
 
 func (t *TrustListObject) removeCertificate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	thumb, ok1 := argValue[string](args, 0)
-	trusted, ok2 := argValue[bool](args, 1)
-	if !ok1 || !ok2 {
-		return nil, ua.StatusBadTypeMismatch
+	var in uamethod.TrustListTypeRemoveCertificateInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
+	thumb, trusted := in.Thumbprint, in.IsTrustedCertificate
 	if t.cfg.Update == nil {
 		return nil, ua.StatusBadNotWritable
 	}

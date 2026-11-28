@@ -16,7 +16,10 @@
 //
 // The Methods of FileType and FileDirectoryType (OPC 10000-20 §4.2, §4.3)
 // are the first: the server package serves files with them
-// (server.FileObject) and package filetransfer is the client.
+// (server.FileObject) and package filetransfer is the client. The
+// TrustListType (OPC 10000-12 §7.8.2), PubSubConfigurationType and
+// PubSubKeyServiceType (OPC 10000-14 §9.1.3.7, §8.3) Methods of the server
+// and of packages gds, pubsub/remote and pubsub/sks use them too.
 package uamethod
 
 import (
@@ -345,6 +348,19 @@ func nodeID(n *ua.NodeID) *ua.NodeID {
 		return ua.NewTwoByteNodeID(0)
 	}
 	return n
+}
+
+// nodeIDs returns ns with the null NodeId for each nil element; a nil
+// slice stays nil (the null array).
+func nodeIDs(ns []*ua.NodeID) []*ua.NodeID {
+	if ns == nil {
+		return nil
+	}
+	out := make([]*ua.NodeID, len(ns))
+	for i, n := range ns {
+		out[i] = nodeID(n)
+	}
+	return out
 }
 
 // localizedText returns t, or the null LocalizedText for nil (Part 6
