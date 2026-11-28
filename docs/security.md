@@ -808,7 +808,17 @@ ApplicationsExclude and EndpointsExclude. What it means for security:
   (Part 6 §6.5.2.3) the `IssuedTokenValidator` accepted; they are refused
   unless the server's issued token policy is `IssuedTokenTypeJWT`.
 - RemoveRole deletes the role's RolePermissions everywhere (§4.2.3).
-- The configuration is kept in memory only; it is not persisted.
+- The configuration is kept in memory only, unless `WithRoleSetStore`
+  persists it. `rolestore.OpenDir` writes the rules that grant every role,
+  SecurityAdmin included, to its directory: whoever can write that
+  directory can grant themselves any role on the next start. The directory
+  is created 0700 and its files 0600 (`fxstore.FileStore`), a directory the
+  group or others may write is refused, and the directory is locked
+  exclusively. For integrity or encryption at rest, pass `rolestore.Open`
+  an `fxstore.Store` that provides it. A store that does not decode, of
+  another `Owner`, or with a role the server would refuse fails `Start`:
+  the server does not start with a RoleSet it cannot restore completely. A
+  change whose write fails is not made.
 
 ### Writable Attributes
 

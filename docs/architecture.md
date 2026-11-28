@@ -66,6 +66,7 @@ Packages are tiered by intended audience and stability commitment:
 | `uafx/fxstore/`, `uafx/fxstore/storetest/` | The persistence of the library: a byte key-value `Store` with an atomic `Apply`, the `Domain` written through it (revision, batch identity, fence until `Settle`), `MemoryStore`, `FileStore`, and the contract tests (see [Persistence](#persistence)) |
 | `server/pushstore/` | The store of push certificate management on a `Domain` of `uafx/fxstore`: one atomic write per ApplyChanges, restored by `server.New` |
 | `server/pubsubstore/` | The store of the PubSub configuration of the server on a `Domain` of `uafx/fxstore`: one atomic write per change, restored when the server starts (see [PubSub configuration persistence](#pubsub-configuration-persistence)) |
+| `server/rolestore/` | The store of the managed RoleSet on a `Domain` of `uafx/fxstore`: one atomic write per change of a role, restored at `Server.Start` (see [RoleSet persistence](#roleset-persistence)) |
 
 **Tier 3 — Internal.** Not part of the supported public API. May change without notice.
 
@@ -93,9 +94,10 @@ The design is [docs/design/uafx-persistent-connections.md](design/uafx-persisten
 
 Its users are the UAFX AutomationComponent and ConnectionManager
 (`uafx/fxserver`, `uafx/fxcm`) and the push certificate management of the
-server (`server/pushstore`, namespace `push`, from v1.43.0) and the PubSub
+server (`server/pushstore`, namespace `push`, from v1.43.0), the PubSub
 configuration of the server (`server/pubsubstore`, namespace `pubsub`, from
-v1.43.0, below). The server
+v1.43.0, below) and the managed RoleSet (`server/rolestore`, namespace
+`roles`, from v1.43.0, below). The server
 package itself does not import it: `server` defines the interfaces of its
 store (`CertificateStore`, `CertificateBatchStore`, `CertificateLoadStore`)
 and `server/pushstore` implements them on `fxstore`, so the dependencies run
@@ -109,7 +111,7 @@ type becomes "changed from `Store` to `<new path>.Store`" (checked against
 an alias of every kind of declaration of the package before this choice).
 Wrappers instead of aliases would duplicate every type. The path can move
 with the next major version; until then a new user imports `uafx/fxstore`
-the same way, as `server/pubsubstore` does.
+the same way, as `server/pubsubstore` and `server/rolestore` do.
 
 ### PubSub configuration persistence
 
@@ -148,6 +150,35 @@ first; the endpoint restore then adopts them as it adopts any existing
 component (docs/design/uafx-persistent-connections.md §5). After each call
 `uafx/fxserver` hands the components of the call that no endpoint uses to
 the server's store (`Server.PersistPubSubConfiguration`).
+
+### RoleSet persistence
+
+`server.WithRoleSetStore` takes a `server.RoleSetStore`; `server/rolestore`
+implements it on one `fxstore.Domain` (namespace `roles`), so the
+dependencies run `server/rolestore` → `server` and → `uafx/fxstore`, never
+`server` → `uafx`.
+
+The changes of the RoleSet are serialized by its operation lock (the
+Methods of OPC 10000-18 §4.2.2 to §4.4.10, the Writes of
+ApplicationsExclude and EndpointsExclude and the `RoleSet` methods all go
+through it). A change is made on a copy of the role; the store is written
+with the RoleSet as it will be, one `Domain.Apply` of the records that
+change, and only then does the copy become the role (or the role is added,
+or removed with its nodes) and the active sessions get their roles again.
+A write that fails therefore changes nothing; the change fails with
+`Bad_InternalError`, which none of the result codes of the Methods covers,
+and an unknown outcome fences the store until `Settle` (or the next change)
+has written the roles the server has back. Readers (the Properties, the
+role evaluation at ActivateSession) take the read lock and never wait for
+the store.
+
+The restore runs once under the same lock, at `Start` before the server
+listens or at the first change before it, and fails them while it cannot
+run (fail closed). A record names its namespaces by URI, so that a role
+keeps the identifier of its NodeId when its namespace moves (Part 3
+§5.2.2); the identifier of a role AddRole adds holds the index of the
+namespace of its BrowseName at that time, and AddRole gives a new role a
+suffix when a restored role has its NodeId already.
 
 ---
 
