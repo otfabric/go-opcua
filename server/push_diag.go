@@ -32,21 +32,14 @@ func (m *pushManager) startDiagnostics() {
 }
 
 // endDiagnostics records the end of the transaction with its result:
-// Good when ApplyChanges applied it, Bad_RequestCancelledByClient when
+// Good when ApplyChanges applied it, the error of ApplyChanges when it
+// discarded it, Bad_RequestCancelledByClient when
 // CancelChanges or ResetToServerDefaults dropped it, Bad_SessionClosed when
 // its session was gone.
 func (m *pushManager) endDiagnostics(result ua.StatusCode) {
 	m.diagMu.Lock()
 	defer m.diagMu.Unlock()
 	m.diag.end = m.now()
-	m.diag.result = result
-}
-
-// setDiagnosticsResult records a failure of ApplyChanges; the transaction
-// stays pending.
-func (m *pushManager) setDiagnosticsResult(result ua.StatusCode) {
-	m.diagMu.Lock()
-	defer m.diagMu.Unlock()
 	m.diag.result = result
 }
 

@@ -463,16 +463,22 @@ func TestPushStore(t *testing.T) {
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
 	require.Equal(t, ua.StatusBadInternalError, sc)
 	require.Equal(t, [][]byte{p.ClientCert}, s.TrustList().TrustedCertificates)
+	// The failed ApplyChanges discarded the transaction (Part 12 §7.10.2):
+	// the change is made again.
+	require.Nil(t, s.push.tx)
 
 	st.mu.Lock()
 	st.fail = nil
 	st.mu.Unlock()
+	_, sc = tlCall(t, s, ctx, mAdd, p.StrangerCert, true)
+	require.Equal(t, ua.StatusOK, sc)
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
 	require.Equal(t, ua.StatusOK, sc)
 	require.Len(t, st.tls, 1)
 	require.Equal(t, [][]byte{p.ClientCert, p.StrangerCert}, st.tls[0].TrustedCertificates)
 
-	// A certificate that fails to be stored stays pending.
+	// A certificate that fails to be stored is discarded with its
+	// transaction; it is applied when it is updated again.
 	cert := reissue(t, p.ServerCert, p.ServerKey, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
 	_, sc = pushCall(t, s, ctx, scObj, mUpdate, defaultGroup, rsaType, cert, [][]byte{}, "", []byte{})
 	require.Equal(t, ua.StatusOK, sc)
@@ -481,14 +487,18 @@ func TestPushStore(t *testing.T) {
 	st.mu.Unlock()
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
 	require.Equal(t, ua.StatusBadInternalError, sc)
+	c, _ := s.cfg.primaryIdentity()
+	require.Equal(t, p.ServerCert, c)
 	st.mu.Lock()
 	st.fail = nil
 	st.mu.Unlock()
+	_, sc = pushCall(t, s, ctx, scObj, mUpdate, defaultGroup, rsaType, cert, [][]byte{}, "", []byte{})
+	require.Equal(t, ua.StatusOK, sc)
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
 	require.Equal(t, ua.StatusOK, sc)
 	require.Equal(t, [][]byte{cert}, st.certs)
 	require.True(t, st.types[0].Equal(rsaType))
-	c, _ := s.cfg.primaryIdentity()
+	c, _ = s.cfg.primaryIdentity()
 	require.Equal(t, cert, c)
 }
 

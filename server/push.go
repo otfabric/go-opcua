@@ -75,10 +75,14 @@ type PushManagement struct {
 	Authorizer PushAuthorizer
 
 	// Store, if set, persists what ApplyChanges and ResetToServerDefaults
-	// apply. The server does not write files on its own. A Store that also
-	// implements CertificateGroupStore persists the changes of every
-	// certificate group; otherwise only those of the
-	// DefaultApplicationGroup are persisted.
+	// apply. The server does not write files on its own: pushstore.OpenDir
+	// (package server/pushstore) is a Store on a directory that writes
+	// each ApplyChanges atomically and restores it at the next start. A
+	// Store that implements CertificateBatchStore persists every change of
+	// an ApplyChanges in one write; one that implements
+	// CertificateGroupStore persists the changes of every certificate
+	// group; otherwise only those of the DefaultApplicationGroup are
+	// persisted. A CertificateLoadStore is loaded by New.
 	Store CertificateStore
 
 	// PFXPassword returns the password of a PKCS #12 (PFX) private key that
@@ -205,7 +209,16 @@ type PushAuthorizer func(ctx context.Context, caller *MethodCaller, method strin
 // CertificateStore persists the changes push certificate management makes,
 // so that a restarted server can be configured with them. ApplyChanges
 // calls it before the changes take effect; an error fails ApplyChanges with
-// Bad_InternalError and keeps the changes pending.
+// Bad_InternalError and discards its transaction, as any error ApplyChanges
+// finds does ("If any errors are found then all changes are discarded",
+// Part 12 §7.10.2), and nothing is applied.
+//
+// The methods of CertificateStore, CertificateGroupStore and
+// CertificateDeleteStore store one trust list or certificate per call: an
+// error part-way leaves the earlier ones stored. A store that implements
+// CertificateBatchStore receives all the changes in one call instead, and a
+// CertificateLoadStore is restored by New. Package server/pushstore
+// implements all of them on a directory.
 type CertificateStore interface {
 	// StoreTrustList persists the trust list of the DefaultApplicationGroup.
 	StoreTrustList(ctx context.Context, tl *ua.TrustListDataType) error
@@ -670,11 +683,17 @@ func (m *pushManager) addCertLocked(ctx context.Context, session *ua.NodeID, g *
 	return true, ua.StatusOK
 }
 
-// storeLocked persists the trust lists and certificates.
-func (m *pushManager) storeLocked(ctx context.Context, trust map[groupKind]*trustList, certs []*pendingCert) ua.StatusCode {
+// storeLocked persists the trust lists and certificates: in one write with
+// a CertificateBatchStore, otherwise group by group and certificate by
+// certificate. reset marks ResetToServerDefaults, now the LastUpdateTime of
+// the trust lists.
+func (m *pushManager) storeLocked(ctx context.Context, trust map[groupKind]*trustList, certs []*pendingCert, reset bool, now time.Time) ua.StatusCode {
 	st := m.cfg.Store
 	if st == nil {
 		return ua.StatusOK
+	}
+	if bs, ok := st.(CertificateBatchStore); ok {
+		return m.storeBatchLocked(ctx, bs, trust, certs, reset, now)
 	}
 	gs, all := st.(CertificateGroupStore)
 	ds, deletes := st.(CertificateDeleteStore)
@@ -752,29 +771,35 @@ func (m *pushManager) checkDeletesLocked(certs []*pendingCert) ua.StatusCode {
 	return ua.StatusOK
 }
 
-// applyLocked applies the transaction (ApplyChanges, Part 12 §7.10.6): the
+// applyLocked applies the transaction (ApplyChanges, Part 12 §7.10.9): the
 // trust lists for the validation of new channels, sessions and TLS
 // connections, and the certificates for new channels and TLS connections.
 // Channels that are open keep their certificate until they are closed.
+//
+// "When ApplyChanges is called the Server verifies that all the changes are
+// consistent and can be applied without errors. If any errors are found
+// then all changes are discarded" (Part 12 §7.10.2): a certificate to delete
+// that is in use, and a failure of the Store, end the transaction with
+// nothing applied.
 func (m *pushManager) applyLocked(ctx context.Context) ua.StatusCode {
 	tx := m.tx
 	if tx == nil {
 		return ua.StatusOK
 	}
 	certs := sortedCerts(tx.certs)
-	if sc := m.checkDeletesLocked(certs); sc != ua.StatusOK {
-		m.setDiagnosticsResult(sc)
-		return sc
-	}
-	if sc := m.storeLocked(ctx, tx.trust, certs); sc != ua.StatusOK {
-		m.setDiagnosticsResult(sc)
-		return sc
+	now := time.Now()
+	sc := m.checkDeletesLocked(certs)
+	if sc == ua.StatusOK {
+		sc = m.storeLocked(ctx, tx.trust, certs, false, now)
 	}
 	m.tx = nil
-	now := time.Now().UnixNano()
+	if sc != ua.StatusOK {
+		m.endDiagnostics(sc)
+		return sc
+	}
 	for k, tl := range tx.trust {
 		m.groups[k].trust.Store(tl)
-		m.groups[k].lastUpdate.Store(now)
+		m.groups[k].lastUpdate.Store(now.UnixNano())
 	}
 	appCerts := false
 	for _, p := range certs {

@@ -131,7 +131,8 @@ func TestPushDeleteCertificate(t *testing.T) {
 
 	// The certificate the channels start with, which the endpoints
 	// advertise, is not deleted: ApplyChanges fails and the transaction
-	// stays pending.
+	// is discarded ("If any errors are found then all changes are
+	// discarded", Part 12 §7.10.2).
 	_, sc = pushCall(t, s, ctx, scObj, mDelete, defaultGroup, rsaType)
 	require.Equal(t, ua.StatusOK, sc)
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
@@ -140,7 +141,7 @@ func TestPushDeleteCertificate(t *testing.T) {
 	require.Equal(t, ua.StatusBadInvalidState, d.result)
 	require.Len(t, d.errs, 1)
 	require.True(t, d.errs[0].TargetID.Equal(defaultGroup))
-	require.NotNil(t, s.push.tx)
+	require.Nil(t, s.push.tx)
 	_, sc = pushCall(t, s, ctx, scObj, mCancel)
 	require.Equal(t, ua.StatusOK, sc)
 	cert, _, _ = s.cfg.identityFor(ua.SecurityPolicyURIBasic256Sha256)
@@ -158,7 +159,8 @@ func TestPushDeleteCertificate(t *testing.T) {
 	_, sc = pushCall(t, s, user, scObj, mDelete, defaultGroup, p256Type)
 	require.Equal(t, ua.StatusBadUserAccessDenied, sc)
 
-	// A failing store keeps the deletion pending.
+	// A failing store discards the deletion: nothing is deleted, and
+	// ApplyChanges has nothing left to apply.
 	st.dmu.Lock()
 	st.derr = errors.New("disk full")
 	st.dmu.Unlock()
@@ -166,6 +168,13 @@ func TestPushDeleteCertificate(t *testing.T) {
 	require.Equal(t, ua.StatusOK, sc)
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
 	require.Equal(t, ua.StatusBadInternalError, sc)
+	require.Nil(t, s.push.tx)
+	require.Equal(t, ua.StatusBadInternalError, s.push.diagnostics().result)
+	st.dmu.Lock()
+	st.derr = nil
+	st.dmu.Unlock()
+	_, sc = pushCall(t, s, ctx, scObj, mApply)
+	require.Equal(t, ua.StatusOK, sc)
 	_, ok = func() ([]byte, bool) { c, _, ok := s.cfg.identityFor(ua.SecurityPolicyURIECCNistP256); return c, ok }()
 	require.True(t, ok)
 }

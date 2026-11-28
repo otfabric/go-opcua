@@ -644,6 +644,42 @@ CertificateAlarms configures the alarms of the certificate groups (Part 12 §7.8
 
 The alarms are Alarms & Conditions conditions (Server.AddCondition) with the source node of their certificate group, in the namespace CertificateAlarmsNamespaceURI. They report their events to the group and the Server object.
 
+### type CertificateBatchStore
+
+```go
+type CertificateBatchStore interface {
+	CertificateStore
+	// StoreChanges persists c, all or nothing. It returns nil when c is
+	// durable. On an error the server does not apply c: ApplyChanges
+	// fails with Bad_InternalError and its transaction is discarded (Part
+	// 12 §7.10.2). After an error the store must hold the state it held
+	// before, or refuse later writes until it does, so that a restarted
+	// server never starts with changes it did not apply.
+	StoreChanges(ctx context.Context, c CertificateChanges) error
+}
+```
+
+CertificateBatchStore is a CertificateStore that persists all the changes of one ApplyChanges, or of one ResetToServerDefaults, in one atomic write. The server calls StoreChanges instead of the other methods of the store and of CertificateGroupStore and CertificateDeleteStore. Package server/pushstore implements it on a directory.
+
+### type CertificateChanges
+
+```go
+type CertificateChanges struct {
+	// Reset marks the changes of ResetToServerDefaults (Part 12 §7.10.13):
+	// they are the trust lists and certificates of the configuration of
+	// the server. A store may then forget what it holds instead of storing
+	// them, so that a restarted server starts with its configuration again.
+	Reset bool
+	// TrustLists are the trust lists that change, at most one per group.
+	TrustLists []CertificateGroupTrustList
+	// Certificates are the certificates that change, at most one per group
+	// and certificate type.
+	Certificates []CertificateGroupChange
+}
+```
+
+CertificateChanges are the trust lists and certificates of certificate groups that one ApplyChanges or ResetToServerDefaults applies, or that a CertificateLoadStore restores.
+
 ### type CertificateDeleteStore
 
 ```go
@@ -687,6 +723,36 @@ type CertificateGroup struct {
 
 CertificateGroup is a certificate group of the application (see PushManagement.CertificateGroups).
 
+### type CertificateGroupChange
+
+```go
+type CertificateGroupChange struct {
+	// Group is the BrowseName of the certificate group, as in
+	// CertificateGroupTrustList.
+	Group string
+	// CertificateType is the type of the certificate (Part 12 §7.8.4), a
+	// numeric NodeId of namespace 0.
+	CertificateType *ua.NodeID
+	// Certificate is the DER encoded certificate; nil deletes the
+	// certificate of the type (DeleteCertificate).
+	Certificate []byte
+	// Issuers are the DER encoded certificates of its issuer chain.
+	Issuers [][]byte
+	// PrivateKey is the key of the certificate.
+	PrivateKey crypto.Signer
+}
+```
+
+CertificateGroupChange is a certificate of a certificate group that is added, replaced or deleted.
+
+#### func (CertificateGroupChange) Deleted
+
+```go
+func (c CertificateGroupChange) Deleted() bool
+```
+
+Deleted reports whether the change deletes the certificate.
+
 ### type CertificateGroupStore
 
 ```go
@@ -702,6 +768,37 @@ type CertificateGroupStore interface {
 
 CertificateGroupStore is a CertificateStore that persists the trust lists and certificates of every certificate group. The server calls these methods instead of those of CertificateStore.
 
+### type CertificateGroupTrustList
+
+```go
+type CertificateGroupTrustList struct {
+	// Group is the BrowseName of the certificate group:
+	// "DefaultApplicationGroup", "DefaultHttpsGroup",
+	// "DefaultUserTokenGroup" or the Name of a CertificateGroup of
+	// PushManagement.CertificateGroups. Unlike its NodeId it does not
+	// depend on the namespace table.
+	Group string
+	// TrustList is the whole trust list (SpecifiedLists is All).
+	TrustList *ua.TrustListDataType
+	// LastUpdateTime is when it took effect, its LastUpdateTime (Part 12
+	// §7.8.2.1). On a restore the zero time keeps the start of the server.
+	LastUpdateTime time.Time
+}
+```
+
+CertificateGroupTrustList is the trust list of a certificate group.
+
+### type CertificateLoadStore
+
+```go
+type CertificateLoadStore interface {
+	CertificateStore
+	LoadCertificates(ctx context.Context) (CertificateChanges, error)
+}
+```
+
+CertificateLoadStore is a CertificateStore that restores what it persisted. New calls LoadCertificates once and applies what it returns on top of the configuration: the trust lists replace those of PushManagement, the certificates those of the options of the server (or are added), and a deleted certificate is removed. What the server was configured with stays the target of ResetToServerDefaults. An error of LoadCertificates, or a trust list or certificate that is not valid, fails New: a server does not start with a trust list other than the one it was told to have.
+
 ### type CertificateStore
 
 ```go
@@ -715,7 +812,9 @@ type CertificateStore interface {
 }
 ```
 
-CertificateStore persists the changes push certificate management makes, so that a restarted server can be configured with them. ApplyChanges calls it before the changes take effect; an error fails ApplyChanges with Bad\_InternalError and keeps the changes pending.
+CertificateStore persists the changes push certificate management makes, so that a restarted server can be configured with them. ApplyChanges calls it before the changes take effect; an error fails ApplyChanges with Bad\_InternalError and discards its transaction, as any error ApplyChanges finds does ("If any errors are found then all changes are discarded", Part 12 §7.10.2), and nothing is applied.
+
+The methods of CertificateStore, CertificateGroupStore and CertificateDeleteStore store one trust list or certificate per call: an error part-way leaves the earlier ones stored. A store that implements CertificateBatchStore receives all the changes in one call instead, and a CertificateLoadStore is restored by New. Package server/pushstore implements all of them on a directory.
 
 ### type ClientCertificateValidator
 
@@ -4314,10 +4413,14 @@ type PushManagement struct {
 	Authorizer PushAuthorizer
 
 	// Store, if set, persists what ApplyChanges and ResetToServerDefaults
-	// apply. The server does not write files on its own. A Store that also
-	// implements CertificateGroupStore persists the changes of every
-	// certificate group; otherwise only those of the
-	// DefaultApplicationGroup are persisted.
+	// apply. The server does not write files on its own: pushstore.OpenDir
+	// (package server/pushstore) is a Store on a directory that writes
+	// each ApplyChanges atomically and restores it at the next start. A
+	// Store that implements CertificateBatchStore persists every change of
+	// an ApplyChanges in one write; one that implements
+	// CertificateGroupStore persists the changes of every certificate
+	// group; otherwise only those of the DefaultApplicationGroup are
+	// persisted. A CertificateLoadStore is loaded by New.
 	Store CertificateStore
 
 	// PFXPassword returns the password of a PKCS #12 (PFX) private key that
