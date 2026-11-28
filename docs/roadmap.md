@@ -98,16 +98,29 @@ push certificate management and the `gds` client;
 PubSubConfigurationType (ReserveIds, CloseAndUpdate) for the
 PubSubConfiguration file and `pubsub/remote`; PubSubKeyServiceType
 (GetSecurityKeys, GetSecurityGroup) for the SKS and `pubsub/sks`. The
-RoleSet, Role and ServerType Methods are generated as well. What remains:
-the GDS DirectoryType and CertificateDirectoryType, whose arguments are
-DataTypes outside namespace 0 (ApplicationRecordDataType of the GDS
-NodeSet) or subtypes of built-in types the GDS NodeSet alone does not
-resolve (`TestNextFamilies`), need the generator to read a NodeSet with
-the one of namespace 0 and a contracts package per namespace; the
-Methods of ServerConfigurationType, SecurityGroupFolderType and
-PubSubKeyPushTargetType, still written by hand, and those of alarms and
-UAFX; and the events a Method generates, mandatory children and state
-machine transitions, which are not generated.
+RoleSet, Role and ServerType Methods are generated as well. The third
+families are done: ServerConfigurationType (OPC 10000-12 §7.10:
+UpdateCertificate, CreateSelfSignedCertificate, DeleteCertificate,
+GetCertificates, ApplyChanges, CreateSigningRequest, CancelChanges,
+GetRejectedList, ResetToServerDefaults) for push certificate management
+(`server/push_methods.go`) and the `gds` push client;
+SecurityGroupFolderType (OPC 10000-14 §8.5: AddSecurityGroup,
+RemoveSecurityGroup, AddSecurityGroupFolder, RemoveSecurityGroupFolder)
+for the SKS and the `uafx/fxcm` RemoteSKS; PublishSubscribeType (§9.1.3:
+SetSecurityKeys, AddConnection, RemoveConnection), whose SetSecurityKeys
+`EnableSecurityKeyPush` and `pubsub/sks` use; and PubSubKeyPushTargetType
+and PubSubKeyPushTargetFolderType (§8.6, §8.7), contracts only, as the
+server has no push targets. What remains: the GDS DirectoryType and
+CertificateDirectoryType, whose arguments are DataTypes outside namespace
+0 (ApplicationRecordDataType of the GDS NodeSet) or subtypes of built-in
+types the GDS NodeSet alone does not resolve (`TestNextFamilies`), need
+the generator to read a NodeSet with the one of namespace 0 and a
+contracts package per namespace; the PubSub configuration Methods of the
+server (AddConnection, RemoveConnection and the Methods of the
+PubSubConnection, group and DataSet types in `server/pubsub_model.go`),
+of alarms and of UAFX, still written by hand; and the events a Method
+generates (AlwaysGeneratesEvent), mandatory children and state machine
+transitions, which are not generated.
 
 ## Phase 3: core symmetry
 

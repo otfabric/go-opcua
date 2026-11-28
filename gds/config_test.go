@@ -128,6 +128,11 @@ func TestMisbehavingConfigurationServer(t *testing.T) {
 	reg(id.ServerConfigurationGetCertificates, out("x", 1))
 	_, _, err = g.GetCertificates(ctx, nil)
 	require.Error(t, err)
+	// The outputs are checked against the declaration (Part 12 §7.10.6).
+	reg(id.ServerConfigurationCreateSelfSignedCertificate, out("x"))
+	_, err = g.CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{})
+	require.ErrorIs(t, err, ua.StatusBadTypeMismatch)
+	require.ErrorContains(t, err, "output argument 0 (Certificate)")
 
 	require.NoError(t, c.Close(ctx))
 	_, err = g.TransactionDiagnostics(ctx)

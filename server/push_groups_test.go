@@ -95,7 +95,7 @@ func TestPushGetCertificates(t *testing.T) {
 	_, sc = pushCall(t, s, ctx, scObj, mGetCerts, ua.NewStringNodeID(1, "x"))
 	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	_, sc = pushCall(t, s, ctx, scObj, mGetCerts, "x")
-	require.Equal(t, ua.StatusBadTypeMismatch, sc)
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 
 	// Only SecurityAdmin.
 	other, _ := pushCallerCtx(s, ua.MessageSecurityModeSignAndEncrypt)
@@ -202,7 +202,7 @@ func TestPushCreateSelfSignedCertificate(t *testing.T) {
 		require.Equal(t, tc.want, sc, "%+v", tc)
 	}
 	_, sc = pushCall(t, s, ctx, scObj, mSelfSigned, defaultGroup, rsaType, "", "x", []string{}, uint16(1), uint16(0))
-	require.Equal(t, ua.StatusBadTypeMismatch, sc)
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	_, sc = pushCall(t, s, ctx, scObj, mSelfSigned, defaultGroup, rsaType, "", ua.MustVariant(nil), ua.MustVariant(nil), uint16(1), uint16(0))
 	require.Equal(t, ua.StatusOK, sc)
 

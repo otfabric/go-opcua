@@ -151,7 +151,7 @@ func TestPushDeleteCertificate(t *testing.T) {
 	_, sc = pushCall(t, s, ctx, scObj, mDelete, userGroup, nullNode)
 	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	_, sc = pushCall(t, s, ctx, scObj, mDelete, defaultGroup, "x")
-	require.Equal(t, ua.StatusBadTypeMismatch, sc)
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	_, sc = pushCall(t, s, ctx, scObj, mDelete, defaultGroup, ua.NewStringNodeID(1, "x"))
 	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	// SecurityAdmin only.
