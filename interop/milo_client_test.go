@@ -1238,8 +1238,11 @@ func TestGoServer_MiloClient_MethodValidation(t *testing.T) {
 		if len(items) > 0 {
 			sc = items[0].StatusCode
 		}
-		if !statusCodeNameHas(sc, "TypeMismatch") && !statusCodeIs(sc, ua.StatusBadTypeMismatch) {
-			t.Errorf("WrongType: got %s, want BadTypeMismatch", sc)
+		// An argument of the wrong type makes the result Bad_InvalidArgument,
+		// with Bad_TypeMismatch in its inputArgumentResults (Part 4
+		// §5.12.2.2, Tables 61 and 62).
+		if !statusCodeNameHas(sc, "InvalidArgument") && !statusCodeIs(sc, ua.StatusBadInvalidArgument) {
+			t.Errorf("WrongType: got %s, want BadInvalidArgument", sc)
 		}
 	})
 

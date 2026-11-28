@@ -633,4 +633,17 @@ func TestStatusOf(t *testing.T) {
 	require.Equal(t, ua.StatusBadInvalidArgument, uamethod.StatusOf(errors.New("x")))
 	var in uamethod.FileTypeOpenInput
 	require.Equal(t, ua.StatusBadArgumentsMissing, uamethod.StatusOf(in.Unpack(nil)))
+	require.Equal(t, ua.StatusBadTooManyArguments, uamethod.StatusOf(in.Unpack([]*ua.Variant{ua.MustVariant(byte(1)), ua.MustVariant(byte(2))})))
+	// An input argument of the wrong type is Bad_InvalidArgument at the
+	// operation level and Bad_TypeMismatch for the argument (Part 4
+	// §5.12.2.2, Tables 61 and 62).
+	err := in.Unpack([]*ua.Variant{ua.MustVariant("x")})
+	require.Equal(t, ua.StatusBadInvalidArgument, uamethod.StatusOf(err))
+	var ae *uamethod.ArgumentError
+	require.ErrorAs(t, err, &ae)
+	require.Equal(t, 0, ae.Index)
+	require.Equal(t, ua.StatusBadTypeMismatch, ae.Status)
+	// An output argument keeps its own status, for a client.
+	var out uamethod.FileTypeOpenOutput
+	require.Equal(t, ua.StatusBadTypeMismatch, uamethod.StatusOf(out.Unpack([]*ua.Variant{ua.MustVariant("x")})))
 }

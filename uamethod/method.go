@@ -153,14 +153,22 @@ func (e *ArgumentError) Error() string {
 // holds.
 func (e *ArgumentError) Unwrap() error { return e.Status }
 
-// StatusOf returns the status an error of Unpack stands for, so a Method
-// handler can return it: the Status of an *ArgumentError, else
-// Bad_InvalidArgument. It returns StatusOK for nil.
+// StatusOf returns the operation level status an error of Unpack stands
+// for, so a Method handler can return it (OPC 10000-4 §5.12.2.2 and
+// Table 61): Bad_ArgumentsMissing or Bad_TooManyArguments for the number
+// of input arguments, Bad_InvalidArgument for an input argument that
+// "broke a constraint (e.g. wrong data type ...)", whose own
+// Bad_TypeMismatch (Table 62) is the Status of the *ArgumentError; the
+// Status of an *ArgumentError of an output argument; Bad_InvalidArgument
+// for any other error. It returns StatusOK for nil.
 func StatusOf(err error) ua.StatusCode {
 	if err == nil {
 		return ua.StatusOK
 	}
 	if e, ok := err.(*ArgumentError); ok {
+		if !e.Output && e.Index >= 0 {
+			return ua.StatusBadInvalidArgument
+		}
 		return e.Status
 	}
 	return ua.StatusBadInvalidArgument

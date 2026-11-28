@@ -687,7 +687,7 @@ handler := func(ctx context.Context, objectID, methodID *ua.NodeID, args []*ua.V
         return nil, ua.StatusBadArgumentsMissing
     }
     if t := args[0].Type(); t != ua.TypeIDFloat && t != ua.TypeIDDouble {
-        return nil, ua.StatusBadTypeMismatch
+        return nil, ua.StatusBadInvalidArgument // a wrong data type (Part 4 §5.12.2.2)
     }
     factor := args[0].Float()
     result := factor * 2.0
@@ -706,10 +706,18 @@ Give the method node its signature with `SetMethodArguments`: it adds the
 InputArguments and OutputArguments Properties of Part 3 §5.7 (PropertyType,
 DataType Argument, ValueRank 1, referenced with HasProperty) to the node's
 namespace, so clients can read them (`Client.MethodArguments`) and the
-server checks the input arguments of a call against them
-(`Bad_ArgumentsMissing`, `Bad_TooManyArguments`, `Bad_TypeMismatch`).
-A nil list leaves that Property out; calling it again replaces the
-arguments.
+server checks the input arguments of a call against them before the
+handler runs. The result follows OPC 10000-4 §5.12.2.2 and Tables 61 and
+62: too few or too many arguments are `Bad_ArgumentsMissing` and
+`Bad_TooManyArguments`; an argument of the wrong type makes the result
+`Bad_InvalidArgument`, with one inputArgumentResult per input argument,
+`Bad_TypeMismatch` for each wrong one. The inputArgumentResults are empty
+in every other result ("This list is empty unless the operation level
+result is Bad_InvalidArgument"), and the output arguments of a handler
+are dropped when its status is Bad ("The list shall be empty if the
+statusCode Severity is Bad"): a handler that has outputs to return with
+an error returns a status of Severity Uncertain. A nil list leaves that
+Property out; calling it again replaces the arguments.
 
 ```go
 method := server.NewFolderNode(methodID, "Double")
@@ -736,7 +744,7 @@ of arguments, their built-in type and ValueRank) and returns an
 func read(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
     var in uamethod.FileTypeReadInput
     if err := in.Unpack(args); err != nil {
-        return nil, uamethod.StatusOf(err) // Bad_ArgumentsMissing, Bad_TooManyArguments, Bad_TypeMismatch
+        return nil, uamethod.StatusOf(err) // Bad_ArgumentsMissing, Bad_TooManyArguments, Bad_InvalidArgument
     }
     return (&uamethod.FileTypeReadOutput{Data: data(in.FileHandle, in.Length)}).Pack(), ua.StatusOK
 }

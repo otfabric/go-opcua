@@ -172,7 +172,7 @@ func TestSKS_GetSecurityKeys(t *testing.T) {
 	res = call(t, alice, pubSubID, getKeysID, "nope", uint32(0), uint32(0))
 	require.Equal(t, ua.StatusBadNotFound, res.StatusCode)
 	res = call(t, alice, pubSubID, getKeysID, "sg1", "x", uint32(0))
-	require.Equal(t, ua.StatusBadTypeMismatch, res.StatusCode)
+	require.Equal(t, ua.StatusBadInvalidArgument, res.StatusCode)
 	res = call(t, alice, pubSubID, getKeysID, "sg1")
 	require.Equal(t, ua.StatusBadArgumentsMissing, res.StatusCode)
 
@@ -279,7 +279,7 @@ func TestSKS_AddRemoveSecurityGroup(t *testing.T) {
 	require.Equal(t, nid, res.OutputArguments[0].Value())
 	require.Equal(t, ua.StatusBadNotFound, call(t, alice, pubSubID, getGroupID, "nope").StatusCode)
 	// The arguments of GetSecurityGroup (Part 14 §8.3.3).
-	require.Equal(t, ua.StatusBadTypeMismatch, call(t, alice, pubSubID, getGroupID, uint32(2)).StatusCode)
+	require.Equal(t, ua.StatusBadInvalidArgument, call(t, alice, pubSubID, getGroupID, uint32(2)).StatusCode)
 	require.Equal(t, ua.StatusBadArgumentsMissing, call(t, alice, pubSubID, getGroupID).StatusCode)
 	require.Equal(t, ua.StatusBadTooManyArguments, call(t, alice, pubSubID, getGroupID, "sg2", "sg3").StatusCode)
 

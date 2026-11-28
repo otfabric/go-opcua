@@ -102,7 +102,7 @@ func TestServerMethodsOwnership(t *testing.T) {
 		_, sc = h(methodCtx(sub.Session), nil, nil, nil)
 		require.Equal(t, ua.StatusBadArgumentsMissing, sc, name)
 		_, sc = h(methodCtx(sub.Session), nil, nil, arg("x", "y")[:len(args)])
-		require.Equal(t, ua.StatusBadTypeMismatch, sc, name)
+		require.Equal(t, ua.StatusBadInvalidArgument, sc, name)
 	}
 
 	// A subscription that lost its session belongs to nobody.

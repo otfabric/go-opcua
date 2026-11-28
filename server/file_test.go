@@ -604,7 +604,7 @@ func TestFileMethodHandlers(t *testing.T) {
 			args[i] = "x"
 		}
 		_, sc = call(name, args...)
-		require.Equal(t, ua.StatusBadTypeMismatch, sc, name)
+		require.Equal(t, ua.StatusBadInvalidArgument, sc, name)
 		_, sc = call(name, append(args, "x")...)
 		require.Equal(t, ua.StatusBadTooManyArguments, sc, name)
 	}
@@ -715,11 +715,11 @@ func TestConfigFileInternals(t *testing.T) {
 	_, sc := f.closeAndUpdate(ctx, nil, []*ua.Variant{ua.MustVariant("h")})
 	require.Equal(t, ua.StatusBadArgumentsMissing, sc)
 	_, sc = f.closeAndUpdate(ctx, nil, []*ua.Variant{ua.MustVariant("h"), ua.MustVariant(false), ua.MustVariant([]*ua.ExtensionObject{})})
-	require.Equal(t, ua.StatusBadTypeMismatch, sc)
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	h, sc := f.file.Open(ctx, fileModeWrite|fileModeEraseExisting)
 	require.Equal(t, ua.StatusOK, sc)
 	_, sc = f.closeAndUpdate(ctx, nil, []*ua.Variant{ua.MustVariant(h), ua.MustVariant("x"), ua.MustVariant("y")})
-	require.Equal(t, ua.StatusBadTypeMismatch, sc)
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	// A null element of ConfigurationReferences is no
 	// PubSubConfigurationRefDataType.
 	_, sc = f.closeAndUpdate(ctx, nil, []*ua.Variant{ua.MustVariant(h), ua.MustVariant(false), ua.MustVariant([]*ua.ExtensionObject{ua.NewExtensionObject(nil)})})

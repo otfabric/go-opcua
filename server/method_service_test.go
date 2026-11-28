@@ -95,7 +95,7 @@ func TestMethodService_Call(t *testing.T) {
 		resp, err := svc.Call(context.Background(), nil, req, 3)
 		require.NoError(t, err)
 		callResp := resp.(*ua.CallResponse)
-		assert.Equal(t, ua.StatusBadTypeMismatch, callResp.Results[0].StatusCode)
+		assert.Equal(t, ua.StatusBadInvalidArgument, callResp.Results[0].StatusCode)
 		require.Len(t, callResp.Results[0].InputArgumentResults, 1)
 		assert.Equal(t, ua.StatusBadTypeMismatch, callResp.Results[0].InputArgumentResults[0])
 	})

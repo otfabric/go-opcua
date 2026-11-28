@@ -240,7 +240,7 @@ func TestFileDirectory(t *testing.T) {
 	_, _, ok = d.Lookup("var/new")
 	require.False(t, ok)
 	_, sc = methodCall(t, s, ctx, varID, "Delete", "x")
-	require.Equal(t, ua.StatusBadTypeMismatch, sc)
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 
 	// MoveOrCopy (§4.3.6): a rename has the directory itself as target.
 	logID, _, _ := d.Lookup("var/log")
