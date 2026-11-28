@@ -34,7 +34,7 @@ func TestRegisterReleases(t *testing.T) {
 	t.Run("group", func(t *testing.T) {
 		t.Run("owner", func(t *testing.T) {
 			t.Parallel()
-			t.Cleanup(func() { close(ran) }) // runs after the one below
+			cleanup.Register(t, func() { close(ran) }) // runs after the one below
 			f := &fixture{}
 			wp = weak.Make(f)
 			cleanup.Register(t, func() { f.buf[0] = 1 })

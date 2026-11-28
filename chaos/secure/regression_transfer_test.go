@@ -8,6 +8,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -22,7 +23,7 @@ import (
 func TestRegressionTransferSubscriptionsNeedsTheOwner(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, chaoskit.Seed(t))
-	t.Cleanup(e.feed())
+	cleanup.Register(t, e.feed())
 	ctx, cancel := chaoskit.OpCtx()
 	defer cancel()
 

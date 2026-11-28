@@ -40,6 +40,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // defaultAsyncOpcuaImage is the async-opcua adapter of the opcua-interop release
@@ -140,7 +142,7 @@ func startAsyncOpcuaSecureReverseServer(t *testing.T, clientPort int) {
 		cmdCancel()
 		t.Fatalf("start adapter reverse server (%s): %v", image, err)
 	}
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		dockerReleaseMount(containerName, "/certs/pki")
 		dockerStop(containerName)
 		cmdCancel()

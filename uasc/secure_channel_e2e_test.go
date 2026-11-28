@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -204,7 +205,7 @@ func newCovPair(t *testing.T, pol covPolicy, o covOpts) *covPair {
 	require.NoError(t, err)
 	p.client, err = NewSecureChannel(ln.Endpoint(), cconn, clientCfg, p.clientErrs)
 	require.NoError(t, err)
-	t.Cleanup(p.close)
+	cleanup.Register(t, p.close)
 
 	if o.noServe {
 		close(p.srvDone)

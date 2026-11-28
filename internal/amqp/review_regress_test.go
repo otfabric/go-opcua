@@ -16,6 +16,7 @@ import (
 
 	"github.com/otfabric/go-opcua/internal/amqp"
 	"github.com/otfabric/go-opcua/internal/testutil/amqpbroker"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // Regression: Close waited for the delivery goroutine, so a handler that
@@ -114,7 +115,7 @@ func TestBrokerThatDoesNotReadIsDropped(t *testing.T) {
 			}
 		}
 	}()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		close(stop)
 		_ = p.conn.SetWriteDeadline(time.Now())
 		<-done

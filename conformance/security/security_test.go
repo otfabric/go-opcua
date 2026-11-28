@@ -16,6 +16,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -81,7 +82,7 @@ func TestSecurity_SubscriptionOverEncryptedChannel(t *testing.T) {
 
 	sub, ch, err := c.NewSubscription().Interval(fastInterval).Monitor(f.Int32).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	awaitValue(t, ch, 0, int32(42))
 	writeInt32(t, c, f.Int32, 4711)
@@ -700,7 +701,7 @@ func TestSecurity_OnlyEnabledSecurityAccepted(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	url := fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 	f := testutil.AddFixture(t, srv)
 
@@ -836,7 +837,7 @@ func TestSecurity_UntrustedCertificateReported(t *testing.T) {
 	filter := ua.NewEventFilter().SelectPaths("EventType", "SourceName", "Status", "StatusCodeId", "CertificateErrorEventId", "EventId", "Certificate").Build()
 	sub, ch, err := watcher.NewSubscription().Interval(20*time.Millisecond).MonitorEvents(filter, ua.NewNumericNodeID(0, id.Server)).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	ep := endpointFor(t, url, ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt)
 	_, err = dialClient(t, url, secureClientOpts(t, ep, ua.UserTokenTypeAnonymous)...)

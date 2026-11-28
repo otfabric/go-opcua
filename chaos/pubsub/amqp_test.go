@@ -15,6 +15,7 @@ import (
 	iamqp "github.com/otfabric/go-opcua/internal/amqp"
 	"github.com/otfabric/go-opcua/internal/testutil/amqpbroker"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/security"
@@ -29,7 +30,7 @@ func startAMQPBroker(t *testing.T, opts amqpbroker.Options) *amqpbroker.Broker {
 	if err := b.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	return b
 }
 

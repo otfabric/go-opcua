@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/remote"
 	"github.com/otfabric/go-opcua/pubsub/transport"
@@ -54,7 +55,7 @@ func TestPubSubMQTT_Actions(t *testing.T) {
 	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	ctx := context.Background()
 	c, err := opcua.NewClient(fmt.Sprintf("opc.tcp://127.0.0.1:%d", port), opcua.InsecureNoSecurity(), opcua.AutoReconnect(false))
 	if err != nil {
@@ -63,7 +64,7 @@ func TestPubSubMQTT_Actions(t *testing.T) {
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	r := remote.New(c)
 
 	n := psFresh()

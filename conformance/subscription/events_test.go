@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +24,7 @@ func TestEvents_MonitorAndEmit(t *testing.T) {
 		MonitorEvents(filter, f.EventObject).
 		Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	// Give the server a moment to register the monitored item before emitting.
 	time.Sleep(200 * time.Millisecond)

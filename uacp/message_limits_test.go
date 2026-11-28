@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +22,7 @@ func ackServer(t *testing.T, ack *Acknowledge) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = ln.Close() })
+	cleanup.Register(t, func() { _ = ln.Close() })
 	go func() {
 		c, err := ln.Accept()
 		if err != nil {

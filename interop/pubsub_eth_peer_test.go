@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/ua"
@@ -64,7 +65,7 @@ func ethNetwork(t *testing.T) (network, bridge string) {
 	if err != nil {
 		t.Fatalf("docker network create: %v\n%s", err, out)
 	}
-	t.Cleanup(func() { exec.Command("docker", "network", "rm", network).Run() }) //nolint:errcheck
+	cleanup.Register(t, func() { exec.Command("docker", "network", "rm", network).Run() }) //nolint:errcheck
 	return network, bridge
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uapolicy"
@@ -40,7 +41,7 @@ func startWireProxy(t *testing.T, hook func(dir string, msg []byte) []byte) *wir
 	ln, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
 	p := &wireProxy{ln: ln, hook: hook}
-	t.Cleanup(func() { _ = ln.Close() })
+	cleanup.Register(t, func() { _ = ln.Close() })
 
 	go func() {
 		for {
@@ -101,7 +102,7 @@ func proxiedECCServer(t *testing.T, hook func(dir string, msg []byte) []byte, ex
 	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	proxy.mu.Lock()
 	proxy.backend = fmt.Sprintf("localhost:%d", srv.Port())
 	proxy.mu.Unlock()
@@ -152,7 +153,7 @@ func testECCRenewalUnderTraffic(t *testing.T) {
 				Monitor(f.Writable).
 				Start(ctx)
 			require.NoError(t, err)
-			t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+			cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 			opens := func() int {
 				mu.Lock()
@@ -571,7 +572,7 @@ func TestECC_ServerConfiguration(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.NoError(t, srv.Start(context.Background()))
-		t.Cleanup(func() { _ = srv.Close() })
+		cleanup.Register(t, func() { _ = srv.Close() })
 		url := fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 
 		secure := func(policy string, mode ua.MessageSecurityMode) []opcua.Option {

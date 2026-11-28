@@ -12,6 +12,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -180,7 +181,7 @@ func TestAlarms_ConditionRefreshErrors(t *testing.T) {
 
 	sub, ch, err := e.c.NewSubscription().Interval(fastInterval).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 	res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth, &ua.MonitoredItemCreateRequest{
 		ItemToMonitor:  &ua.ReadValueID{NodeID: ua.NewNumericNodeID(0, id.Server), AttributeID: ua.AttributeIDEventNotifier},
 		MonitoringMode: ua.MonitoringModeReporting,
@@ -279,7 +280,7 @@ func TestAlarms_LimitAlarms(t *testing.T) {
 		Build()
 	sub, ch, err := e.c.NewSubscription().Interval(fastInterval).MonitorEvents(f, ua.NewNumericNodeID(0, id.Server)).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	require.NoError(t, excl.EvaluateLimits(90))
 	require.NoError(t, nonExcl.EvaluateLimits(120))
@@ -323,7 +324,7 @@ func TestAlarms_WhereClause(t *testing.T) {
 		Where(ua.FieldPath("ActiveState/Id").Equals(true)).Build()
 	sub, ch, err := e.c.NewSubscription().Interval(fastInterval).MonitorEvents(f, ua.NewNumericNodeID(0, id.Server)).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	require.NoError(t, cond.SetSeverity(300)) // inactive: filtered
 	require.NoError(t, cond.SetActive(true))
@@ -386,7 +387,7 @@ func TestAlarms_AddressSpace(t *testing.T) {
 	require.NoError(t, err)
 	sub, ch, err := e.c.NewSubscription().Interval(fastInterval).Monitor(activeID).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 	awaitValue(t, ch, 0, false)
 	require.NoError(t, cond.SetActive(true))
 	awaitValue(t, ch, 0, true)

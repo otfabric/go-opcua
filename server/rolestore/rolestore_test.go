@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx/fxstore"
@@ -87,7 +88,7 @@ func openMem(t *testing.T, b fxstore.Store) *Store {
 	t.Helper()
 	s, err := Open(context.Background(), b, Options{Owner: owner})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	return s
 }
 

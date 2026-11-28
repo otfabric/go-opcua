@@ -23,6 +23,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -128,7 +129,7 @@ func startGoServerWithEventHistory(t *testing.T) *goEventHistory {
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	if s.Port() == 0 {
 		t.Fatal("server.Start: bound port is 0")
 	}
@@ -698,7 +699,7 @@ func assertGoUpdatesPeerEvents(t *testing.T, endpoint string) {
 		})
 		return historyUpdateResult(t, fmt.Sprintf("HistoryUpdate %v", perform), resp, err)
 	}
-	t.Cleanup(func() { p.resetEvents(t, context.Background()) })
+	cleanup.Register(t, func() { p.resetEvents(t, context.Background()) })
 
 	p.resetEvents(t, ctx)
 	r := update(ua.PerformUpdateTypeInsert,
@@ -727,7 +728,7 @@ func assertGoDeletesPeerEvents(t *testing.T, endpoint string, unknownStatus ua.S
 	t.Helper()
 	p := dialPeerEventServer(t, endpoint)
 	ctx := shortTestCtx(t)
-	t.Cleanup(func() { p.resetEvents(t, context.Background()) })
+	cleanup.Register(t, func() { p.resetEvents(t, context.Background()) })
 
 	p.resetEvents(t, ctx)
 	resp, err := p.c.HistoryDeleteEvents(ctx, &ua.DeleteEventDetails{

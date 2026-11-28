@@ -17,6 +17,7 @@ import (
 	"github.com/otfabric/go-opcua/internal/mdns"
 	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -57,7 +58,7 @@ func dialDiscovery(t *testing.T, url string, opts ...opcua.Option) *opcua.Client
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	require.NoError(t, c.Dial(ctx))
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	return c
 }
 
@@ -507,7 +508,7 @@ func TestDiscovery_FallbackToRegisterServer(t *testing.T) {
 					return nil, status
 				})
 			require.NoError(t, lds.Start(context.Background()))
-			t.Cleanup(func() { _ = lds.Close() })
+			cleanup.Register(t, func() { _ = lds.Close() })
 			ldsURL := fmt.Sprintf("opc.tcp://localhost:%d", lds.Port())
 
 			var log conformkit.RegistrationLog

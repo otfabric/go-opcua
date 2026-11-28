@@ -14,6 +14,7 @@ import (
 
 	imqtt "github.com/otfabric/go-opcua/internal/mqtt"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/security"
@@ -110,7 +111,7 @@ func TestChaosFuzzThroughTransport(t *testing.T) {
 	if err := broker.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(broker.Close)
+	cleanup.Register(t, broker.Close)
 
 	// The secured reader is checked strictly; the others may deliver
 	// whatever a mutated unsigned message says.

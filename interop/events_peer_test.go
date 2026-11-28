@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -64,7 +65,7 @@ func pulsePeerEvents(t *testing.T, srv *server.Server, source *ua.NodeID) {
 	t.Helper()
 	done, stopped := make(chan struct{}), make(chan struct{})
 	// emitPeerEvent logs to t: the goroutine ends before the test does.
-	t.Cleanup(func() { close(done); <-stopped })
+	cleanup.Register(t, func() { close(done); <-stopped })
 	go func() {
 		defer close(stopped)
 		ticker := time.NewTicker(500 * time.Millisecond)

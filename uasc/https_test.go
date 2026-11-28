@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -53,7 +54,7 @@ func newRawHTTPSPeer(t *testing.T, respond func(w http.ResponseWriter, r *http.R
 		p.lastBody.Store(b)
 		respond(w, r, b)
 	}))
-	t.Cleanup(p.Close)
+	cleanup.Register(t, p.Close)
 	return p
 }
 
@@ -85,7 +86,7 @@ func newHTTPSTestChannel(t *testing.T, p *httpsPeer) (*SecureChannel, chan error
 	errCh := make(chan error, 1)
 	sc, err := NewHTTPSChannel(p.endpoint(), p.Client(), noneConfig(), errCh)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sc.Close() })
+	cleanup.Register(t, func() { _ = sc.Close() })
 	return sc, errCh
 }
 

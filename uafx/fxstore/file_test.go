@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"slices"
 	"testing"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 func openTemp(t *testing.T) (*FileStore, string) {
@@ -23,7 +25,7 @@ func openTemp(t *testing.T) (*FileStore, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = f.Close() })
+	cleanup.Register(t, func() { _ = f.Close() })
 	return f, dir
 }
 
@@ -239,7 +241,7 @@ type faultHooks struct {
 func withFaults(t *testing.T, h faultHooks) {
 	t.Helper()
 	sf, rn, sd := syncFile, rename, syncDir
-	t.Cleanup(func() { syncFile, rename, syncDir = sf, rn, sd })
+	cleanup.Register(t, func() { syncFile, rename, syncDir = sf, rn, sd })
 	boom := errors.New("boom")
 	if h.syncFile {
 		syncFile = func(*os.File) error { return boom }

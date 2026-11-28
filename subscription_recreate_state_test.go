@@ -11,6 +11,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
@@ -34,7 +35,7 @@ func TestRecreateSubscription_KeepsPublishingMode(t *testing.T) {
 	notify := make(chan *opcua.PublishNotificationData, 64)
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond}, notify)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	_, err = sub.Monitor(ctx, ua.TimestampsToReturnBoth,
 		opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewStringNodeID(ns.ID(), "IntVar"), ua.AttributeIDValue, 1))
 	require.NoError(t, err)
@@ -80,7 +81,7 @@ func TestRecreateSubscription_RestoresTriggeringLinks(t *testing.T) {
 	notify := make(chan *opcua.PublishNotificationData, 64)
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond}, notify)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	reportReq := opcua.NewMonitoredItemCreateRequestWithDefaults(reportNode, ua.AttributeIDValue, reportHandle)
 	reportReq.MonitoringMode = ua.MonitoringModeSampling
@@ -138,7 +139,7 @@ func TestRestoreTriggering_ServerRefuses(t *testing.T) {
 
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond}, make(chan *opcua.PublishNotificationData, 64))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth,
 		opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewStringNodeID(ns.ID(), "IntVar"), ua.AttributeIDValue, 1),
 		opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewStringNodeID(ns.ID(), "FloatVar"), ua.AttributeIDValue, 2))
@@ -177,7 +178,7 @@ func TestUnmonitor_DropsTriggeringLinks(t *testing.T) {
 
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond}, make(chan *opcua.PublishNotificationData, 64))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	var reqs []*ua.MonitoredItemCreateRequest
 	for i, name := range []string{"IntVar", "FloatVar", "StringVar", "IntVar"} {
 		reqs = append(reqs, opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewStringNodeID(ns.ID(), name), ua.AttributeIDValue, uint32(i+1)))
@@ -233,7 +234,7 @@ func TestRestoreTriggering_MissingResult(t *testing.T) {
 
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond}, make(chan *opcua.PublishNotificationData, 64))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth,
 		opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewNumericNodeID(0, id.ServerServerStatusCurrentTime), ua.AttributeIDValue, 1),
 		opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewNumericNodeID(0, id.ServerServerStatusState), ua.AttributeIDValue, 2))
@@ -266,7 +267,7 @@ func TestSetPublishingMode_RefusedKeepsMode(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []ua.StatusCode{ua.StatusBadSubscriptionIDInvalid}, res.Results)
 	require.NoError(t, sub.TestingRecreateCreate(ctx))
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	st, err := sub.Stats(ctx)
 	require.NoError(t, err)
 	require.True(t, st.PublishingEnabled, "the refused request did not disable publishing")
@@ -294,7 +295,7 @@ func TestSetTriggering_RemoveAndAddKeepsLink(t *testing.T) {
 	notify := make(chan *opcua.PublishNotificationData, 64)
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond}, notify)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	reportReq := opcua.NewMonitoredItemCreateRequestWithDefaults(reportNode, ua.AttributeIDValue, reportHandle)
 	reportReq.MonitoringMode = ua.MonitoringModeSampling

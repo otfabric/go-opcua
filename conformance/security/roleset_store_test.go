@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/rolemgmt"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/rolestore"
@@ -32,7 +33,7 @@ func openRoleStore(t *testing.T, dir string) *rolestore.Store {
 	t.Helper()
 	st, err := rolestore.OpenDir(context.Background(), dir, rolestore.Options{Owner: roleStoreOwner})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = st.Close() })
+	cleanup.Register(t, func() { _ = st.Close() })
 	return st
 }
 

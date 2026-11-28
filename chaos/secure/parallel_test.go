@@ -14,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uapolicy"
 )
@@ -190,7 +191,7 @@ func TestSecureParallelOneClient(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, chaoskit.Seed(t))
 	wd := chaoskit.NewWatchdog(t)
-	t.Cleanup(e.feed())
+	cleanup.Register(t, e.feed())
 	d := parallelDuration(t, 1500*time.Millisecond)
 
 	for _, pol := range []policy{polAesGcm, polChaChaPoly, polCurve25519, polCurve448, polP256, polBrainpool256} {
@@ -223,7 +224,7 @@ func TestSecureParallelOneClient(t *testing.T) {
 			}
 		})
 	}
-	t.Cleanup(func() { e.reportReplays() })
+	cleanup.Register(t, func() { e.reportReplays() })
 }
 
 // TestSecureParallelMixedPolicies runs clients of every policy, in both
@@ -235,7 +236,7 @@ func TestSecureParallelMixedPolicies(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, chaoskit.Seed(t))
 	wd := chaoskit.NewWatchdog(t)
-	t.Cleanup(e.feed())
+	cleanup.Register(t, e.feed())
 	d := parallelDuration(t, 1500*time.Millisecond)
 
 	type variant struct {
@@ -362,7 +363,7 @@ func testRenewalUnderLoad(t *testing.T) {
 		reportsMu sync.Mutex
 		reports   []func()
 	)
-	t.Cleanup(e.feed())
+	cleanup.Register(t, e.feed())
 	var opens openCounter
 	opens.install(e.proxy)
 
@@ -488,7 +489,7 @@ func TestSecureParallelSessionMovesUnderLoad(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, chaoskit.Seed(t))
 	wd := chaoskit.NewWatchdog(t)
-	t.Cleanup(e.feed())
+	cleanup.Register(t, e.feed())
 	pols := selectedPolicies(t)
 	const cuts = 3
 

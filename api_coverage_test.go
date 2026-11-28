@@ -10,6 +10,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -100,7 +101,7 @@ func TestSetPublishingMode(t *testing.T) {
 
 	sub, _, err := c.NewSubscription().Interval(100 * time.Millisecond).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	resp, err := c.SetPublishingMode(ctx, true, sub.SubscriptionID)
 	require.NoError(t, err)
@@ -244,7 +245,7 @@ func TestSubscriptionBuilderMonitorEvents(t *testing.T) {
 		MonitorEvents(filter, f.EventObject).
 		Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 	require.NotNil(t, notifyCh)
 
 	time.Sleep(200 * time.Millisecond)
@@ -302,7 +303,7 @@ func TestSubscriptionStats(t *testing.T) {
 
 	sub, _, err := c.NewSubscription().Interval(100 * time.Millisecond).Monitor(f.Int32).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	// The server exposes its SubscriptionDiagnosticsArray.
 	st, err := sub.Stats(ctx)

@@ -16,6 +16,7 @@ import (
 	iamqp "github.com/otfabric/go-opcua/internal/amqp"
 	imqtt "github.com/otfabric/go-opcua/internal/mqtt"
 	"github.com/otfabric/go-opcua/internal/testutil/amqpbroker"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/remote"
@@ -50,7 +51,7 @@ func psAMQPBroker(t *testing.T, opts amqpbroker.Options) *amqpbroker.Broker {
 	t.Helper()
 	b := amqpbroker.New(opts)
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	return b
 }
 
@@ -178,7 +179,7 @@ func TestPubSub_BrokerTransportsServerToServer(t *testing.T) {
 	wire := newPSWire()
 	mb := mqttbroker.New(mqttbroker.Options{OnPublish: wire.onPublish, OnConnect: wire.onConnect})
 	require.NoError(t, mb.Start())
-	t.Cleanup(mb.Close)
+	cleanup.Register(t, mb.Close)
 	ab := psAMQPBroker(t, amqpbroker.Options{OnMessage: wire.onMessage, OnOpen: wire.onOpen})
 	ring := psRing(t, "sg")
 
@@ -440,7 +441,7 @@ func TestPubSub_RemoteConnectionValidation(t *testing.T) {
 	wire := newPSWire()
 	mb := mqttbroker.New(mqttbroker.Options{DisableV5: true, OnConnect: wire.onConnect})
 	require.NoError(t, mb.Start())
-	t.Cleanup(mb.Close)
+	cleanup.Register(t, mb.Close)
 	srv, url := newServer(t, server.WithPubSub(nil))
 	ns := server.NewNodeNameSpace(srv, "urn:pubsub:remote-validation")
 	c := newClient(t, url)

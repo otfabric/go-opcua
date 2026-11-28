@@ -34,6 +34,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -89,7 +90,7 @@ func startAdapterReverseServer(t *testing.T, imageEnvVar, defaultImage string, c
 		cmdCancel()
 		_ = cmd.Wait()
 	}
-	t.Cleanup(stop)
+	cleanup.Register(t, stop)
 
 	startCtx, startCancel := context.WithTimeout(context.Background(), serverReadyTimeout)
 	defer startCancel()
@@ -138,7 +139,7 @@ func runAdapterReverseClientWith(t *testing.T, imageEnvVar, defaultImage, endpoi
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
 	cmd.Stderr = os.Stderr
-	t.Cleanup(func() { dockerStop(containerName) })
+	cleanup.Register(t, func() { dockerStop(containerName) })
 
 	raw, err := cmd.Output()
 	if err != nil {
@@ -196,7 +197,7 @@ func TestOpen62541Server_ReverseConnect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListenReverse: %v", err)
 	}
-	t.Cleanup(func() { _ = l.Close() })
+	cleanup.Register(t, func() { _ = l.Close() })
 
 	startAdapterReverseServer(t, "OPEN62541_IMAGE", defaultOpen62541Image, l.Addr().(*net.TCPAddr).Port)
 
@@ -218,7 +219,7 @@ func TestOpen62541Server_ReverseConnect(t *testing.T) {
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("Connect over reverse connection: %v", err)
 	}
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
 		_ = c.Close(ctx2)
@@ -452,7 +453,7 @@ func TestOpen62541Server_ReverseConnect_Secure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListenReverse: %v", err)
 	}
-	t.Cleanup(func() { _ = l.Close() })
+	cleanup.Register(t, func() { _ = l.Close() })
 	// One server with the RSA and the ECC endpoints; it is only reached
 	// through the connections it opens (every 300 ms while there is none).
 	startOpen62541ECCServerWith(t,
