@@ -101,11 +101,16 @@ func TestConnectionManagerLog(t *testing.T) {
 		InputArguments: []*ua.Variant{ua.MustVariant(int32(uafx.StartEditing)), ua.MustVariant("x")}})
 	require.NoError(t, err)
 	require.NotEqual(t, ua.StatusOK, res.StatusCode)
+	res, err = f.c.Call(ctx, &ua.CallMethodRequest{ObjectID: cm,
+		MethodID:       ua.NewNumericNodeID(f.ns.CM, fxcmid.FxRootConnectionManagerProcessConnectionConfigurationSets),
+		InputArguments: []*ua.Variant{ua.MustVariant(int32(uafx.ActionEstablishConnections)), ua.MustVariant("x")}})
+	require.NoError(t, err)
+	require.NotEqual(t, ua.StatusOK, res.StatusCode)
 	_, rs, err := uafx.EditConnectionConfigurationSets(ctx, f.c, uafx.DiscardUpdates, nil)
 	require.NoError(t, err)
 	require.Empty(t, rs)
 	for _, p := range []string{"ConnectionManager/EditConnection FxEdit(99): ", "ConnectionManager/ProcessConnection FxProcess(99): ",
-		"ConnectionManager/EditConnection : ", "ConnectionManager/EditConnection DiscardUpdates: "} {
+		"ConnectionManager/EditConnection : ", "ConnectionManager/ProcessConnection : ", "ConnectionManager/EditConnection DiscardUpdates: "} {
 		r := find(l, p)
 		require.Len(t, r, 1, p)
 		assert.True(t, r[0].SourceNode.Equal(cm), p)
@@ -144,6 +149,14 @@ func TestConnectionManagerLog(t *testing.T) {
 	assert.Contains(t, errs[1].Message.Text, "Endpoint2")
 	assert.Equal(t, f.node(".Conn[C1]").String(), data(errs[0])["ErrorCodeNode"].(*ua.NodeID).String())
 	assert.Equal(t, int32(uafx.FxErrorTargetServerConnectionError), data(errs[0])["FxError"])
+
+	// A call after Close: Bad_Shutdown, still a record (§6.7.5).
+	require.NoError(t, f.cm.Close())
+	_, _, err = uafx.ProcessConnectionConfigurationSets(ctx, f.c, uafx.ActionEstablishConnections, []*ua.NodeID{f.set})
+	require.ErrorIs(t, err, ua.StatusBadShutdown)
+	r := find(l, "ConnectionManager/ProcessConnection : ")
+	require.Len(t, r, 2)
+	assert.Equal(t, ua.StatusBadShutdown, data(r[1])["ErrorCode"])
 }
 
 // TestConnectionManagerLogEvents: the records of the Events of the
