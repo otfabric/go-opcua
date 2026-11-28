@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 )
@@ -46,7 +47,7 @@ func usePacketFake(t *testing.T) *packetFake {
 	sysFilter = fk.filter
 	sysRecv = fk.recv
 	sysSendto = fk.sendto
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		sysSocket, sysBind, sysJoin, sysFilter, sysRecv, sysSendto = oldSocket, oldBind, oldJoin, oldFilter, oldRecv, oldSend
 		fk.mu.Lock()
 		defer fk.mu.Unlock()
@@ -148,7 +149,7 @@ func TestPacketOpenAndRead(t *testing.T) {
 	fk := usePacketFake(t)
 	l, err := openOSLink(linkConfig{ifi: eth0, recv: true, group: grp})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = l.close() })
+	cleanup.Register(t, func() { _ = l.close() })
 	require.Equal(t, 1, fk.filters)
 	require.Equal(t, []unix.SockaddrLinklayer{{Protocol: htons(unix.ETH_P_ALL), Ifindex: 2}}, fk.binds)
 	require.Len(t, fk.joins, 1)
@@ -230,7 +231,7 @@ func TestPacketWriteDeadline(t *testing.T) {
 	fk := usePacketFake(t)
 	l, err := openOSLink(linkConfig{ifi: eth0})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = l.close() })
+	cleanup.Register(t, func() { _ = l.close() })
 	fk.mu.Lock()
 	fk.sendErr = unix.EAGAIN // the socket buffer stays full
 	fk.mu.Unlock()

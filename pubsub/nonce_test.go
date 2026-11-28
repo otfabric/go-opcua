@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/pubsub/uadp"
@@ -189,7 +190,7 @@ func signedSubscriber(t *testing.T, url string, timeout float64, opts ...Option)
 		append([]Option{WithDataSetHandler(rec.handler)}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	cid := mustID(t, sub, KindConnection, Root, "sub")
 	rid := mustID(t, sub, KindDataSetReader, mustID(t, sub, KindReaderGroup, cid, "rg"), "ra")
 	require.Eventually(t, func() bool { return bus.subscribers(url) > 0 }, 3*time.Second, time.Millisecond)

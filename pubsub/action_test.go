@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -44,7 +45,7 @@ func startReal(t *testing.T, cfg *ua.PubSubConfigurationDataType, opts ...Option
 	p, err := New(cfg, opts...)
 	require.NoError(t, err)
 	require.NoError(t, p.Start(context.Background()))
-	t.Cleanup(func() { _ = p.Close() })
+	cleanup.Register(t, func() { _ = p.Close() })
 	return p
 }
 
@@ -153,7 +154,7 @@ func TestActionHandlerTimeoutAndPanic(t *testing.T) {
 	resp := startReal(t, responderConfig(url, 20*time.Millisecond, ua.MessageSecurityModeNone),
 		WithActionHandler("Calc", 1, slow),
 		WithActionHandler("Calc", 2, func(context.Context, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) { panic("boom") }))
-	t.Cleanup(func() { close(release) })
+	cleanup.Register(t, func() { close(release) })
 	req := startReal(t, requestorConfig(url))
 	waitRunning(t, resp, "Responder")
 	waitRunning(t, req, "Requestor")

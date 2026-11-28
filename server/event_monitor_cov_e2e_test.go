@@ -10,6 +10,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
@@ -50,7 +51,7 @@ func TestEventMonitorCovOfTypeOverTheWire(t *testing.T) {
 	tank.AddRef(overflow, id.HasSubtype, true)
 	variable := ns.AddNewVariableStringNode("NotAType", int32(1))
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 
 	c := testutil.NewTestClient(t, srv.Endpoints()[0].EndpointURL)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -58,7 +59,7 @@ func TestEventMonitorCovOfTypeOverTheWire(t *testing.T) {
 	notifyCh := make(chan *opcua.PublishNotificationData, 32)
 	sub, _, err := c.NewSubscription().Interval(20 * time.Millisecond).NotifyChannel(notifyCh).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	monitor := func(node *ua.NodeID, handle uint32, f *ua.EventFilter) *ua.MonitoredItemCreateResult {
 		t.Helper()

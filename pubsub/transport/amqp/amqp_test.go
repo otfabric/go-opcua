@@ -13,6 +13,7 @@ import (
 
 	iamqp "github.com/otfabric/go-opcua/internal/amqp"
 	"github.com/otfabric/go-opcua/internal/testutil/amqpbroker"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 )
 
@@ -22,7 +23,7 @@ func startBroker(t *testing.T, opts amqpbroker.Options) *amqpbroker.Broker {
 	t.Helper()
 	b := amqpbroker.New(opts)
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	return b
 }
 
@@ -32,7 +33,7 @@ func open(t *testing.T, cfg transport.Config) *Conn {
 	defer cancel()
 	c, err := Open(ctx, cfg)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	cleanup.Register(t, func() { _ = c.Close() })
 	return c
 }
 

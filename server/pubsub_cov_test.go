@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
@@ -229,7 +230,7 @@ func TestPubSubCov_StartFailures(t *testing.T) {
 	s, err := newServerNoNS(EndPoint("localhost", 0), InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous), WithPubSub(nil))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	err = s.Start(context.Background())
 	require.ErrorContains(t, err, "PublishSubscribe object is missing")
 	s.mu.Lock()

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -84,7 +85,7 @@ func observedServer(t *testing.T, rec *eventRecorder) (*server.Server, string) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return srv, srv.Endpoints()[0].EndpointURL
 }
 
@@ -168,7 +169,7 @@ func TestSessionObserver_ServerShutdown(t *testing.T) {
 	defer cancel()
 
 	c := observedClient(t, ctx, url)
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	rec.wait(t, "activated", 1)
 
 	require.NoError(t, srv.Close())
@@ -221,7 +222,7 @@ func TestSessionObserver_Rejected(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	url := srv.Endpoints()[0].EndpointURL
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

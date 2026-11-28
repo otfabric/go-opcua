@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -206,7 +207,7 @@ func TestPublish_FullQueueAnswersOldest(t *testing.T) {
 	srv, err := New(EndPoint("localhost", 0), InsecureNoSecurity(), EnableAuthMode(ua.UserTokenTypeAnonymous))
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -215,7 +216,7 @@ func TestPublish_FullQueueAnswersOldest(t *testing.T) {
 			opcua.AutoReconnect(false), opcua.RequestTimeout(60*time.Second))
 		require.NoError(t, err)
 		require.NoError(t, c.Connect(ctx))
-		t.Cleanup(func() { _ = c.Close(context.Background()) })
+		cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 		// A subscription that publishes nothing during the test.
 		require.NoError(t, c.Send(ctx, &ua.CreateSubscriptionRequest{
 			RequestedPublishingInterval: 60000, RequestedLifetimeCount: 3000,

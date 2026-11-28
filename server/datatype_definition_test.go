@@ -13,6 +13,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/nodeset"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -230,14 +231,14 @@ func TestDataTypeDefinition_Read(t *testing.T) {
 	srv, err := New(EndPoint("localhost", 0), InsecureNoSecurity(), EnableAuthMode(ua.UserTokenTypeAnonymous))
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	c, err := opcua.NewClient(srv.Endpoints()[0].EndpointURL, opcua.InsecureNoSecurity(), opcua.AutoReconnect(false))
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(ctx))
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 
 	resp, err := c.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{
 		{NodeID: ns0(id.BuildInfo), AttributeID: ua.AttributeIDDataTypeDefinition},
@@ -393,7 +394,7 @@ func importDefinitions(t *testing.T, doc []byte, at int) (*Server, uint16, *byte
 	var log bytes.Buffer
 	s, err := New(SetLogger(slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{Level: slog.LevelWarn}))))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	for len(s.Namespaces()) < at {
 		NewNodeNameSpace(s, "urn:test:filler:"+itoa(len(s.Namespaces())))
 	}

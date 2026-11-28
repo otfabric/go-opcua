@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -704,7 +705,7 @@ func TestConfigFileInternals(t *testing.T) {
 	s := newTestServer()
 	s.cfg.pubsub = &pubsubConfig{}
 	require.NotNil(t, s.PubSub())
-	t.Cleanup(s.closePubSub)
+	cleanup.Register(t, s.closePubSub)
 	require.NoError(t, s.buildPubSubModel())
 	f := s.ps.model.file
 	require.NotNil(t, f)

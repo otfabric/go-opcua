@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 )
 
@@ -113,7 +114,7 @@ func useFakes(t *testing.T) *fakeEnv {
 		}
 		return nil, errors.New("no such interface")
 	}
-	t.Cleanup(func() { openLink, interfaceByName = oldOpen, oldIf })
+	cleanup.Register(t, func() { openLink, interfaceByName = oldOpen, oldIf })
 	return env
 }
 
@@ -137,7 +138,7 @@ func openFake(t *testing.T, cfg transport.Config) *Conn {
 	}
 	c, err := Open(context.Background(), cfg)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	cleanup.Register(t, func() { _ = c.Close() })
 	return c
 }
 
@@ -480,7 +481,7 @@ func TestReceiveHiddenMAC(t *testing.T) {
 	env := useFakes(t)
 	old := macHidden
 	macHidden = func(net.HardwareAddr) bool { return true }
-	t.Cleanup(func() { macHidden = old })
+	cleanup.Register(t, func() { macHidden = old })
 	c := openFake(t, transport.Config{URL: "opc.eth://01-00-5e-7f-00-01"})
 	col := newCollector()
 	_, err := c.Subscribe(context.Background(), "", 0, col.handle)

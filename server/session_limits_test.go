@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ func limitServer(t *testing.T, opts ...Option) (*Server, func() (*ua.RequestHead
 	}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 
 	sessions := &SessionService{srv: srv}
 	return srv, func() (*ua.RequestHeader, error) {

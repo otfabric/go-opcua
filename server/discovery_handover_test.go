@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/internal/mdns"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -86,7 +87,7 @@ func TestMulticast_TakesOverFromAResponderThatLeaves(t *testing.T) {
 
 	peer, err := mdns.New(mdns.Config{Conns: []mdns.PacketConn{link.Conn()}})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = peer.Close() })
+	cleanup.Register(t, func() { _ = peer.Close() })
 	require.NoError(t, peer.Register(mdns.Service{Instance: name, Type: opcuaServiceType, Host: "press7.local.", Port: 4841, Text: []string{"path=/self", "caps=NA"}}))
 	require.Eventually(t, func() bool { return onNetworkRecord(s, name) != nil }, wait, 5*time.Millisecond)
 

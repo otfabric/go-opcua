@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 )
 
@@ -62,7 +63,7 @@ func multicastSetup(t *testing.T, group string, v6 bool) (url, ifName string, su
 				ok = false
 				break
 			}
-			t.Cleanup(func() { _ = c.Close() })
+			cleanup.Register(t, func() { _ = c.Close() })
 			cols[i] = newCollector()
 			if _, err := c.Subscribe(context.Background(), "", 0, cols[i].handle); err != nil {
 				t.Logf("interface %q: %v", ifName, err)
@@ -77,7 +78,7 @@ func multicastSetup(t *testing.T, group string, v6 bool) (url, ifName string, su
 		if err != nil {
 			continue
 		}
-		t.Cleanup(func() { _ = pub.Close() })
+		cleanup.Register(t, func() { _ = pub.Close() })
 		if err := pub.Send(context.Background(), []byte("probe"), transport.PublishOptions{}); err != nil {
 			t.Logf("interface %q: %v", ifName, err)
 			continue

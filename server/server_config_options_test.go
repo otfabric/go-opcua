@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -197,6 +198,6 @@ func TestServerOption_ECCSignLegacyKeyLength(t *testing.T) {
 	require.NoError(t, err)
 	srv.cb = nil
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	require.True(t, srv.cb.eccSignLegacyKeyLength)
 }

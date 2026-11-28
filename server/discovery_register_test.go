@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/ua"
@@ -22,7 +23,7 @@ func startedServer(t *testing.T, opts ...Option) *Server {
 	s, err := New(append([]Option{InsecureNoSecurity()}, append([]Option{EndPoint("localhost", 0)}, opts...)...)...)
 	require.NoError(t, err)
 	require.NoError(t, s.Start(context.Background()))
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	return s
 }
 

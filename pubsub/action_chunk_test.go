@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -145,7 +146,7 @@ func TestE2EActionChunksMQTT(t *testing.T) {
 	t.Parallel()
 	b := mqttbroker.New(mqttbroker.Options{})
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	queue := ActionRequestTopic("chunks", MappingUADP, "1", "Actions")
 	g := WriterGroup("Actions", 10, 0, DataSetWriter("BlobWriter", 100, "Blob"))
 	g.MaxNetworkMessageSize = 400
