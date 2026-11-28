@@ -216,6 +216,7 @@ Phase 2 of docs/roadmap.md and items of phase 3.
 - `TestClientServerMethods` (root): the client calls of `*opcua.Client` and `*opcua.Subscription`. `TestContracts` and `TestCallAll` (`uamethod`) cover the ServerType contracts.
 - `TestImportedAddressSpaceGolden`: `testdata/nodeset_golden.txt` is rewritten for the values of SecondsTillShutdown, ShutdownReason and EstimatedReturnTime; the dumps differ from those before in these three nodes of namespace 0 only.
 - `TestServerCapabilitiesMandatory`, `TestServerCapabilitiesOptions`, `TestBindServerCapabilitiesWithoutNode`, `TestContinuationPointCapabilityUInt16` (`server`) and `TestServerCapabilities_Mandatory` (`conformance/addrspace`, through a client): every Mandatory ServerCapabilities Property with its DataType, the options copied, the UInt16 bound. `TestImportedAddressSpaceGolden`: the dumps differ from those before by the values of these seven Properties only (`i=2269`, `2271`, `2272`, `2735`, `2736`, `2737`, `3704`).
+- `TestSessionKeepAliveKeepsIdleSessionOpen` (root) failed once in Race (Go 1.27): the idle client came back with a new session, which only a stall of more than the 2 s session timeout explains. The client did not reconnect, and it keeps the session alive every 200 ms. The timeout is now 4 s, and the test checks the same thing.
 
 ---
 ## v1.42.1
