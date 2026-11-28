@@ -27,11 +27,12 @@ import (
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 // minCSRNonce is the least entropy a client gives CreateSigningRequest
-// when the key is regenerated (Part 12 §7.10.7).
+// when the key is regenerated (Part 12 §7.10.10).
 const minCSRNonce = 32
 
 // The certificate types of application instance certificates (Part 12
@@ -213,16 +214,11 @@ func (m *pushManager) slot(g *certGroup, want uint32) (groupCert, uint32, bool) 
 	return groupCert{}, 0, false
 }
 
-// certOfType returns the certificate of the group and type arguments with
-// its concrete type: argument i is the CertificateGroupId (null is the
-// DefaultApplicationGroup) and i+1 the CertificateTypeId. The certificate
-// of a type the group has no certificate of is empty.
-func (m *pushManager) certOfType(args []*ua.Variant, i int) (*certGroup, groupCert, uint32, ua.StatusCode) {
-	gid, ok1 := argValue[*ua.NodeID](args, i)
-	typ, ok2 := argValue[*ua.NodeID](args, i+1)
-	if !ok1 || !ok2 {
-		return nil, groupCert{}, 0, ua.StatusBadTypeMismatch
-	}
+// certOfType returns the certificate of the CertificateGroupId gid (null
+// is the DefaultApplicationGroup) and the CertificateTypeId typ with its
+// concrete type. The certificate of a type the group has no certificate of
+// is empty.
+func (m *pushManager) certOfType(gid, typ *ua.NodeID) (*certGroup, groupCert, uint32, ua.StatusCode) {
 	g, ok := m.group(gid)
 	if !ok {
 		return nil, groupCert{}, 0, ua.StatusBadInvalidArgument
@@ -239,6 +235,21 @@ func (m *pushManager) certOfType(args []*ua.Variant, i int) (*certGroup, groupCe
 		return nil, groupCert{}, 0, ua.StatusBadInvalidArgument
 	}
 	return g, cur, t, ua.StatusOK
+}
+
+// nullArgs returns args with the null Variant at each position of null
+// replaced by the null value of the declared type: the push Methods take a
+// null Variant for an empty IssuerCertificates, PrivateKey, Nonce,
+// DnsNames or IpAddresses, as they did before the generated contracts,
+// which refuse a Variant of another built-in type. args is not changed.
+func nullArgs(args []*ua.Variant, null map[int]any) []*ua.Variant {
+	out := slices.Clone(args)
+	for i, v := range null {
+		if i < len(out) && (out[i] == nil || out[i].Value() == nil) {
+			out[i] = ua.MustVariant(v)
+		}
+	}
+	return out
 }
 
 func isNumericNodeID(n *ua.NodeID) bool {
@@ -275,29 +286,20 @@ func (m *pushManager) checkNewCert(certType uint32, der []byte) (*x509.Certifica
 	return cert, ua.StatusOK
 }
 
-// updateCertificate is UpdateCertificate (Part 12 §7.10.4): a new
+// updateCertificate is UpdateCertificate (Part 12 §7.10.5): a new
 // certificate of a group, with its issuers and, if the server did not make
 // the key, its private key (PEM or PFX). It replaces the certificate of the
 // type for new channels or TLS connections when the changes are applied.
 func (m *pushManager) updateCertificate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	g, cur, certType, sc := m.certOfType(args, 0)
+	var in uamethod.ServerConfigurationTypeUpdateCertificateInput
+	if err := in.Unpack(nullArgs(args, map[int]any{3: [][]byte(nil), 5: []byte(nil)})); err != nil {
+		return nil, uamethod.StatusOf(err)
+	}
+	g, cur, certType, sc := m.certOfType(in.CertificateGroupID, in.CertificateTypeID)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	der, ok1 := argValue[[]byte](args, 2)
-	var issuers [][]byte
-	ok2 := true
-	if len(args) > 3 && args[3] != nil && args[3].Value() != nil {
-		issuers, ok2 = args[3].Value().([][]byte)
-	}
-	format, ok3 := argValue[string](args, 4)
-	var keyData []byte
-	if len(args) > 5 && args[5] != nil && args[5].Value() != nil {
-		keyData, ok3 = args[5].Value().([]byte)
-	}
-	if !ok1 || !ok2 || !ok3 {
-		return nil, ua.StatusBadTypeMismatch
-	}
+	der, issuers, format, keyData := in.Certificate, in.IssuerCertificates, in.PrivateKeyFormat, in.PrivateKey
 	cert, sc := m.checkNewCert(certType, der)
 	if sc != ua.StatusOK {
 		return nil, sc
@@ -369,7 +371,8 @@ func (m *pushManager) updateCertificate(ctx context.Context, c *MethodCaller, ar
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	return []*ua.Variant{ua.MustVariant(required)}, ua.StatusOK
+	out := uamethod.ServerConfigurationTypeUpdateCertificateOutput{ApplyChangesRequired: required}
+	return out.Pack(), ua.StatusOK
 }
 
 // issuedByOneOf reports whether cert is self-signed or signed by one of the
@@ -393,26 +396,21 @@ func issuedByOneOf(cert *x509.Certificate, issuers []*x509.Certificate) bool {
 	return false
 }
 
-// createSigningRequest is CreateSigningRequest (Part 12 §7.10.7): a PKCS #10
+// createSigningRequest is CreateSigningRequest (Part 12 §7.10.10): a PKCS #10
 // certificate request for the certificate of the group and type, with the
 // key the server has or a new one (RegeneratePrivateKey), which
 // UpdateCertificate then takes with the certificate issued for it. RSA,
 // ECDSA (NIST and Brainpool), Ed25519 and Ed448 keys are supported.
 func (m *pushManager) createSigningRequest(_ context.Context, _ *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	g, cur, certType, sc := m.certOfType(args, 0)
+	var in uamethod.ServerConfigurationTypeCreateSigningRequestInput
+	if err := in.Unpack(nullArgs(args, map[int]any{4: []byte(nil)})); err != nil {
+		return nil, uamethod.StatusOf(err)
+	}
+	g, cur, certType, sc := m.certOfType(in.CertificateGroupID, in.CertificateTypeID)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	subject, ok1 := argValue[string](args, 2)
-	regenerate, ok2 := argValue[bool](args, 3)
-	var nonce []byte
-	ok3 := true
-	if len(args) > 4 && args[4] != nil && args[4].Value() != nil {
-		nonce, ok3 = args[4].Value().([]byte)
-	}
-	if !ok1 || !ok2 || !ok3 {
-		return nil, ua.StatusBadTypeMismatch
-	}
+	subject, regenerate, nonce := in.SubjectName, in.RegeneratePrivateKey, in.Nonce
 	tmpl := &x509.CertificateRequest{}
 	if cur.cert != nil {
 		curCert, err := uapolicy.ParseCertificate(cur.cert)
@@ -459,7 +457,8 @@ func (m *pushManager) createSigningRequest(_ context.Context, _ *MethodCaller, a
 		m.csrKeys[certKey{g.kind, certType}] = key
 		m.mu.Unlock()
 	}
-	return []*ua.Variant{ua.MustVariant(csr)}, ua.StatusOK
+	out := uamethod.ServerConfigurationTypeCreateSigningRequestOutput{CertificateRequest: csr}
+	return out.Pack(), ua.StatusOK
 }
 
 // keyBits is the size of the key of a certificate type for
@@ -543,7 +542,7 @@ var oidDomainComponent = asn1.ObjectIdentifier{0, 9, 2342, 19200300, 100, 1, 25}
 
 // parseSubjectName parses the SubjectName of CreateSigningRequest and
 // CreateSelfSignedCertificate: X.500 name value pairs separated by '/'
-// (Part 12 §7.10.7, CN=App/O=Company) or by ','.
+// (Part 12 §7.10.10, CN=App/O=Company) or by ','.
 func parseSubjectName(s string) (pkix.Name, error) {
 	var n pkix.Name
 	sep := ","
@@ -586,22 +585,19 @@ func parseSubjectName(s string) (pkix.Name, error) {
 const defaultCertLifetime = 365
 
 // createSelfSignedCertificate is CreateSelfSignedCertificate (Part 12
-// §7.10.5): a new key and a self-signed certificate of the group and type,
+// §7.10.6): a new key and a self-signed certificate of the group and type,
 // which replaces the current one when the changes are applied. It returns
 // the certificate.
 func (m *pushManager) createSelfSignedCertificate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	g, cur, certType, sc := m.certOfType(args, 0)
+	var in uamethod.ServerConfigurationTypeCreateSelfSignedCertificateInput
+	if err := in.Unpack(nullArgs(args, map[int]any{3: []string(nil), 4: []string(nil)})); err != nil {
+		return nil, uamethod.StatusOf(err)
+	}
+	g, cur, certType, sc := m.certOfType(in.CertificateGroupID, in.CertificateTypeID)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	subject, ok1 := argValue[string](args, 2)
-	dnsNames, ok2 := stringsArg(args, 3)
-	ipNames, ok3 := stringsArg(args, 4)
-	days, ok4 := argValue[uint16](args, 5)
-	bits, ok5 := argValue[uint16](args, 6)
-	if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 {
-		return nil, ua.StatusBadTypeMismatch
-	}
+	subject, dnsNames, ipNames, days, bits := in.SubjectName, in.DNSNames, in.IPAddresses, in.LifetimeInDays, in.KeySizeInBits
 	tmpl := &x509.Certificate{}
 	if cur.cert != nil {
 		curCert, err := uapolicy.ParseCertificate(cur.cert)
@@ -676,10 +672,11 @@ func (m *pushManager) createSelfSignedCertificate(ctx context.Context, c *Method
 	if _, sc := m.addCertLocked(ctx, c.SessionID, g, &pendingCert{key: certKey{g.kind, certType}, old: cur.cert, cert: der, priv: key}); sc != ua.StatusOK {
 		return nil, sc
 	}
-	return []*ua.Variant{ua.MustVariant(der)}, ua.StatusOK
+	out := uamethod.ServerConfigurationTypeCreateSelfSignedCertificateOutput{Certificate: der}
+	return out.Pack(), ua.StatusOK
 }
 
-// deleteCertificate is DeleteCertificate (Part 12 1.05 §7.10): removes the
+// deleteCertificate is DeleteCertificate (Part 12 §7.10.7): removes the
 // certificate of the group and type when the changes are applied. It
 // fails with Bad_InvalidState if the group has no certificate of the type,
 // counting the changes of the session's transaction; ApplyChanges refuses
@@ -687,7 +684,11 @@ func (m *pushManager) createSelfSignedCertificate(ctx context.Context, c *Method
 // Deleting and then creating or updating the certificate of the type in
 // one transaction replaces it.
 func (m *pushManager) deleteCertificate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	g, cur, certType, sc := m.certOfType(args, 0)
+	var in uamethod.ServerConfigurationTypeDeleteCertificateInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
+	}
+	g, cur, certType, sc := m.certOfType(in.CertificateGroupID, in.CertificateTypeID)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -717,23 +718,14 @@ func (m *pushManager) deleteCertificate(ctx context.Context, c *MethodCaller, ar
 	return nil, ua.StatusOK
 }
 
-// stringsArg returns a String array argument; null is an empty array.
-func stringsArg(args []*ua.Variant, i int) ([]string, bool) {
-	if i >= len(args) || args[i] == nil || args[i].Value() == nil {
-		return nil, i < len(args)
-	}
-	v, ok := args[i].Value().([]string)
-	return v, ok
-}
-
 // getCertificates is GetCertificates (Part 12 §7.10.8): the certificate
 // types and the certificates of a group that are in use.
 func (m *pushManager) getCertificates(_ context.Context, _ *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	gid, ok := argValue[*ua.NodeID](args, 0)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
+	var in uamethod.ServerConfigurationTypeGetCertificatesInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
-	g, ok := m.group(gid)
+	g, ok := m.group(in.CertificateGroupID)
 	if !ok {
 		return nil, ua.StatusBadInvalidArgument
 	}
@@ -744,16 +736,18 @@ func (m *pushManager) getCertificates(_ context.Context, _ *MethodCaller, args [
 		tids[i] = ua.NewNumericNodeID(0, types[i])
 		ders[i] = slices.Clone(certs[i].cert)
 	}
-	return []*ua.Variant{ua.MustVariant(tids), ua.MustVariant(ders)}, ua.StatusOK
+	out := uamethod.ServerConfigurationTypeGetCertificatesOutput{CertificateTypeIDs: tids, Certificates: ders}
+	return out.Pack(), ua.StatusOK
 }
 
-// getRejectedList is GetRejectedList (Part 12 §7.10.9).
+// getRejectedList is GetRejectedList (Part 12 §7.10.12).
 func (m *pushManager) getRejectedList(_ context.Context, _ *MethodCaller, _ []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	certs := m.rejectedList()
 	if certs == nil {
 		certs = [][]byte{}
 	}
-	return []*ua.Variant{ua.MustVariant(certs)}, ua.StatusOK
+	out := uamethod.ServerConfigurationTypeGetRejectedListOutput{Certificates: certs}
+	return out.Pack(), ua.StatusOK
 }
 
 // applyChanges is ApplyChanges (Part 12 §7.10.9): applies the transaction

@@ -56,4 +56,24 @@ var families = []family{
 		Out:     "uamethod/pubsub_gen.go",
 		Types:   []string{"PubSubConfigurationType", "PubSubKeyServiceType"},
 	},
+	// The push certificate management Methods of ServerConfigurationType
+	// (OPC 10000-12 §7.10).
+	{
+		NodeSet: "internal/schema/Opc.Ua.NodeSet2.xml",
+		Package: "uamethod",
+		Out:     "uamethod/serverconfig_gen.go",
+		Types:   []string{"ServerConfigurationType"},
+	},
+	// The SecurityGroup folders (OPC 10000-14 §8.5), the key push targets
+	// of an SKS (§8.6, §8.7) and the Methods of the PublishSubscribe
+	// Object (§9.1.3: SetSecurityKeys, AddConnection, RemoveConnection).
+	{
+		NodeSet: "internal/schema/Opc.Ua.NodeSet2.xml",
+		Package: "uamethod",
+		Out:     "uamethod/securitygroup_gen.go",
+		Types: []string{
+			"SecurityGroupFolderType", "PubSubKeyPushTargetType",
+			"PubSubKeyPushTargetFolderType", "PublishSubscribeType",
+		},
+	},
 }

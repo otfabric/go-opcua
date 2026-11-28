@@ -200,8 +200,15 @@ func resolveMethod(set *nodeset.Set, f family, t *objectType, n *nodeset.Node) (
 	return m, nil
 }
 
+// fieldInitialisms are the initialisms of argument names that
+// goname.Format leaves alone (it is shared by the generators of exported
+// identifiers that must not change): "IpAddresses" of
+// CreateSelfSignedCertificate (OPC 10000-12 §7.10.6) is the field
+// IPAddresses.
+var fieldInitialisms = strings.NewReplacer("IpAddress", "IPAddress")
+
 func resolveArg(set *nodeset.Set, a nodeset.Argument) (*arg, error) {
-	r := &arg{name: a.Name, field: goname.Format(a.Name), valueRank: a.ValueRank, description: a.Description.Text}
+	r := &arg{name: a.Name, field: fieldInitialisms.Replace(goname.Format(a.Name)), valueRank: a.ValueRank, description: a.Description.Text}
 	if !goname.IsValidIdent(r.field) {
 		return nil, fmt.Errorf("no Go name for %q", a.Name)
 	}

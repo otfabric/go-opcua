@@ -332,18 +332,16 @@ func (h *SecurityKeyService) addSecurityGroup(ctx context.Context, folder *ua.No
 	if st := requireEncryption(c); st != ua.StatusOK {
 		return nil, st
 	}
-	if st := checkArgs(args, ua.TypeIDString, ua.TypeIDDouble, ua.TypeIDString, ua.TypeIDUint32, ua.TypeIDUint32); st != ua.StatusOK {
-		return nil, st
+	var in uamethod.SecurityGroupFolderTypeAddSecurityGroupInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
 	path, ok := h.folderPath(folder)
 	if !ok {
 		return nil, ua.StatusBadNodeIDUnknown
 	}
-	name, _ := args[0].Value().(string)
-	lifetime, _ := args[1].Value().(float64)
-	uri, _ := args[2].Value().(string)
-	maxFuture, _ := args[3].Value().(uint32)
-	maxPast, _ := args[4].Value().(uint32)
+	name, lifetime, uri := in.SecurityGroupName, in.KeyLifetime, in.SecurityPolicyURI
+	maxFuture, maxPast := in.MaxFutureKeyCount, in.MaxPastKeyCount
 	if err := h.ks.Authorize(ctx, c, pubsubsec.OpAddSecurityGroup, name); err != nil {
 		return nil, pubsubsec.StatusCode(err)
 	}
@@ -374,7 +372,8 @@ func (h *SecurityKeyService) addSecurityGroup(ctx context.Context, folder *ua.No
 	if !ok { // removed concurrently, or the server was detached
 		return nil, ua.StatusBadInternalError
 	}
-	return []*ua.Variant{ua.MustVariant(name), ua.MustVariant(nid)}, status
+	out := uamethod.SecurityGroupFolderTypeAddSecurityGroupOutput{SecurityGroupID: name, SecurityGroupNodeID: nid}
+	return out.Pack(), status
 }
 
 // sameSecurityGroup reports whether a and b have the parameters of
@@ -390,10 +389,11 @@ func (h *SecurityKeyService) removeSecurityGroup(ctx context.Context, args []*ua
 	if st := requireEncryption(c); st != ua.StatusOK {
 		return nil, st
 	}
-	if st := checkArgs(args, ua.TypeIDNodeID); st != ua.StatusOK {
-		return nil, st
+	var in uamethod.SecurityGroupFolderTypeRemoveSecurityGroupInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
-	nid, _ := args[0].Value().(*ua.NodeID)
+	nid := in.SecurityGroupNodeID
 	h.mu.Lock()
 	gid, ok := "", false
 	if nid != nil {
@@ -417,19 +417,12 @@ func setSecurityKeys(ctx context.Context, rings *pubsubsec.KeyRings, a pubsubsec
 	if st := requireEncryption(c); st != ua.StatusOK {
 		return nil, st
 	}
-	if st := checkArgs(args, ua.TypeIDString, ua.TypeIDString, ua.TypeIDUint32, ua.TypeIDByteString, ua.TypeIDByteString, ua.TypeIDDouble, ua.TypeIDDouble); st != ua.StatusOK {
-		return nil, st
+	var in uamethod.PublishSubscribeTypeSetSecurityKeysInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
-	gid, _ := args[0].Value().(string)
-	uri, _ := args[1].Value().(string)
-	tokenID, _ := args[2].Value().(uint32)
-	current, _ := args[3].Value().([]byte)
-	future, _ := args[4].Value().([][]byte)
-	if !args[4].IsArray() || args[3].IsArray() {
-		return nil, ua.StatusBadTypeMismatch
-	}
-	ttnk, _ := args[5].Value().(float64)
-	lifetime, _ := args[6].Value().(float64)
+	gid, uri, tokenID := in.SecurityGroupID, in.SecurityPolicyURI, in.CurrentTokenID
+	current, future, ttnk, lifetime := in.CurrentKey, in.FutureKeys, in.TimeToNextKey, in.KeyLifetime
 	ring, ok := rings.Get(gid)
 	if !ok {
 		return nil, ua.StatusBadNotFound
@@ -447,24 +440,6 @@ func setSecurityKeys(ctx context.Context, rings *pubsubsec.KeyRings, a pubsubsec
 		return nil, pubsubsec.StatusCode(err)
 	}
 	return nil, ua.StatusOK
-}
-
-// checkArgs checks the number and built-in types of method arguments (the
-// Call service validates them against the InputArguments too; this guards
-// against a node without them).
-func checkArgs(args []*ua.Variant, types ...ua.TypeID) ua.StatusCode {
-	if len(args) < len(types) {
-		return ua.StatusBadArgumentsMissing
-	}
-	if len(args) > len(types) {
-		return ua.StatusBadTooManyArguments
-	}
-	for i, t := range types {
-		if args[i] == nil || args[i].Type() != t {
-			return ua.StatusBadTypeMismatch
-		}
-	}
-	return ua.StatusOK
 }
 
 // durationMS returns d in milliseconds, the unit of Duration.

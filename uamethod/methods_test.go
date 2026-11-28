@@ -78,6 +78,52 @@ func filled() []args {
 		&uamethod.PubSubKeyServiceTypeGetSecurityKeysOutput{SecurityPolicyURI: "urn:policy", FirstTokenID: 1, Keys: [][]byte{{1}}, TimeToNextKey: 10, KeyLifetime: 20},
 		&uamethod.PubSubKeyServiceTypeGetSecurityGroupInput{SecurityGroupID: "sg"},
 		&uamethod.PubSubKeyServiceTypeGetSecurityGroupOutput{SecurityGroupNodeID: n},
+		&uamethod.ServerConfigurationTypeUpdateCertificateInput{
+			CertificateGroupID: n, CertificateTypeID: n, Certificate: []byte{0x30}, IssuerCertificates: [][]byte{{0x31}},
+			PrivateKeyFormat: "PEM", PrivateKey: []byte{1},
+		},
+		&uamethod.ServerConfigurationTypeUpdateCertificateOutput{ApplyChangesRequired: true},
+		&uamethod.ServerConfigurationTypeCreateSelfSignedCertificateInput{
+			CertificateGroupID: n, CertificateTypeID: n, SubjectName: "CN=s", DNSNames: []string{"h"}, IPAddresses: []string{"::1"},
+			LifetimeInDays: 30, KeySizeInBits: 2048,
+		},
+		&uamethod.ServerConfigurationTypeCreateSelfSignedCertificateOutput{Certificate: []byte{0x30}},
+		&uamethod.ServerConfigurationTypeDeleteCertificateInput{CertificateGroupID: n, CertificateTypeID: n},
+		&uamethod.ServerConfigurationTypeGetCertificatesInput{CertificateGroupID: n},
+		&uamethod.ServerConfigurationTypeGetCertificatesOutput{CertificateTypeIDs: []*ua.NodeID{n}, Certificates: [][]byte{{0x30}}},
+		&uamethod.ServerConfigurationTypeCreateSigningRequestInput{
+			CertificateGroupID: n, CertificateTypeID: n, SubjectName: "CN=s", RegeneratePrivateKey: true, Nonce: []byte{1},
+		},
+		&uamethod.ServerConfigurationTypeCreateSigningRequestOutput{CertificateRequest: []byte{0x30}},
+		&uamethod.ServerConfigurationTypeGetRejectedListOutput{Certificates: [][]byte{{0x30}}},
+		&uamethod.SecurityGroupFolderTypeAddSecurityGroupInput{
+			SecurityGroupName: "sg", KeyLifetime: 1000, SecurityPolicyURI: "urn:policy", MaxFutureKeyCount: 2, MaxPastKeyCount: 1,
+		},
+		&uamethod.SecurityGroupFolderTypeAddSecurityGroupOutput{SecurityGroupID: "sg", SecurityGroupNodeID: n},
+		&uamethod.SecurityGroupFolderTypeRemoveSecurityGroupInput{SecurityGroupNodeID: n},
+		&uamethod.SecurityGroupFolderTypeAddSecurityGroupFolderInput{Name: "f"},
+		&uamethod.SecurityGroupFolderTypeAddSecurityGroupFolderOutput{SecurityGroupFolderNodeID: n},
+		&uamethod.SecurityGroupFolderTypeRemoveSecurityGroupFolderInput{SecurityGroupFolderNodeID: n},
+		&uamethod.PubSubKeyPushTargetTypeConnectSecurityGroupsInput{SecurityGroupIDs: []*ua.NodeID{n}},
+		&uamethod.PubSubKeyPushTargetTypeConnectSecurityGroupsOutput{ConnectResults: []ua.StatusCode{ua.StatusOK}},
+		&uamethod.PubSubKeyPushTargetTypeDisconnectSecurityGroupsInput{SecurityGroupIDs: []*ua.NodeID{n}},
+		&uamethod.PubSubKeyPushTargetTypeDisconnectSecurityGroupsOutput{DisconnectResults: []ua.StatusCode{ua.StatusOK}},
+		&uamethod.PubSubKeyPushTargetFolderTypeAddPushTargetInput{
+			ApplicationURI: "urn:app", EndpointURL: "opc.tcp://h:4840", SecurityPolicyURI: "urn:policy",
+			UserTokenType: &ua.UserTokenPolicy{PolicyID: "p", TokenType: ua.UserTokenTypeUserName}, RequestedKeyCount: 3, RetryInterval: 500,
+		},
+		&uamethod.PubSubKeyPushTargetFolderTypeAddPushTargetOutput{PushTargetID: n},
+		&uamethod.PubSubKeyPushTargetFolderTypeRemovePushTargetInput{PushTargetID: n},
+		&uamethod.PubSubKeyPushTargetFolderTypeAddPushTargetFolderInput{Name: "f"},
+		&uamethod.PubSubKeyPushTargetFolderTypeAddPushTargetFolderOutput{PushTargetFolderNodeID: n},
+		&uamethod.PubSubKeyPushTargetFolderTypeRemovePushTargetFolderInput{PushTargetFolderNodeID: n},
+		&uamethod.PublishSubscribeTypeSetSecurityKeysInput{
+			SecurityGroupID: "sg", SecurityPolicyURI: "urn:policy", CurrentTokenID: 1, CurrentKey: []byte{1},
+			FutureKeys: [][]byte{{2}}, TimeToNextKey: 10, KeyLifetime: 20,
+		},
+		&uamethod.PublishSubscribeTypeAddConnectionInput{Configuration: &ua.PubSubConnectionDataType{Name: "c", Enabled: true}},
+		&uamethod.PublishSubscribeTypeAddConnectionOutput{ConnectionID: n},
+		&uamethod.PublishSubscribeTypeRemoveConnectionInput{ConnectionID: n},
 	}
 }
 
@@ -288,6 +334,8 @@ func arrayOf(v *ua.Variant) *ua.Variant {
 		return ua.MustVariant(ua.NewExtensionObject(nil))
 	case [][]byte:
 		return ua.MustVariant([]byte{1})
+	case []string:
+		return ua.MustVariant("a")
 	}
 	panic("unexpected type")
 }

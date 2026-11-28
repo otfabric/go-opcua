@@ -251,7 +251,7 @@ type CertificateUpdate struct {
 }
 ```
 
-CertificateUpdate is the input of UpdateCertificate (Part 12 §7.10.4).
+CertificateUpdate is the input of UpdateCertificate (Part 12 §7.10.5).
 
 ### type Client
 
@@ -289,7 +289,7 @@ AddCertificate adds a certificate (DER) to the trusted certificates, or with tru
 func (g *Client) ApplyChanges(ctx context.Context) error
 ```
 
-ApplyChanges makes the server apply the pending changes (Part 12 §7.10.6): the new trust list for new connections and the new certificates for new SecureChannels.
+ApplyChanges makes the server apply the pending changes (Part 12 §7.10.9): the new trust list for new connections and the new certificates for new SecureChannels.
 
 #### func (Client) CancelChanges
 
@@ -297,7 +297,7 @@ ApplyChanges makes the server apply the pending changes (Part 12 §7.10.6): the 
 func (g *Client) CancelChanges(ctx context.Context) error
 ```
 
-CancelChanges drops the pending changes (Part 12 §7.10.10).
+CancelChanges drops the pending changes (Part 12 §7.10.11).
 
 #### func (Client) CertificateGroups
 
@@ -329,7 +329,7 @@ CreateSigningRequest asks the server for a PKCS #10 certificate signing request 
 func (g *Client) DeleteCertificate(ctx context.Context, group, certType *ua.NodeID) error
 ```
 
-DeleteCertificate has the server delete the certificate of a type of a certificate group (nil: the DefaultApplicationGroup) when the changes are applied (DeleteCertificate, Part 12 1.05 §7.10); certType nil is a null NodeId. A server refuses it with Bad\_InvalidState if the group has no certificate of the type, and ApplyChanges fails with Bad\_InvalidState for a certificate one of its endpoints uses. Deleting a certificate and then creating or updating one of the type in the same transaction replaces it, which servers that refuse to overwrite a certificate require.
+DeleteCertificate has the server delete the certificate of a type of a certificate group (nil: the DefaultApplicationGroup) when the changes are applied (DeleteCertificate, Part 12 §7.10.7); certType nil is a null NodeId. A server refuses it with Bad\_InvalidState if the group has no certificate of the type, and ApplyChanges fails with Bad\_InvalidState for a certificate one of its endpoints uses. Deleting a certificate and then creating or updating one of the type in the same transaction replaces it, which servers that refuse to overwrite a certificate require.
 
 #### func (Client) GetCertificates
 
@@ -768,7 +768,7 @@ type SelfSignedCertificate struct {
 }
 ```
 
-SelfSignedCertificate is the input of CreateSelfSignedCertificate (Part 12 §7.10.5).
+SelfSignedCertificate is the input of CreateSelfSignedCertificate (Part 12 §7.10.6).
 
 ### type ServerQuery
 
@@ -819,7 +819,7 @@ type SigningRequest struct {
 }
 ```
 
-SigningRequest is the input of CreateSigningRequest (Part 12 §7.10.7).
+SigningRequest is the input of CreateSigningRequest (Part 12 §7.10.10).
 
 ### type TransactionDiagnostics
 

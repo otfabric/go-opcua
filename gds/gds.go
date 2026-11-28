@@ -44,6 +44,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 )
 
 // Well-known nodes of the ServerConfiguration object.
@@ -208,7 +209,7 @@ func byteStrings(xs [][]byte) [][]byte {
 	return xs
 }
 
-// SigningRequest is the input of CreateSigningRequest (Part 12 §7.10.7).
+// SigningRequest is the input of CreateSigningRequest (Part 12 §7.10.10).
 type SigningRequest struct {
 	// CertificateGroup is the certificate group (nil: the
 	// DefaultApplicationGroup).
@@ -242,20 +243,28 @@ func (g *Client) CreateSigningRequest(ctx context.Context, req *SigningRequest) 
 	if nonce == nil {
 		nonce = []byte{}
 	}
-	out, err := g.call(ctx, ServerConfiguration, "CreateSigningRequest", id.ServerConfigurationCreateSigningRequest, 1,
-		ua.MustVariant(groupOrDefault(req.CertificateGroup)), ua.MustVariant(nodeOrNull(req.CertificateType)),
-		ua.MustVariant(req.SubjectName), ua.MustVariant(req.RegeneratePrivateKey), ua.MustVariant(nonce))
+	in := uamethod.ServerConfigurationTypeCreateSigningRequestInput{
+		CertificateGroupID:   groupOrDefault(req.CertificateGroup),
+		CertificateTypeID:    req.CertificateType,
+		SubjectName:          req.SubjectName,
+		RegeneratePrivateKey: req.RegeneratePrivateKey,
+		Nonce:                nonce,
+	}
+	out, err := g.call(ctx, ServerConfiguration, "CreateSigningRequest", id.ServerConfigurationCreateSigningRequest, 0, in.Pack()...)
 	if err != nil {
 		return nil, err
 	}
-	csr, ok := out[0].Value().([]byte)
-	if !ok || len(csr) == 0 {
+	var o uamethod.ServerConfigurationTypeCreateSigningRequestOutput
+	if err := o.Unpack(out); err != nil {
+		return nil, fmt.Errorf("gds: %w", err)
+	}
+	if len(o.CertificateRequest) == 0 {
 		return nil, fmt.Errorf("gds: CreateSigningRequest returned no certificate request")
 	}
-	return csr, nil
+	return o.CertificateRequest, nil
 }
 
-// CertificateUpdate is the input of UpdateCertificate (Part 12 §7.10.4).
+// CertificateUpdate is the input of UpdateCertificate (Part 12 §7.10.5).
 type CertificateUpdate struct {
 	// CertificateGroup is the certificate group (nil: the
 	// DefaultApplicationGroup).
@@ -281,41 +290,47 @@ func (g *Client) UpdateCertificate(ctx context.Context, u *CertificateUpdate) (a
 	if key == nil {
 		key = []byte{}
 	}
-	out, err := g.call(ctx, ServerConfiguration, "UpdateCertificate", id.ServerConfigurationUpdateCertificate, 1,
-		ua.MustVariant(groupOrDefault(u.CertificateGroup)), ua.MustVariant(nodeOrNull(u.CertificateType)),
-		ua.MustVariant(u.Certificate), ua.MustVariant(byteStrings(u.IssuerCertificates)),
-		ua.MustVariant(u.PrivateKeyFormat), ua.MustVariant(key))
+	in := uamethod.ServerConfigurationTypeUpdateCertificateInput{
+		CertificateGroupID: groupOrDefault(u.CertificateGroup),
+		CertificateTypeID:  u.CertificateType,
+		Certificate:        u.Certificate,
+		IssuerCertificates: byteStrings(u.IssuerCertificates),
+		PrivateKeyFormat:   u.PrivateKeyFormat,
+		PrivateKey:         key,
+	}
+	out, err := g.call(ctx, ServerConfiguration, "UpdateCertificate", id.ServerConfigurationUpdateCertificate, 0, in.Pack()...)
 	if err != nil {
 		return false, err
 	}
-	return boolOut("UpdateCertificate", out[0])
+	var o uamethod.ServerConfigurationTypeUpdateCertificateOutput
+	if err := o.Unpack(out); err != nil {
+		return false, fmt.Errorf("gds: %w", err)
+	}
+	return o.ApplyChangesRequired, nil
 }
 
 // GetRejectedList returns the certificates the server rejected (DER).
 func (g *Client) GetRejectedList(ctx context.Context) ([][]byte, error) {
-	out, err := g.call(ctx, ServerConfiguration, "GetRejectedList", id.ServerConfigurationGetRejectedList, 1)
+	out, err := g.call(ctx, ServerConfiguration, "GetRejectedList", id.ServerConfigurationGetRejectedList, 0)
 	if err != nil {
 		return nil, err
 	}
-	switch v := out[0].Value().(type) {
-	case [][]byte:
-		return v, nil
-	case nil:
-		return nil, nil
-	default:
-		return nil, fmt.Errorf("gds: GetRejectedList returned %T, want a ByteString array", v)
+	var o uamethod.ServerConfigurationTypeGetRejectedListOutput
+	if err := o.Unpack(nullArrays(out, map[int]any{0: [][]byte(nil)})); err != nil {
+		return nil, fmt.Errorf("gds: %w", err)
 	}
+	return o.Certificates, nil
 }
 
 // ApplyChanges makes the server apply the pending changes (Part 12
-// §7.10.6): the new trust list for new connections and the new
+// §7.10.9): the new trust list for new connections and the new
 // certificates for new SecureChannels.
 func (g *Client) ApplyChanges(ctx context.Context) error {
 	_, err := g.call(ctx, ServerConfiguration, "ApplyChanges", id.ServerConfigurationApplyChanges, 0)
 	return err
 }
 
-// CancelChanges drops the pending changes (Part 12 §7.10.10).
+// CancelChanges drops the pending changes (Part 12 §7.10.11).
 func (g *Client) CancelChanges(ctx context.Context) error {
 	_, err := g.call(ctx, ServerConfiguration, "CancelChanges", id.ServerConfigurationCancelChanges, 0)
 	return err

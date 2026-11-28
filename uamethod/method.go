@@ -17,9 +17,12 @@
 // The Methods of FileType and FileDirectoryType (OPC 10000-20 §4.2, §4.3)
 // are the first: the server package serves files with them
 // (server.FileObject) and package filetransfer is the client. The
-// TrustListType (OPC 10000-12 §7.8.2), PubSubConfigurationType and
-// PubSubKeyServiceType (OPC 10000-14 §9.1.3.7, §8.3) Methods of the server
-// and of packages gds, pubsub/remote and pubsub/sks use them too.
+// TrustListType and ServerConfigurationType (OPC 10000-12 §7.8.2, §7.10),
+// PubSubConfigurationType, PubSubKeyServiceType, SecurityGroupFolderType
+// and PublishSubscribeType (OPC 10000-14 §9.1.3.7, §8.3, §8.5, §9.1.3)
+// Methods of the server and of packages gds, pubsub/remote, pubsub/sks
+// and uafx/fxcm use them too; those of PubSubKeyPushTargetType and
+// PubSubKeyPushTargetFolderType (§8.6, §8.7) are contracts only.
 package uamethod
 
 import (

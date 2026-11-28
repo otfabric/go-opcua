@@ -94,7 +94,8 @@ func TestMisbehavingServer(t *testing.T) {
 	_, err = g.UpdateCertificate(ctx, &gds.CertificateUpdate{CertificateType: gds.RsaSha256ApplicationCertificateType, Certificate: []byte{1}, PrivateKey: []byte{2}})
 	require.ErrorContains(t, err, "want a Boolean")
 	_, err = g.GetRejectedList(ctx)
-	require.ErrorContains(t, err, "want a ByteString array")
+	require.ErrorContains(t, err, "want a ByteString")
+	require.ErrorIs(t, err, ua.StatusBadTypeMismatch)
 	_, err = g.ReadTrustList(ctx, ua.TrustListMasksAll)
 	require.ErrorContains(t, err, "want a Uint32")
 	require.ErrorIs(t, err, ua.StatusBadTypeMismatch)
@@ -166,6 +167,19 @@ func TestMisbehavingServer(t *testing.T) {
 	_, err = gds.New(c5).WriteTrustList(ctx, &ua.TrustListDataType{})
 	require.ErrorIs(t, err, ua.StatusBadTypeMismatch)
 	require.ErrorContains(t, err, "ApplyChangesRequired")
+	// The outputs of the ServerConfiguration Methods are checked against
+	// their declarations (Part 12 §7.10.10, §7.10.12); a null Variant is
+	// an empty list of rejected certificates.
+	c6 := fakeServer(t, map[uint32]handler{
+		id.ServerConfigurationCreateSigningRequest: out(int32(1)),
+		id.ServerConfigurationGetRejectedList:      out(nil),
+	}, nil)
+	_, err = gds.New(c6).CreateSigningRequest(ctx, &gds.SigningRequest{})
+	require.ErrorIs(t, err, ua.StatusBadTypeMismatch)
+	require.ErrorContains(t, err, "CertificateRequest")
+	rej, err = gds.New(c6).GetRejectedList(ctx)
+	require.NoError(t, err)
+	require.Nil(t, rej)
 
 	// A closed client: browsing for the method fails, and so does reading.
 	require.NoError(t, c4.Close(ctx))

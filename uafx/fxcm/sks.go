@@ -16,6 +16,7 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxstore"
+	"github.com/otfabric/go-opcua/uamethod"
 )
 
 // The SecurityKeyServer of a set (Part 81 §6.8.2, §9.3, F.1.10): with
@@ -114,11 +115,9 @@ func (r *RemoteSKS) dial(ctx context.Context, sks uafx.SecurityKeyServerAddress)
 	return s, nil
 }
 
-func callSKS(ctx context.Context, s Session, object, method uint32, args ...any) (*ua.CallMethodResult, error) {
-	in := make([]*ua.Variant, len(args))
-	for i, a := range args {
-		in[i] = ua.MustVariant(a)
-	}
+// callSKS calls a Method of an SKS with the InputArguments of its contract
+// (package uamethod).
+func callSKS(ctx context.Context, s Session, object, method uint32, in []*ua.Variant) (*ua.CallMethodResult, error) {
 	return s.Call(ctx, &ua.CallMethodRequest{ObjectID: ua.NewNumericNodeID(0, object), MethodID: ua.NewNumericNodeID(0, method), InputArguments: in})
 }
 
@@ -133,8 +132,14 @@ func (r *RemoteSKS) AddSecurityGroup(ctx context.Context, sks uafx.SecurityKeySe
 		return false, err
 	}
 	defer func() { _ = s.Close(context.WithoutCancel(ctx)) }()
-	res, err := callSKS(ctx, s, id.PublishSubscribeSecurityGroups, id.PublishSubscribeSecurityGroupsAddSecurityGroup,
-		cfg.SecurityGroupID, g.KeyLifetime, cfg.SecurityPolicyURI, cfg.MaxFutureKeyCount, cfg.MaxPastKeyCount)
+	in := uamethod.SecurityGroupFolderTypeAddSecurityGroupInput{
+		SecurityGroupName: cfg.SecurityGroupID,
+		KeyLifetime:       g.KeyLifetime,
+		SecurityPolicyURI: cfg.SecurityPolicyURI,
+		MaxFutureKeyCount: cfg.MaxFutureKeyCount,
+		MaxPastKeyCount:   cfg.MaxPastKeyCount,
+	}
+	res, err := callSKS(ctx, s, id.PublishSubscribeSecurityGroups, id.PublishSubscribeSecurityGroupsAddSecurityGroup, in.Pack())
 	switch {
 	case err != nil:
 		return false, fmt.Errorf("fxcm: AddSecurityGroup %q: %w", cfg.SecurityGroupID, err)
@@ -153,7 +158,8 @@ func (r *RemoteSKS) RemoveSecurityGroup(ctx context.Context, sks uafx.SecurityKe
 		return err
 	}
 	defer func() { _ = s.Close(context.WithoutCancel(ctx)) }()
-	res, err := callSKS(ctx, s, id.PublishSubscribe, id.PublishSubscribeGetSecurityGroup, securityGroupID)
+	get := uamethod.PubSubKeyServiceTypeGetSecurityGroupInput{SecurityGroupID: securityGroupID}
+	res, err := callSKS(ctx, s, id.PublishSubscribe, id.PublishSubscribeGetSecurityGroup, get.Pack())
 	if err != nil {
 		return fmt.Errorf("fxcm: GetSecurityGroup %q: %w", securityGroupID, err)
 	}
@@ -162,14 +168,12 @@ func (r *RemoteSKS) RemoveSecurityGroup(ctx context.Context, sks uafx.SecurityKe
 		// from SKSs that answer so).
 		return nil
 	}
-	var nid *ua.NodeID
-	if !bad(res.StatusCode) && len(res.OutputArguments) == 1 {
-		nid, _ = res.OutputArguments[0].Value().(*ua.NodeID)
-	}
-	if nid == nil {
+	var out uamethod.PubSubKeyServiceTypeGetSecurityGroupOutput
+	if bad(res.StatusCode) || out.Unpack(res.OutputArguments) != nil || out.SecurityGroupNodeID == nil {
 		return fmt.Errorf("fxcm: GetSecurityGroup %q: %w", securityGroupID, orBad(res.StatusCode))
 	}
-	res, err = callSKS(ctx, s, id.PublishSubscribeSecurityGroups, id.PublishSubscribeSecurityGroupsRemoveSecurityGroup, nid)
+	remove := uamethod.SecurityGroupFolderTypeRemoveSecurityGroupInput(out) // the SecurityGroupNodeId
+	res, err = callSKS(ctx, s, id.PublishSubscribeSecurityGroups, id.PublishSubscribeSecurityGroupsRemoveSecurityGroup, remove.Pack())
 	switch {
 	case err != nil:
 		return fmt.Errorf("fxcm: RemoveSecurityGroup %q: %w", securityGroupID, err)
