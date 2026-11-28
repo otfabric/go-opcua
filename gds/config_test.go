@@ -125,9 +125,11 @@ func TestMisbehavingConfigurationServer(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, types)
 	require.Empty(t, certs)
-	reg(id.ServerConfigurationGetCertificates, out("x", 1))
+	// The outputs are checked against the declaration (Part 12 §7.10.8).
+	reg(id.ServerConfigurationGetCertificates, out("x", [][]byte{}))
 	_, _, err = g.GetCertificates(ctx, nil)
-	require.Error(t, err)
+	require.ErrorIs(t, err, ua.StatusBadTypeMismatch)
+	require.ErrorContains(t, err, "output argument 0 (CertificateTypeIds)")
 	// The outputs are checked against the declaration (Part 12 §7.10.6).
 	reg(id.ServerConfigurationCreateSelfSignedCertificate, out("x"))
 	_, err = g.CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{})
