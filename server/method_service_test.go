@@ -137,3 +137,98 @@ func TestMethodService_Call(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+// TestMethodService_CallArgumentEncodings: the DataType of an Argument is
+// checked whatever DataEncoding its NUMERIC NodeId has (OPC 10000-6
+// §5.2.2.9): the InputArguments of a NodeSet give the DataTypes of
+// namespace 0 as Two Byte or Four Byte NodeIds. An empty Variant is taken
+// for an array and a nullable built-in type, and refused for the others
+// (§5.1.2 Table 1, §5.1.9, §5.1.11).
+func TestMethodService_CallArgumentEncodings(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		dt        *ua.NodeID
+		rank      int32
+		good      any
+		wrong     any
+		nullTaken bool
+	}{
+		{"TwoByte Int32", ua.NewTwoByteNodeID(id.Int32), -1, int32(1), "x", false},
+		{"FourByte Int32", ua.NewFourByteNodeID(0, id.Int32), -1, int32(1), "x", false},
+		{"Numeric Int32", ua.NewNumericNodeID(0, id.Int32), -1, int32(1), "x", false},
+		// Duration is a subtype of Double.
+		{"FourByte Duration", ua.NewFourByteNodeID(0, id.Duration), -1, float64(1), int32(1), false},
+		{"TwoByte String", ua.NewTwoByteNodeID(id.String), -1, "x", int32(1), true},
+		{"TwoByte ByteString array", ua.NewTwoByteNodeID(id.ByteString), 1, [][]byte{{1}}, []string{"x"}, true},
+		{"TwoByte Int32 array", ua.NewTwoByteNodeID(id.Int32), 1, []int32{1}, int32(1), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newTestServer()
+			ns, obj := addTestNamespace(srv)
+			methodID := ua.NewStringNodeID(ns.ID(), "m")
+			m := NewFolderNode(methodID, "m")
+			m.SetNodeClass(ua.NodeClassMethod)
+			ns.AddNode(m)
+			obj.AddRef(m, RefType(id.HasComponent), true)
+			args := &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant([]*ua.ExtensionObject{
+				ua.NewExtensionObject(&ua.Argument{Name: "v", DataType: tc.dt, ValueRank: tc.rank}),
+			})}
+			argNode := NewNode(ua.NewStringNodeID(ns.ID(), "m.InputArguments"),
+				map[ua.AttributeID]*ua.DataValue{
+					ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+					ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("InputArguments")),
+				}, nil, func() *ua.DataValue { return args })
+			ns.AddNode(argNode)
+			m.AddRef(argNode, RefType(id.HasProperty), true)
+			srv.RegisterMethod(obj.ID(), methodID, func(context.Context, *ua.NodeID, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+				return nil, ua.StatusOK
+			})
+			call := func(v *ua.Variant) *ua.CallMethodResult {
+				resp, err := (&MethodService{srv: srv}).Call(context.Background(), nil, &ua.CallRequest{
+					RequestHeader: reqHeader(),
+					MethodsToCall: []*ua.CallMethodRequest{{ObjectID: obj.ID(), MethodID: methodID, InputArguments: []*ua.Variant{v}}},
+				}, 1)
+				require.NoError(t, err)
+				return resp.(*ua.CallResponse).Results[0]
+			}
+			assert.Equal(t, ua.StatusOK, call(ua.MustVariant(tc.good)).StatusCode)
+			r := call(ua.MustVariant(tc.wrong))
+			assert.Equal(t, ua.StatusBadInvalidArgument, r.StatusCode)
+			assert.Equal(t, []ua.StatusCode{ua.StatusBadTypeMismatch}, r.InputArgumentResults)
+			for _, null := range []*ua.Variant{{}, nil} {
+				r = call(null)
+				if tc.nullTaken {
+					assert.Equal(t, ua.StatusOK, r.StatusCode, "an empty Variant is a null value")
+				} else {
+					assert.Equal(t, ua.StatusBadInvalidArgument, r.StatusCode, "the type has no null value")
+					assert.Equal(t, []ua.StatusCode{ua.StatusBadTypeMismatch}, r.InputArgumentResults)
+				}
+			}
+		})
+	}
+}
+
+// TestNullableBuiltin: the Nullable column of OPC 10000-6 §5.1.2 Table 1.
+func TestNullableBuiltin(t *testing.T) {
+	for typ := ua.TypeIDBoolean; typ <= ua.TypeIDDiagnosticInfo; typ++ {
+		want := typ > ua.TypeIDDouble && typ != ua.TypeIDStatusCode
+		assert.Equal(t, want, nullableBuiltin(typ), typ.String())
+	}
+	assert.True(t, nullableBuiltin(ua.TypeIDNull))
+	assert.True(t, nullableBuiltin(ua.TypeID(99)), "not a built-in type: not refused here")
+}
+
+// TestBuiltinTypeOfNodeIDs: a DataType of namespace 0 is a built-in type in
+// any DataEncoding of its NUMERIC NodeId (OPC 10000-6 §5.2.2.9); nil, other
+// namespaces and other identifier types are not.
+func TestBuiltinTypeOfNodeIDs(t *testing.T) {
+	for _, dt := range []*ua.NodeID{ua.NewTwoByteNodeID(id.Int32), ua.NewFourByteNodeID(0, id.Int32), ua.NewNumericNodeID(0, id.Int32)} {
+		typ, ok := builtinTypeOf(nil, dt)
+		assert.True(t, ok, dt.String())
+		assert.Equal(t, ua.TypeIDInt32, typ, dt.String())
+	}
+	for _, dt := range []*ua.NodeID{nil, ua.NewNumericNodeID(1, id.Int32), ua.NewFourByteNodeID(1, id.Int32), ua.NewStringNodeID(0, "Int32")} {
+		_, ok := builtinTypeOf(nil, dt)
+		assert.False(t, ok, "%v", dt)
+	}
+}

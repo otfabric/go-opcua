@@ -411,8 +411,10 @@ func TestPubSubRemoveMethods(t *testing.T) {
 		{rg, nid(id.ReaderGroupTypeRemoveDataSetReader)},
 		{dir, nid(id.DataSetFolderTypeRemovePublishedDataSet)},
 	} {
+		// The Call service refuses the wrong type (Part 4 §5.12.2.2).
 		res = psCall(t, c, tc.obj, tc.method, ua.MustVariant("x"))
-		require.Equal(t, ua.StatusBadTypeMismatch, res.StatusCode)
+		require.Equal(t, ua.StatusBadInvalidArgument, res.StatusCode)
+		require.Equal(t, []ua.StatusCode{ua.StatusBadTypeMismatch}, res.InputArgumentResults)
 		res = psCall(t, c, tc.obj, tc.method, ua.MustVariant(nid(1)))
 		require.Equal(t, ua.StatusBadNodeIDUnknown, res.StatusCode)
 	}

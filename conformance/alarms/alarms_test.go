@@ -208,11 +208,13 @@ func TestAlarms_ConditionRefreshErrors(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ua.StatusOK, r.StatusCode)
 	require.Len(t, s.collectRefresh(t), 1)
-	// A wrong argument type is refused by the Call service.
+	// A wrong argument type is refused by the Call service: Bad_InvalidArgument
+	// with Bad_TypeMismatch for the argument (Part 4 §5.12.2.2, Table 62).
 	r, err = e.c.Call(ctx, &ua.CallMethodRequest{ObjectID: ua.NewNumericNodeID(0, id.ConditionType),
 		MethodID: ua.NewNumericNodeID(0, id.ConditionTypeConditionRefresh), InputArguments: []*ua.Variant{ua.MustVariant("x")}})
 	require.NoError(t, err)
-	require.Equal(t, ua.StatusBadTypeMismatch, r.StatusCode)
+	require.Equal(t, ua.StatusBadInvalidArgument, r.StatusCode)
+	require.Equal(t, []ua.StatusCode{ua.StatusBadTypeMismatch}, r.InputArgumentResults)
 }
 
 // Part 9 §5.8.10: the ShelvedStateMachine of an alarm.

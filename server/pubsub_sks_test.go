@@ -300,7 +300,8 @@ func TestSKS_AddRemoveSecurityGroup(t *testing.T) {
 		{"lifetime", []any{"sg3", 0.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
 		{"negative lifetime", []any{"sg3", -1.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
 		{"name", []any{"", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
-		{"types", []any{"sg3", "1000", pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadTypeMismatch},
+		// A wrong type is refused by the Call service (Part 4 §5.12.2.2).
+		{"types", []any{"sg3", "1000", pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
 		// MaxPastKeyCount + MaxFutureKeyCount is at most 65534.
 		{"future keys", []any{"sg3", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(65535), uint32(0)}, ua.StatusBadInvalidArgument},
 		{"past keys", []any{"sg3", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(65535)}, ua.StatusBadInvalidArgument},
@@ -421,7 +422,8 @@ func TestSKS_SetSecurityKeys(t *testing.T) {
 		{"key length", []any{"pushed", p.URI(), uint32(1), []byte{1, 2}, [][]byte{}, 0.0, 1000.0}, ua.StatusBadSecurityChecksFailed},
 		{"token 0", []any{"pushed", p.URI(), uint32(0), key(1), [][]byte{}, 0.0, 1000.0}, ua.StatusBadInvalidArgument},
 		{"lifetime", []any{"pushed", p.URI(), uint32(1), key(1), [][]byte{}, 0.0, -5.0}, ua.StatusBadInvalidArgument},
-		{"scalar future keys", []any{"pushed", p.URI(), uint32(1), key(1), key(2), 0.0, 1000.0}, ua.StatusBadTypeMismatch},
+		// A scalar for an array is refused by the Call service (Part 4 §5.12.2.2).
+		{"scalar future keys", []any{"pushed", p.URI(), uint32(1), key(1), key(2), 0.0, 1000.0}, ua.StatusBadInvalidArgument},
 		{"missing", []any{"pushed", p.URI()}, ua.StatusBadArgumentsMissing},
 	}
 	for _, c := range cases {
