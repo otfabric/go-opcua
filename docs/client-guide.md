@@ -1594,7 +1594,7 @@ accepts (UA-.NETStandard compares the case).
 
 Peers differ in details: open62541 1.5.10 serves the methods to any session on a
 SignAndEncrypt channel and answers ApplyChanges without a pending change with
-`Bad_NothingToDo` (as node-opcua), and the endpoints of UA-.NETStandard and
+`Bad_NothingToDo` (as node-opcua and, since v1.43.0, go-opcua, Part 12 §7.10.9), and the endpoints of UA-.NETStandard and
 node-opcua carry the issuer chain after the certificate. Of the Part 12 1.05
 additions, UA-.NETStandard serves GetCertificates, the TransactionDiagnostics,
 the HTTPS and UserToken trust lists, PFX keys and the alarms, and refuses
