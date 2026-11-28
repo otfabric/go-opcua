@@ -6,6 +6,7 @@ package uamethod
 
 import (
 	"context"
+	"time"
 
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -848,4 +849,348 @@ func CallFileDirectoryTypeMoveOrCopy(ctx context.Context, c Caller, obj, method 
 		return nil, err
 	}
 	return out, nil
+}
+
+// ServerTypeGetMonitoredItems is the contract of the Method GetMonitoredItems
+// of ServerType (OPC 10000-5 §9.1).
+var ServerTypeGetMonitoredItems = &Method{
+	Name: "GetMonitoredItems", ObjectType: "ServerType", Namespace: "",
+	ID: 11489, ObjectTypeID: 2004,
+	Clause: "OPC 10000-5 §9.1", Mandatory: false,
+	in: []argument{
+		{name: "SubscriptionId", dataType: 7, valueRank: -1, builtin: ua.TypeIDUint32, description: ""},
+	},
+	out: []argument{
+		{name: "ServerHandles", dataType: 7, valueRank: 1, builtin: ua.TypeIDUint32, description: ""},
+		{name: "ClientHandles", dataType: 7, valueRank: 1, builtin: ua.TypeIDUint32, description: ""},
+	},
+}
+
+// ServerTypeGetMonitoredItemsInput are the InputArguments of ServerType.GetMonitoredItems.
+type ServerTypeGetMonitoredItemsInput struct {
+	// SubscriptionID is the argument SubscriptionId, UInt32.
+	SubscriptionID uint32
+}
+
+// Pack returns the InputArguments in the order of their declaration.
+func (x *ServerTypeGetMonitoredItemsInput) Pack() []*ua.Variant {
+	return []*ua.Variant{
+		ua.MustVariant(x.SubscriptionID),
+	}
+}
+
+// Unpack sets x from the InputArguments of a call. An error is an
+// *ArgumentError: Bad_ArgumentsMissing, Bad_TooManyArguments or
+// Bad_TypeMismatch, as the Call service gives them; x is unchanged then.
+func (x *ServerTypeGetMonitoredItemsInput) Unpack(args []*ua.Variant) error {
+	if err := ServerTypeGetMonitoredItems.count(false, args); err != nil {
+		return err
+	}
+	var y ServerTypeGetMonitoredItemsInput
+	var err error
+	if y.SubscriptionID, err = scalar[uint32](ServerTypeGetMonitoredItems, false, args, 0); err != nil {
+		return err
+	}
+	*x = y
+	return nil
+}
+
+// ServerTypeGetMonitoredItemsOutput are the OutputArguments of ServerType.GetMonitoredItems.
+type ServerTypeGetMonitoredItemsOutput struct {
+	// ServerHandles is the argument ServerHandles, UInt32 array.
+	ServerHandles []uint32
+
+	// ClientHandles is the argument ClientHandles, UInt32 array.
+	ClientHandles []uint32
+}
+
+// Pack returns the OutputArguments in the order of their declaration.
+func (x *ServerTypeGetMonitoredItemsOutput) Pack() []*ua.Variant {
+	return []*ua.Variant{
+		ua.MustVariant(x.ServerHandles),
+		ua.MustVariant(x.ClientHandles),
+	}
+}
+
+// Unpack sets x from the OutputArguments of a call. An error is an
+// *ArgumentError: Bad_ArgumentsMissing, Bad_TooManyArguments or
+// Bad_TypeMismatch, as the Call service gives them; x is unchanged then.
+func (x *ServerTypeGetMonitoredItemsOutput) Unpack(args []*ua.Variant) error {
+	if err := ServerTypeGetMonitoredItems.count(true, args); err != nil {
+		return err
+	}
+	var y ServerTypeGetMonitoredItemsOutput
+	var err error
+	if y.ServerHandles, err = array[uint32](ServerTypeGetMonitoredItems, true, args, 0); err != nil {
+		return err
+	}
+	if y.ClientHandles, err = array[uint32](ServerTypeGetMonitoredItems, true, args, 1); err != nil {
+		return err
+	}
+	*x = y
+	return nil
+}
+
+// CallServerTypeGetMonitoredItems calls GetMonitoredItems of the Object obj.
+// method is the NodeId of the Method: that of the Method of obj, or nil for
+// the declaration (ServerTypeGetMonitoredItems.NodeID(0)), which the server
+// maps to the Method of obj. A Bad result is a *CallError; outputs that do not
+// match the declaration are an *ArgumentError.
+func CallServerTypeGetMonitoredItems(ctx context.Context, c Caller, obj, method *ua.NodeID, in *ServerTypeGetMonitoredItemsInput) (*ServerTypeGetMonitoredItemsOutput, error) {
+	if in == nil {
+		in = new(ServerTypeGetMonitoredItemsInput)
+	}
+	args, err := ServerTypeGetMonitoredItems.Call(ctx, c, obj, method, in.Pack())
+	if err != nil {
+		return nil, err
+	}
+	out := new(ServerTypeGetMonitoredItemsOutput)
+	if err := out.Unpack(args); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ServerTypeResendData is the contract of the Method ResendData of ServerType
+// (OPC 10000-5 §9.2).
+var ServerTypeResendData = &Method{
+	Name: "ResendData", ObjectType: "ServerType", Namespace: "",
+	ID: 12871, ObjectTypeID: 2004,
+	Clause: "OPC 10000-5 §9.2", Mandatory: false,
+	in: []argument{
+		{name: "SubscriptionId", dataType: 7, valueRank: -1, builtin: ua.TypeIDUint32, description: ""},
+	},
+}
+
+// ServerTypeResendDataInput are the InputArguments of ServerType.ResendData.
+type ServerTypeResendDataInput struct {
+	// SubscriptionID is the argument SubscriptionId, UInt32.
+	SubscriptionID uint32
+}
+
+// Pack returns the InputArguments in the order of their declaration.
+func (x *ServerTypeResendDataInput) Pack() []*ua.Variant {
+	return []*ua.Variant{
+		ua.MustVariant(x.SubscriptionID),
+	}
+}
+
+// Unpack sets x from the InputArguments of a call. An error is an
+// *ArgumentError: Bad_ArgumentsMissing, Bad_TooManyArguments or
+// Bad_TypeMismatch, as the Call service gives them; x is unchanged then.
+func (x *ServerTypeResendDataInput) Unpack(args []*ua.Variant) error {
+	if err := ServerTypeResendData.count(false, args); err != nil {
+		return err
+	}
+	var y ServerTypeResendDataInput
+	var err error
+	if y.SubscriptionID, err = scalar[uint32](ServerTypeResendData, false, args, 0); err != nil {
+		return err
+	}
+	*x = y
+	return nil
+}
+
+// CallServerTypeResendData calls ResendData of the Object obj. method is the
+// NodeId of the Method: that of the Method of obj, or nil for the declaration
+// (ServerTypeResendData.NodeID(0)), which the server maps to the Method of
+// obj. A Bad result is a *CallError; outputs that do not match the declaration
+// are an *ArgumentError.
+func CallServerTypeResendData(ctx context.Context, c Caller, obj, method *ua.NodeID, in *ServerTypeResendDataInput) error {
+	if in == nil {
+		in = new(ServerTypeResendDataInput)
+	}
+	args, err := ServerTypeResendData.Call(ctx, c, obj, method, in.Pack())
+	if err != nil {
+		return err
+	}
+	return ServerTypeResendData.count(true, args)
+}
+
+// ServerTypeSetSubscriptionDurable is the contract of the Method
+// SetSubscriptionDurable of ServerType (OPC 10000-5 §9.3).
+var ServerTypeSetSubscriptionDurable = &Method{
+	Name: "SetSubscriptionDurable", ObjectType: "ServerType", Namespace: "",
+	ID: 12746, ObjectTypeID: 2004,
+	Clause: "OPC 10000-5 §9.3", Mandatory: false,
+	in: []argument{
+		{name: "SubscriptionId", dataType: 7, valueRank: -1, builtin: ua.TypeIDUint32, description: ""},
+		{name: "LifetimeInHours", dataType: 7, valueRank: -1, builtin: ua.TypeIDUint32, description: ""},
+	},
+	out: []argument{
+		{name: "RevisedLifetimeInHours", dataType: 7, valueRank: -1, builtin: ua.TypeIDUint32, description: ""},
+	},
+}
+
+// ServerTypeSetSubscriptionDurableInput are the InputArguments of ServerType.SetSubscriptionDurable.
+type ServerTypeSetSubscriptionDurableInput struct {
+	// SubscriptionID is the argument SubscriptionId, UInt32.
+	SubscriptionID uint32
+
+	// LifetimeInHours is the argument LifetimeInHours, UInt32.
+	LifetimeInHours uint32
+}
+
+// Pack returns the InputArguments in the order of their declaration.
+func (x *ServerTypeSetSubscriptionDurableInput) Pack() []*ua.Variant {
+	return []*ua.Variant{
+		ua.MustVariant(x.SubscriptionID),
+		ua.MustVariant(x.LifetimeInHours),
+	}
+}
+
+// Unpack sets x from the InputArguments of a call. An error is an
+// *ArgumentError: Bad_ArgumentsMissing, Bad_TooManyArguments or
+// Bad_TypeMismatch, as the Call service gives them; x is unchanged then.
+func (x *ServerTypeSetSubscriptionDurableInput) Unpack(args []*ua.Variant) error {
+	if err := ServerTypeSetSubscriptionDurable.count(false, args); err != nil {
+		return err
+	}
+	var y ServerTypeSetSubscriptionDurableInput
+	var err error
+	if y.SubscriptionID, err = scalar[uint32](ServerTypeSetSubscriptionDurable, false, args, 0); err != nil {
+		return err
+	}
+	if y.LifetimeInHours, err = scalar[uint32](ServerTypeSetSubscriptionDurable, false, args, 1); err != nil {
+		return err
+	}
+	*x = y
+	return nil
+}
+
+// ServerTypeSetSubscriptionDurableOutput are the OutputArguments of ServerType.SetSubscriptionDurable.
+type ServerTypeSetSubscriptionDurableOutput struct {
+	// RevisedLifetimeInHours is the argument RevisedLifetimeInHours, UInt32.
+	RevisedLifetimeInHours uint32
+}
+
+// Pack returns the OutputArguments in the order of their declaration.
+func (x *ServerTypeSetSubscriptionDurableOutput) Pack() []*ua.Variant {
+	return []*ua.Variant{
+		ua.MustVariant(x.RevisedLifetimeInHours),
+	}
+}
+
+// Unpack sets x from the OutputArguments of a call. An error is an
+// *ArgumentError: Bad_ArgumentsMissing, Bad_TooManyArguments or
+// Bad_TypeMismatch, as the Call service gives them; x is unchanged then.
+func (x *ServerTypeSetSubscriptionDurableOutput) Unpack(args []*ua.Variant) error {
+	if err := ServerTypeSetSubscriptionDurable.count(true, args); err != nil {
+		return err
+	}
+	var y ServerTypeSetSubscriptionDurableOutput
+	var err error
+	if y.RevisedLifetimeInHours, err = scalar[uint32](ServerTypeSetSubscriptionDurable, true, args, 0); err != nil {
+		return err
+	}
+	*x = y
+	return nil
+}
+
+// CallServerTypeSetSubscriptionDurable calls SetSubscriptionDurable of the
+// Object obj. method is the NodeId of the Method: that of the Method of obj,
+// or nil for the declaration (ServerTypeSetSubscriptionDurable.NodeID(0)),
+// which the server maps to the Method of obj. A Bad result is a *CallError;
+// outputs that do not match the declaration are an *ArgumentError.
+func CallServerTypeSetSubscriptionDurable(ctx context.Context, c Caller, obj, method *ua.NodeID, in *ServerTypeSetSubscriptionDurableInput) (*ServerTypeSetSubscriptionDurableOutput, error) {
+	if in == nil {
+		in = new(ServerTypeSetSubscriptionDurableInput)
+	}
+	args, err := ServerTypeSetSubscriptionDurable.Call(ctx, c, obj, method, in.Pack())
+	if err != nil {
+		return nil, err
+	}
+	out := new(ServerTypeSetSubscriptionDurableOutput)
+	if err := out.Unpack(args); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ServerTypeRequestServerStateChange is the contract of the Method
+// RequestServerStateChange of ServerType (OPC 10000-5 §9.4).
+var ServerTypeRequestServerStateChange = &Method{
+	Name: "RequestServerStateChange", ObjectType: "ServerType", Namespace: "",
+	ID: 12883, ObjectTypeID: 2004,
+	Clause: "OPC 10000-5 §9.4", Mandatory: false,
+	in: []argument{
+		{name: "State", dataType: 852, valueRank: -1, builtin: ua.TypeIDInt32, description: ""},
+		{name: "EstimatedReturnTime", dataType: 13, valueRank: -1, builtin: ua.TypeIDDateTime, description: ""},
+		{name: "SecondsTillShutdown", dataType: 7, valueRank: -1, builtin: ua.TypeIDUint32, description: ""},
+		{name: "Reason", dataType: 21, valueRank: -1, builtin: ua.TypeIDLocalizedText, description: ""},
+		{name: "Restart", dataType: 1, valueRank: -1, builtin: ua.TypeIDBoolean, description: ""},
+	},
+}
+
+// ServerTypeRequestServerStateChangeInput are the InputArguments of ServerType.RequestServerStateChange.
+type ServerTypeRequestServerStateChangeInput struct {
+	// State is the argument State, ServerState.
+	State int32
+
+	// EstimatedReturnTime is the argument EstimatedReturnTime, DateTime.
+	EstimatedReturnTime time.Time
+
+	// SecondsTillShutdown is the argument SecondsTillShutdown, UInt32.
+	SecondsTillShutdown uint32
+
+	// Reason is the argument Reason, LocalizedText.
+	Reason *ua.LocalizedText
+
+	// Restart is the argument Restart, Boolean.
+	Restart bool
+}
+
+// Pack returns the InputArguments in the order of their declaration.
+func (x *ServerTypeRequestServerStateChangeInput) Pack() []*ua.Variant {
+	return []*ua.Variant{
+		ua.MustVariant(x.State),
+		ua.MustVariant(x.EstimatedReturnTime),
+		ua.MustVariant(x.SecondsTillShutdown),
+		ua.MustVariant(localizedText(x.Reason)),
+		ua.MustVariant(x.Restart),
+	}
+}
+
+// Unpack sets x from the InputArguments of a call. An error is an
+// *ArgumentError: Bad_ArgumentsMissing, Bad_TooManyArguments or
+// Bad_TypeMismatch, as the Call service gives them; x is unchanged then.
+func (x *ServerTypeRequestServerStateChangeInput) Unpack(args []*ua.Variant) error {
+	if err := ServerTypeRequestServerStateChange.count(false, args); err != nil {
+		return err
+	}
+	var y ServerTypeRequestServerStateChangeInput
+	var err error
+	if y.State, err = scalar[int32](ServerTypeRequestServerStateChange, false, args, 0); err != nil {
+		return err
+	}
+	if y.EstimatedReturnTime, err = scalar[time.Time](ServerTypeRequestServerStateChange, false, args, 1); err != nil {
+		return err
+	}
+	if y.SecondsTillShutdown, err = scalar[uint32](ServerTypeRequestServerStateChange, false, args, 2); err != nil {
+		return err
+	}
+	if y.Reason, err = pointer[ua.LocalizedText](ServerTypeRequestServerStateChange, false, args, 3); err != nil {
+		return err
+	}
+	if y.Restart, err = scalar[bool](ServerTypeRequestServerStateChange, false, args, 4); err != nil {
+		return err
+	}
+	*x = y
+	return nil
+}
+
+// CallServerTypeRequestServerStateChange calls RequestServerStateChange of the
+// Object obj. method is the NodeId of the Method: that of the Method of obj,
+// or nil for the declaration (ServerTypeRequestServerStateChange.NodeID(0)),
+// which the server maps to the Method of obj. A Bad result is a *CallError;
+// outputs that do not match the declaration are an *ArgumentError.
+func CallServerTypeRequestServerStateChange(ctx context.Context, c Caller, obj, method *ua.NodeID, in *ServerTypeRequestServerStateChangeInput) error {
+	if in == nil {
+		in = new(ServerTypeRequestServerStateChangeInput)
+	}
+	args, err := ServerTypeRequestServerStateChange.Call(ctx, c, obj, method, in.Pack())
+	if err != nil {
+		return err
+	}
+	return ServerTypeRequestServerStateChange.count(true, args)
 }

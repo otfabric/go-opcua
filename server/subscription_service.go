@@ -231,6 +231,9 @@ func (s *SubscriptionService) ModifySubscription(ctx context.Context, sc *uasc.S
 		req.RequestedLifetimeCount,
 		req.RequestedMaxKeepAliveCount,
 	)
+	if sub.durable.Load() {
+		lifetime = s.srv.cfg.durable.reviseDurableLifetime(req.RequestedLifetimeCount, pi, keepalive)
+	}
 	// Apply revised values on the modify request so the subscription goroutine
 	// stores the same numbers we return to the client.
 	req.RequestedPublishingInterval = pi
@@ -814,6 +817,11 @@ type Subscription struct {
 	evSeq       uint64
 	looseEvents []queuedEvent
 	evItems     map[*MonitoredItem]struct{} // the items with queued events
+
+	// durable is set by SetSubscriptionDurable (subscription_durable.go):
+	// the subscription has the lifetime and queue sizes of a durable
+	// subscription.
+	durable atomic.Bool
 }
 
 // Subscription parameter revision policy (Part 4 §5.13.2). Peers may choose
