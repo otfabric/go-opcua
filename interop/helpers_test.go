@@ -21,6 +21,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -124,7 +125,7 @@ func drainInitial(t *testing.T, notifyCh <-chan *opcua.PublishNotificationData) 
 func shortTestCtx(t *testing.T) context.Context {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	t.Cleanup(cancel)
+	cleanup.Register(t, cancel)
 	return ctx
 }
 

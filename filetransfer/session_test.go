@@ -14,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua/filetransfer"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uamethod"
@@ -41,7 +42,7 @@ func TestFileHandleSurvivesChannel(t *testing.T) {
 		opcua.RequestTimeout(10*time.Second), opcua.DialTimeout(10*time.Second))
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(ctx))
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	other := testutil.NewTestClient(t, url)
 	sessionID := c.Session().SessionID()
 

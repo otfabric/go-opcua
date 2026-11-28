@@ -9,6 +9,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -35,7 +36,7 @@ func TestMonitoredItemIDsSurviveRecreation(t *testing.T) {
 	notifyCh := make(chan *opcua.PublishNotificationData, 256)
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond}, notifyCh)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	// Create the items one by one and delete the first, so the ids the server
 	// hands out after a recreation (1..3 again) cannot line up with the ids

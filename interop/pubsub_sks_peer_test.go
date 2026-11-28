@@ -37,6 +37,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/pubsub/sks"
 	"github.com/otfabric/go-opcua/pubsub/transport"
@@ -212,7 +213,7 @@ func TestPubSubSKS_GoPulls_Open62541SKS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewKeySource: %v", err)
 	}
-	t.Cleanup(func() { _ = ks.Close() })
+	cleanup.Register(t, func() { _ = ks.Close() })
 
 	values := psValues(c.vars, psFresh())
 	writePubSubVars(t, pub.endpoint, c.vars, values)
@@ -265,7 +266,7 @@ func startGoSKS(t *testing.T, ks *security.KeyService, rings *security.KeyRings)
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	return fmt.Sprintf("opc.tcp://localhost:%d%s", s.Port(), endpointPath)
 }
 

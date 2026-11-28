@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +18,7 @@ import (
 func withPublishHook(t *testing.T, fn func(context.Context, *Client) (*ua.PublishResponse, error)) {
 	t.Helper()
 	prev := publishRequestFn.Swap(&fn)
-	t.Cleanup(func() { publishRequestFn.Store(prev) })
+	cleanup.Register(t, func() { publishRequestFn.Store(prev) })
 }
 
 // Regression: the hook was a plain variable. Client.Close does not wait for
@@ -126,7 +127,7 @@ func TestPublish_ErrorSwitch(t *testing.T) {
 		c.subMux.Lock()
 		c.subs[42] = sub
 		c.subMux.Unlock()
-		t.Cleanup(func() {
+		cleanup.Register(t, func() {
 			c.subMux.Lock()
 			delete(c.subs, 42)
 			c.subMux.Unlock()
@@ -151,7 +152,7 @@ func TestPublish_ErrorSwitch(t *testing.T) {
 		c.subs[1] = a
 		c.subs[2] = b
 		c.subMux.Unlock()
-		t.Cleanup(func() {
+		cleanup.Register(t, func() {
 			c.subMux.Lock()
 			delete(c.subs, 1)
 			delete(c.subs, 2)
@@ -193,7 +194,7 @@ func TestPublish_ErrorSwitch(t *testing.T) {
 		c.subs[7] = sub
 		c.pendingAcks = nil
 		c.subMux.Unlock()
-		t.Cleanup(func() {
+		cleanup.Register(t, func() {
 			c.subMux.Lock()
 			delete(c.subs, 7)
 			c.subMux.Unlock()

@@ -11,6 +11,7 @@ import (
 
 	imqtt "github.com/otfabric/go-opcua/internal/mqtt"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/transport"
@@ -28,7 +29,7 @@ func startMQTTBroker(t *testing.T, opts ...mqttbroker.Options) *mqttbroker.Broke
 	if err := b.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	return b
 }
 

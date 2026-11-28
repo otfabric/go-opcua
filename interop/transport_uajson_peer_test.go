@@ -23,6 +23,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
 )
@@ -60,7 +61,7 @@ func dialJSONTransportClient(t *testing.T, url, profile string, user bool, opts 
 	if err := c.Connect(ctx2); err != nil {
 		t.Fatalf("Connect(%s, %s): %v", url, profile, err)
 	}
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = c.Close(ctx)

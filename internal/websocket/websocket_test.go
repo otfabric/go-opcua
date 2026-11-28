@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/leakcheck"
 	"github.com/stretchr/testify/require"
 )
@@ -263,7 +264,7 @@ func tcpPair(t *testing.T) (net.Conn, net.Conn) {
 	require.NoError(t, err)
 	b := <-ch
 	require.NotNil(t, b)
-	t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
+	cleanup.Register(t, func() { _ = a.Close(); _ = b.Close() })
 	return a, b
 }
 

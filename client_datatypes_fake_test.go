@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
@@ -145,7 +146,7 @@ func newFakeClient(t *testing.T, f *fakeTypes) *Client {
 		return nil, ua.StatusBadHistoryOperationUnsupported
 	})
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return dynClient(t, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()))
 }
 

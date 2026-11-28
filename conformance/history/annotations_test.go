@@ -12,6 +12,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -205,7 +206,7 @@ func TestAnnotations_AnnotationCount(t *testing.T) {
 	// The AggregateFilter of a MonitoredItem.
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: fastInterval}, make(chan *opcua.PublishNotificationData, 8))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	item := opcua.NewMonitoredItemCreateRequestWithDefaults(f.HistoryVar, ua.AttributeIDValue, 1)
 	item.RequestedParameters.Filter = ua.NewExtensionObject(&ua.AggregateFilter{
 		StartTime: histAt(0), ProcessingInterval: 1000,

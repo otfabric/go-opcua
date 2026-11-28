@@ -19,6 +19,7 @@ import (
 	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -251,7 +252,7 @@ func (n *node) up(clientURL string) *node {
 	t, name, prof := n.t, n.name, n.prof
 	n.clientURL = clientURL
 	n.start()
-	t.Cleanup(n.stop)
+	cleanup.Register(t, n.stop)
 
 	if prof.secured() {
 		ctx, cancel := chaoskit.OpCtx()
@@ -496,7 +497,7 @@ func (n *node) dial(rec *chaoskit.StateRecorder, extra ...opcua.Option) (*opcua.
 		chaoskit.CloseClient(c, rec)
 		return nil, err
 	}
-	n.t.Cleanup(func() { chaoskit.CloseClient(c, rec) })
+	cleanup.Register(n.t, func() { chaoskit.CloseClient(c, rec) })
 	return c, nil
 }
 
@@ -853,7 +854,7 @@ func listen(t *testing.T, cfg *uacp.ReverseListenerConfig) *uacp.ReverseListener
 	if err != nil {
 		t.Fatalf("chaos: reverse listener: %v", err)
 	}
-	t.Cleanup(func() { _ = l.Close() })
+	cleanup.Register(t, func() { _ = l.Close() })
 	return l
 }
 

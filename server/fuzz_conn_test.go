@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -31,7 +32,7 @@ func startFuzzServer(f *testing.F) string {
 	if err := s.Start(context.Background()); err != nil {
 		f.Fatalf("fuzz server: %v", err)
 	}
-	f.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(f, func() { _ = s.Close() })
 	return fmt.Sprintf("127.0.0.1:%d", s.Port())
 }
 

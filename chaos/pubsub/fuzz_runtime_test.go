@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/security"
@@ -148,7 +149,7 @@ func FuzzRuntimeReceive(f *testing.F) {
 	if err := rt.Start(context.Background()); err != nil {
 		f.Fatal(err)
 	}
-	f.Cleanup(func() { _ = rt.Close() })
+	cleanup.Register(f, func() { _ = rt.Close() })
 	deadline := time.Now().Add(10 * time.Second)
 	for seg.subscribers() == 0 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)

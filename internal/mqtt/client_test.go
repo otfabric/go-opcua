@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	"github.com/stretchr/testify/require"
@@ -25,7 +26,7 @@ func startBroker(t *testing.T, opts mqttbroker.Options) *mqttbroker.Broker {
 	t.Helper()
 	b := mqttbroker.New(opts)
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	return b
 }
 
@@ -39,7 +40,7 @@ func dial(t *testing.T, opts mqtt.Options) *mqtt.Client {
 	defer cancel()
 	c, err := mqtt.Dial(ctx, opts)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	cleanup.Register(t, func() { _ = c.Close() })
 	return c
 }
 

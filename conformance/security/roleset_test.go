@@ -10,6 +10,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/rolemgmt"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -78,7 +79,7 @@ func readStatus(ctx context.Context, t *testing.T, c *opcua.Client, nid *ua.Node
 func roleSetCtx(t *testing.T) context.Context {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	t.Cleanup(cancel)
+	cleanup.Register(t, cancel)
 	return ctx
 }
 
@@ -331,7 +332,7 @@ func TestRoleSet_AuditEvents(t *testing.T) {
 	sub, ch, err := alice.NewSubscription().Interval(20*time.Millisecond).
 		MonitorEvents(f.Build(), ua.NewNumericNodeID(0, id.Server)).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	// next returns the next event whose SourceName is a RoleSet Method.
 	next := func() []*ua.Variant {
 		t.Helper()

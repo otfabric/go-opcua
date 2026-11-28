@@ -52,7 +52,10 @@ func (f *fx) persistent(t *testing.T, name string) *ua.NodeID {
 
 func (f *fx) waitStatus(t *testing.T, ep *ua.NodeID, want uafx.ConnectionEndpointStatus) {
 	t.Helper()
-	require.Eventually(t, func() bool { st, ok := f.conns.Status(ep); return ok && st == want }, 5*time.Second, 5*time.Millisecond,
+	// 20 s: a restored endpoint becomes Operational when the data of the
+	// first publishing intervals arrived, which a loaded runner (the crash
+	// tests start child processes) can delay beyond a few seconds.
+	require.Eventually(t, func() bool { st, ok := f.conns.Status(ep); return ok && st == want }, 20*time.Second, 5*time.Millisecond,
 		"the Status of %v does not become %v", ep, want)
 }
 

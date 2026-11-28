@@ -12,6 +12,7 @@ import (
 
 	imqtt "github.com/otfabric/go-opcua/internal/mqtt"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/message"
@@ -40,7 +41,7 @@ func TestChaosMQTTBroker(t *testing.T) {
 			if err := b.Start(); err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(b.Close)
+			cleanup.Register(t, b.Close)
 
 			// A one second keep-alive, so that ignored pings are noticed.
 			keepAlive := pubsub.WithTransportConfig(func(_ *ua.PubSubConnectionDataType, cfg *transport.Config) {
@@ -182,7 +183,7 @@ func TestChaosMQTTChangeDuringOutage(t *testing.T) {
 	if err := b.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	w := pubsub.SetWriterQueue(pubsub.DataSetWriter("w", 1, "v"), "outage/v", "")
 	w.KeyFrameCount = 1000
 	w.TransportSettings.Value.(*ua.BrokerDataSetWriterTransportDataType).RequestedDeliveryGuarantee = ua.BrokerTransportQoSBestEffort
@@ -244,7 +245,7 @@ func TestChaosMQTTSubscriptionRefused(t *testing.T) {
 	if err := b.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	chk := newChecker()
 	q := "refused/ds0"
 	r := pubsub.SetReaderQueue(pubsub.DataSetReader("ds0", uint16(7), 1, 1, pubsub.DataSetMetaDataOf(counterPDS("ds0"))), q, "")
