@@ -711,7 +711,13 @@ handler runs. The result follows OPC 10000-4 §5.12.2.2 and Tables 61 and
 62: too few or too many arguments are `Bad_ArgumentsMissing` and
 `Bad_TooManyArguments`; an argument of the wrong type makes the result
 `Bad_InvalidArgument`, with one inputArgumentResult per input argument,
-`Bad_TypeMismatch` for each wrong one. The inputArgumentResults are empty
+`Bad_TypeMismatch` for each wrong one. An empty Variant is a null value
+(OPC 10000-6 §5.1.9): the handler gets it for an array argument and for
+one of a nullable built-in type (String, ByteString, NodeId, an
+ExtensionObject and the others of Table 1 of §5.1.2), and the Call service
+refuses it as the wrong type for Boolean, the integer and floating-point
+types and StatusCode. The DataType of an Argument is a NodeId of
+namespace 0 in any of its numeric encodings. The inputArgumentResults are empty
 in every other result ("This list is empty unless the operation level
 result is Bad_InvalidArgument"), and the output arguments of a handler
 are dropped when its status is Bad ("The list shall be empty if the
