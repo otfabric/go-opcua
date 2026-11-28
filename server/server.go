@@ -199,6 +199,7 @@ type serverConfig struct {
 	nodeManagement             bool // EnableNodeManagement
 	roleMapper                 RoleMapper
 	roleMgmt                   *RoleManagement // WithRoleManagement
+	roleSetStore               RoleSetStore    // WithRoleSetStore
 	usernameValidator          UsernameValidator
 	x509UserValidator          X509UserValidator
 	issuedTokenValidator       IssuedTokenValidator
@@ -351,6 +352,9 @@ func New(opts ...Option) (*Server, error) {
 	}
 	if cfg.pubsubStore != nil && cfg.pubsub == nil {
 		return nil, stderrors.New("server: WithPubSubStore needs WithPubSub")
+	}
+	if cfg.roleSetStore != nil && cfg.roleMgmt == nil {
+		return nil, stderrors.New("server: WithRoleSetStore needs WithRoleManagement")
 	}
 	var push *pushManager
 	if cfg.push != nil {
@@ -735,6 +739,11 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	if err := s.checkRegistrations(); err != nil {
 		return err
+	}
+	if rs := s.roleSet; rs != nil {
+		if err := rs.restore(); err != nil {
+			return err
+		}
 	}
 
 	// An ECC endpoint without an ECC certificate cannot work, and unlike an

@@ -146,8 +146,22 @@ behaviour you may notice, and the deviations of peers are in
   with the defaults of its namespace, which are read from the
   NamespaceMetadata Object.
 - Managed RoleSet (`server.WithRoleManagement`, OPC 10000-18): the
-  configuration of the roles lives in memory and is lost when the process
-  ends (persistence is phase 4 of docs/roadmap.md). The roles of namespace 0
+  configuration of the roles lives in memory unless `server.WithRoleSetStore`
+  persists it (`server/rolestore`, v1.43.0). The store keeps the roles
+  AddRole added and the Identities, Applications, ApplicationsExclude,
+  Endpoints and EndpointsExclude of every role that can change; not the
+  RolePermissions of the nodes and the DefaultRolePermissions of the
+  namespaces, which are the application's (a RolePermission the application
+  gives a role that RemoveRole removed comes back with the next start). The
+  restore runs at Start, or at the first change through `Server.RoleSet()`
+  before it; MaxRoles and MaxEntries do not limit the roles it restores. The
+  first AddRole adds the namespace `server.RolesNamespaceURI` also when its
+  write fails. An AddRole whose NodeId a restored role has already (the
+  namespace index in the identifier may have moved) gets a suffix `#2`, `#3`.
+  With `ua.StatusBadInternalError` for a store that does not write, the
+  Methods of §4.2.2 to §4.4.10 and the Write of ApplicationsExclude and
+  EndpointsExclude answer with a code their tables do not list (none of them
+  covers a store failure): a library interpretation. The roles of namespace 0
   cannot be removed; Anonymous, AuthenticatedUser and TrustedApplication
   cannot be changed. Browse and Read of the role Properties are limited to
   administrators only by the `RBACAccessController` (or an own

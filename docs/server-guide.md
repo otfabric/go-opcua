@@ -2051,7 +2051,8 @@ Object.
 By default the roles of a session come from the `RoleMapper`
 (`WithRoleMapper`, `DefaultRoleMapper` without one). `WithRoleManagement`
 adds the managed RoleSet of OPC 10000-18: the server keeps the
-configuration of its roles in memory and serves it through the RoleSet
+configuration of its roles in memory (and, with `WithRoleSetStore`, in a
+store: see below) and serves it through the RoleSet
 Object (`Server.ServerCapabilities.RoleSet`, §4.3), whose roles a
 certificate or user manager changes over the wire with the RoleSet and
 Role Methods, and the application with `Server.RoleSet()`:
@@ -2084,11 +2085,52 @@ maintainer, err := srv.RoleSet().AddRole("Maintainer", "") // in server.RolesNam
 | Applications and Endpoints | An include list grants the role only to those, an exclude list to all others; a role with Applications needs a signed channel and a Client Certificate the server validated (a trust list, a validator or push management). An Endpoint matches the endpointUrl of CreateSession and the SecurityPolicy and SecurityMode of the channel; fields left at their default are ignored (§4.4.2) |
 | RemoveRole | Removes the role's nodes, its RolePermissions on every node and in the DefaultRolePermissions of every namespace (§4.2.3), and the role from the sessions. Roles of namespace 0 are not removable (`Bad_RequestNotAllowed`) |
 | Audit | With auditing on, a change by a Role Method reports a RoleMappingRuleChangedAuditEventType event (§4.5); AddRole, RemoveRole and refused calls an AuditUpdateMethodEventType event |
-| Persistence | None: the configuration starts from the defaults with each `New` and is lost when the process ends |
+| Persistence | None by default: the configuration starts from the defaults with each `New` and is lost when the process ends. `WithRoleSetStore` with `rolestore.OpenDir` keeps it in a directory, one atomic write per change, restored at `Start` (see below) |
 
 Without `WithRoleManagement` the roles come from the `RoleMapper` alone,
 the RoleSet Methods are not served (`Bad_MethodInvalid`) and the
 Properties have the values of the NodeSet, as in v1.42 and earlier.
+
+#### Persisting the RoleSet
+
+Package `server/rolestore` is a `server.RoleSetStore` on a directory: the
+roles AddRole added and the Identities, Applications, ApplicationsExclude,
+Endpoints and EndpointsExclude of every role that can change, the
+well-known roles included. Open it before `New` and close it after the
+server:
+
+```go
+st, err := rolestore.OpenDir(ctx, "/var/lib/myserver/roles", rolestore.Options{
+    Owner: "urn:example:myserver", // the ApplicationUri: another owner's store is refused
+})
+if err != nil {
+    return err
+}
+defer st.Close()
+
+srv, err := server.New(
+    // ... as above
+    server.WithRoleManagement(server.RoleManagement{}),
+    server.WithRoleSetStore(st),
+)
+// Register the namespaces the BrowseNames of added roles use before Start.
+// The first administrator: Bad_AlreadyExists once the store has it.
+err = srv.RoleSet().AddIdentity(ua.RoleSecurityAdmin.NodeID(),
+    &ua.IdentityMappingRuleType{CriteriaType: ua.IdentityCriteriaTypeUserName, Criteria: "secadmin"})
+if err != nil && !errors.Is(err, ua.StatusBadAlreadyExists) {
+    return err
+}
+```
+
+| Behaviour | Detail |
+|-----------|--------|
+| One write per change | Every AddRole, RemoveRole, Role Method, Write of ApplicationsExclude or EndpointsExclude and `RoleSet` method that succeeds writes the roles that are not Fixed in one `StoreRoleSet`, one `fxstore.Domain.Apply` of the records that change, before it returns; the active sessions get their roles again after it |
+| Restore | Once, at `Start` before the server listens, or at the first change through `Server.RoleSet()` before it: the stored configuration replaces that of the roles it names, and the added roles come back with their nodes, Methods and NodeIds ("A Server shall persist the identifierType and identifier NodeId elements of a Node as well as the Namespace Uri", OPC 10000-3 §5.2.2), their namespaces mapped by URI. Changes an application makes at each start are made on the restored roles (an AddRole or AddIdentity of something restored is `Bad_AlreadyExists`) |
+| Fail closed | A store that cannot be loaded, a namespace the server does not have (`rolestore.ErrNamespace`), a role that is not one of the RoleSet or is Fixed, or a rule the Methods would refuse fails `Start` and every change until the restore succeeds |
+| Failed write | The change is not made (the RoleSet stays as it was) and fails with `Bad_InternalError`, the error of the store in the chain; OPC 10000-18 lists no result code for it |
+| Unknown outcome | The store is fenced (`Status().Fenced`) and refuses writes until `Settle`, which the next write runs first; if the write landed, `Settle` writes the roles before it back |
+| Not stored | The RolePermissions of the nodes and the DefaultRolePermissions of the namespaces: they are the application's, set at each start with the NodeIds of the restored roles |
+| Directory | Created 0700, the lock file and the data file 0600; group- or world-writable directories are refused; one process at a time (`fxstore.ErrLocked`). `rolestore.Open` takes any `fxstore.Store` |
 
 ---
 
