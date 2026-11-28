@@ -14,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua/di/diid"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
@@ -42,7 +43,7 @@ func newServer(t *testing.T, opts ...server.Option) *server.Server {
 func start(t *testing.T, srv *server.Server) *opcua.Client {
 	t.Helper()
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return testutil.NewTestClient(t, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()))
 }
 

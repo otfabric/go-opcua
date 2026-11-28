@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
@@ -42,7 +43,7 @@ func TestConnectionManagerRestart(t *testing.T) {
 		f := &cmFX{srv: srv, ns: ns, m: m, cm: cm}
 		f.c = start(t, srv)
 		f.set, _ = cm.SetNode(key)
-		t.Cleanup(func() {
+		cleanup.Register(t, func() {
 			_ = cm.Close()
 			_ = m.Close()
 		})

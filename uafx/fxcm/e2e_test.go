@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/pubsub"
@@ -120,7 +121,7 @@ func buildAC(t *testing.T, name string, opts fxserver.ConnectionOptions, extra s
 			_ = srv.Close()
 		})
 	}
-	t.Cleanup(stop)
+	cleanup.Register(t, stop)
 	return &ac{srv: srv, conns: conns, ns: ns, test: test, uri: uri, url: fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()), port: srv.Port(), stop: stop}
 }
 
@@ -299,7 +300,7 @@ func newManager(t *testing.T, opts fxcm.Options) *fxcm.Manager {
 	}
 	m, err := fxcm.New(opts)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = m.Close() })
+	cleanup.Register(t, func() { _ = m.Close() })
 	return m
 }
 

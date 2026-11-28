@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
 	"github.com/otfabric/go-opcua/uafx/fxstore"
@@ -92,7 +93,7 @@ func TestCrash(t *testing.T) {
 			runCrashChild(t, name, dir, sc.point)
 			store, err := fxstore.OpenFile(dir, fxstore.Limits{})
 			require.NoError(t, err)
-			t.Cleanup(func() { _ = store.Close() })
+			cleanup.Register(t, func() { _ = store.Close() })
 			require.Equal(t, fxstore.DurabilityPowerLoss, store.Durability())
 			f := newFX(t, fxserver.ConnectionOptions{Store: store})
 			require.Empty(t, f.conns.Quarantined())
