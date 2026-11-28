@@ -248,12 +248,14 @@ func TestRestoreTriggering_MissingResult(t *testing.T) {
 }
 
 // A SetPublishingMode the server refuses for the subscription changes
-// nothing the recreation uses.
+// nothing the recreation uses. The client does not reconnect: its
+// subscription recovery would recreate the deleted subscription itself
+// (Bad_NoSubscription of the publish loop) while the test does.
 func TestSetPublishingMode_RefusedKeepsMode(t *testing.T) {
 	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	testutil.AddTestNodes(t, srv)
-	c := testutil.NewTestClient(t, url)
+	c := connectCovClient(t, url, opcua.AutoReconnect(false))
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
