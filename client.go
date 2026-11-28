@@ -1875,6 +1875,7 @@ func (c *Client) DetachSession(ctx context.Context) (*Session, error) {
 func (c *Client) Send(ctx context.Context, req ua.Request, h func(ua.Response) error) error {
 	stats.Client().Add("Send", 1)
 	applyAuditEntryID(ctx, req)
+	applySpanContext(ctx, req)
 
 	if c.wantsDiagnostics(req) {
 		hd, rh := c.prepareDiagnostics(req, h)

@@ -110,7 +110,7 @@ func newCMFX(t *testing.T, opts fxserver.ConnectionManagerOptions, srvOpts ...se
 	srv := newServer(t, append([]server.Option{server.WithRoleMapper(roles)}, srvOpts...)...)
 	ns, err := fxserver.AddModel(srv, fxserver.ModelCM)
 	require.NoError(t, err)
-	m, err := fxcm.New(fxcm.Options{Dialer: offlineDialer{}, ApplicationURI: "urn:test:cm", Logger: slog.New(slog.DiscardHandler)})
+	m, err := fxcm.New(fxcm.Options{Dialer: offlineDialer{}, ApplicationURI: "urn:test:cm", Logger: slog.New(slog.DiscardHandler), TraceCalls: opts.Log != nil})
 	require.NoError(t, err)
 	cleanup.Register(t, func() { _ = m.Close() })
 	_, err = m.Add(cmConf("Line1"))

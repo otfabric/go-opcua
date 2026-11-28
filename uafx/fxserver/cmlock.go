@@ -336,6 +336,7 @@ func (c *ConnectionManager) writer(x *cmVar) server.ValueWriter {
 		}
 		c.mu.Unlock()
 		c.auditWrite(ctx, s, x, old, w.Value, sc)
+		c.logWrite(s, x, old, w.Value, sc)
 		return sc
 	}
 }
@@ -350,19 +351,26 @@ func (c *ConnectionManager) auditWrite(ctx context.Context, s *cmSet, x *cmVar, 
 	if old != nil && old.Value != nil {
 		ov = old.Value
 	}
+	fields := map[string]*ua.Variant{
+		"Status":                         ua.MustVariant(sc == ua.StatusGood),
+		"AttributeId":                    ua.MustVariant(uint32(ua.AttributeIDValue)),
+		"IndexRange":                     ua.MustVariant(""),
+		"OldValue":                       ov,
+		"NewValue":                       nv.Value,
+		"ConnectionConfigurationSetNode": ua.MustVariant(s.id),
+		"Name":                           ua.MustVariant(s.key.Name),
+	}
+	if c.records != nil {
+		// Library interpretation: the write is a record of the
+		// ConnectionManagerLog (§6.8.2), so its event maps to the log as
+		// those of §8.4 and §8.6 do.
+		fields = logEntryClass(fields)
+	}
 	c.srv.ReportAuditEvent(ctx, &server.BaseEvent{
 		EventType:  ua.NewNumericNodeID(c.ns.CM, fxcmid.AuditUpdateConnectionConfigurationSetEventType),
 		SourceNode: x.id,
 		SourceName: "Attribute/Write",
 		Message:    ua.NewLocalizedText(x.name + " of " + s.key.String() + ": " + sc.Error()),
-		Fields: map[string]*ua.Variant{
-			"Status":                         ua.MustVariant(sc == ua.StatusGood),
-			"AttributeId":                    ua.MustVariant(uint32(ua.AttributeIDValue)),
-			"IndexRange":                     ua.MustVariant(""),
-			"OldValue":                       ov,
-			"NewValue":                       nv.Value,
-			"ConnectionConfigurationSetNode": ua.MustVariant(s.id),
-			"Name":                           ua.MustVariant(s.key.Name),
-		},
+		Fields:     fields,
 	}, c.id)
 }

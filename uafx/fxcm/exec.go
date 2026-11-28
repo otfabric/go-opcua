@@ -34,6 +34,8 @@ type run struct {
 	// meanwhile.
 	gen uint64
 	fp  []byte
+	// trace is the TraceId of the calls of the run (traced).
+	trace *ua.GUID
 
 	acs []*acRun
 	eps []*epRun
@@ -198,7 +200,7 @@ func (m *Manager) execute(ctx context.Context, s *set, r *Run, prev State) *RunR
 	s.mu.Lock()
 	cfg, gen, fp := s.cfg, s.gen, s.fp
 	s.mu.Unlock()
-	x := &run{m: m, s: s, r: r, cfg: cfg, gen: gen, fp: fp}
+	x := &run{m: m, s: s, r: r, cfg: cfg, gen: gen, fp: fp, trace: newTraceID()}
 	for _, cn := range cfg.conns {
 		for _, e := range cn.endpoints {
 			x.eps = append(x.eps, &epRun{x: x, e: e})
@@ -1437,10 +1439,12 @@ func (x *run) call(ctx context.Context, a *acRun, req *uafx.EstablishConnections
 	}
 	cctx, cancel := context.WithTimeout(ctx, x.m.opts.CallTimeout)
 	defer cancel()
+	cctx, trace := x.traced(cctx)
 	x.m.counters.establish.Add(1)
 	out, err := a.t.sess.Call(cctx, &ua.CallMethodRequest{ObjectID: a.node, MethodID: a.establish, InputArguments: args})
 	x.crashPoint("call.after-send")
-	ev := Event{Kind: EventCall, Set: x.r.key, Run: x.r.id, Method: "EstablishConnections", Address: a.addr.Address}
+	ev := Event{Kind: EventCall, Set: x.r.key, Run: x.r.id, Method: "EstablishConnections", Address: a.addr.Address,
+		Connections: callConnections(a, req), CommandMask: req.CommandMask, Trace: trace}
 	defer func() { x.m.observe(ev) }()
 	if err != nil {
 		x.m.counters.establishFailed.Add(1)
@@ -2575,8 +2579,10 @@ func (x *run) closeSent(ctx context.Context, t *target, ac *ua.NodeID, recs []*r
 	}()
 	cctx, cancel := context.WithTimeout(ctx, x.m.opts.CallTimeout)
 	defer cancel()
+	cctx, trace := x.traced(cctx)
 	x.m.counters.close.Add(1)
-	ev := Event{Kind: EventCall, Set: x.r.key, Run: x.r.id, Method: "CloseConnections", Address: addr.Address}
+	ev := Event{Kind: EventCall, Set: x.r.key, Run: x.r.id, Method: "CloseConnections", Address: addr.Address,
+		Connections: recordConnections(recs, send), Trace: trace}
 	defer func() { x.m.observe(ev) }()
 	out, err := sess.Call(cctx, &ua.CallMethodRequest{ObjectID: ac, MethodID: closeM, InputArguments: []*ua.Variant{ua.MustVariant(nodes), ua.MustVariant(remove)}})
 	if err != nil {
@@ -3040,6 +3046,11 @@ func (x *run) finish() *RunResult {
 	}
 	x.mu.Lock()
 	stopped := x.stopped
+	// The failures so far have no Connection (extraFailure).
+	var failures []RunFailure
+	for _, f := range x.res.Failures {
+		failures = append(failures, RunFailure{Failure: f})
+	}
 	for _, ep := range x.eps {
 		if ep.outcome == nil {
 			k := Succeeded
@@ -3049,7 +3060,9 @@ func (x *run) finish() *RunResult {
 			ep.outcome = &Outcome{Kind: k}
 		}
 		if ep.outcome.Kind == Failed {
-			x.res.Failures = append(x.res.Failures, Failure{FxError: ep.outcome.FxError, Status: ep.outcome.Status})
+			f := Failure{FxError: ep.outcome.FxError, Status: ep.outcome.Status}
+			x.res.Failures = append(x.res.Failures, f)
+			failures = append(failures, RunFailure{Endpoint: EndpointRef{Connection: ep.e.conn.name, Endpoint: ep.e.number}, Failure: f})
 		}
 	}
 	failed := len(x.res.Failures) > 0
@@ -3098,7 +3111,7 @@ func (x *run) finish() *RunResult {
 	retry := x.scheduleRetryLocked(failed, unresolved)
 	s.mu.Unlock()
 	close(x.r.done)
-	x.m.observe(Event{Kind: EventTransition, Set: x.r.key, Run: x.r.id, Transition: tr, Action: x.r.action})
+	x.m.observe(Event{Kind: EventTransition, Set: x.r.key, Run: x.r.id, Transition: tr, Action: x.r.action, Failures: failures})
 	if retry > 0 {
 		x.m.observe(Event{Kind: EventRetry, Set: x.r.key, Run: x.r.id, Attempt: s.retries})
 	}

@@ -1094,6 +1094,14 @@ if err := c.Suppress2(ctx, alarmID, "maintenance until 14:00"); err != nil {
 }
 ```
 
+`WithSpanContext(ctx, sc)` passes a `ua.SpanContextDataType` (a TraceId and
+a SpanId) with the requests sent with that context, as the parameter
+`SpanContext` of the AdditionalHeader of the RequestHeader (OPC 10000-26
+§5.6.4, OPC 10000-4 §7.32). A server with a LogObject records it as the
+parent of its records (the TraceContext, §5.6.3); a go-opcua server gives
+it to a Method handler as `server.MethodCaller.SpanContext`. A SpanId of 0
+is no span and is not sent.
+
 ### Monitor Package (Callback-Based)
 
 The `monitor` package provides a higher-level API with callbacks:

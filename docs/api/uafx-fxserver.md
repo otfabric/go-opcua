@@ -18,6 +18,34 @@ A server becomes an AutomationComponent with the instances an application import
 
 Import the model and enable the connections before the server starts.
 
+## Constants
+
+```go
+const (
+	// DefaultLogMaxRecords is the capacity of a log: the MaxRecords
+	// Property (OPC 10000-26 §5.2).
+	DefaultLogMaxRecords = 1000
+	// DefaultLogMaxReturnRecords is the most records one GetRecords call
+	// returns (§5.3: "The Server can also impose a limit").
+	DefaultLogMaxReturnRecords = 100
+)
+```
+
+The defaults of LogOptions.
+
+```go
+const (
+	// SeverityInformation is a Good outcome: Information (51 to 100).
+	SeverityInformation uint16 = 100
+	// SeverityWarning is an Uncertain one: Warning (151 to 200).
+	SeverityWarning uint16 = 200
+	// SeverityError is a Bad one: Error (201 to 250).
+	SeverityError uint16 = 250
+)
+```
+
+The Severities of the LogRecords the library makes, in the ranges of OPC 10000-26 §5.5 Table 9.
+
 ## Variables
 
 ```go
@@ -31,6 +59,12 @@ var ErrConnections = errors.New("fxserver: connections")
 ```
 
 ErrConnections reports that the connection Methods cannot be served.
+
+```go
+var ErrLog = errors.New("fxserver: log")
+```
+
+ErrLog reports LogOptions that cannot be served.
 
 ```go
 var ErrModel = errors.New("fxserver: UAFX model")
@@ -154,6 +188,8 @@ type ConnectionManager struct {
 
 	// nil is time.Now
 
+	// records is the ConnectionManagerLog, nil without opts.Log.
+
 	// The events of the Manager, handled in order by loop. amu is held
 	// while events are applied, so that a drain of a Method handler or of
 	// Flush and the one of loop apply them in the order they came.
@@ -187,6 +223,14 @@ func (c *ConnectionManager) Flush()
 
 Flush applies the events the Manager reported so far to the address space: a caller that changed the Manager directly sees the change in the nodes afterwards.
 
+#### func (ConnectionManager) Log
+
+```go
+func (c *ConnectionManager) Log() *Log
+```
+
+Log returns the ConnectionManagerLog (Part 81 §6.7.2), nil without ConnectionManagerOptions.Log. The application may add its own records ("LogObject records can also be generated without the generation of an Event", §6.7.2).
+
 #### func (ConnectionManager) SetNode
 
 ```go
@@ -219,6 +263,17 @@ type ConnectionManagerOptions struct {
 	MaxInactiveLockTime time.Duration
 	// Logger receives debug messages; nil is slog.Default.
 	Logger *slog.Logger
+	// Log adds the ConnectionManagerLog (Part 81 §6.7.2), a LogObject of
+	// OPC 10000-26, or completes the one the ConnectionManager has: a
+	// record for every call of EditConnectionConfigurationSets and
+	// ProcessConnectionConfigurationSets, every EstablishConnections and
+	// CloseConnections call of the Manager, every failure of a run
+	// (§8.10, §8.11), every transition of a set state machine (§6.9.2)
+	// and every SelectionList write (§6.8.2); and the ConditionClassId
+	// LogEntryConditionClassType on the events of §8.4 to §8.6. It needs
+	// fxcm.Options.TraceCalls on the Manager (§6.7.2). nil: no log (Table
+	// 77: Optional).
+	Log *LogOptions
 }
 ```
 
@@ -311,6 +366,13 @@ type ConnectionOptions struct {
 	// runtime has keys for from another source is left to it. nil: the
 	// application supplies the keys (pubsub.WithKeySource).
 	SecurityKeys *sks.PullerOptions
+	// Log adds the AutomationComponentLog of every AutomationComponent
+	// (Part 81 §6.2.2), a LogObject of OPC 10000-26, or completes the one
+	// its instance has: a record for every EstablishConnections and
+	// CloseConnections call and every cleanup of a ConnectionEndpoint
+	// (§6.6.2), and the ConditionClassId LogEntryConditionClassType on the
+	// audit events of §8.2 to §8.4. nil: no log (Table 5: Optional).
+	Log *LogOptions
 	// maxControlled replaces maxControlled in tests; 0 is maxControlled.
 
 	// failCapabilities, set by tests, makes setSupportsPersistence fail
@@ -404,6 +466,14 @@ func (c *Connections) Endpoints() []*ua.NodeID
 ```
 
 Endpoints returns the NodeIds of the ConnectionEndpoints the connections manage.
+
+#### func (Connections) Log
+
+```go
+func (c *Connections) Log(ac *ua.NodeID) *Log
+```
+
+Log returns the AutomationComponentLog of the AutomationComponent ac (Part 81 §6.2.2), nil without ConnectionOptions.Log or for a node that is not one of its AutomationComponents. The application may add its own records ("LogObject records can also be generated without the generation of an Event", §6.2.2).
 
 #### func (Connections) OwnsPubSubComponent
 
@@ -530,6 +600,69 @@ type ControlRequest struct {
 ```
 
 ControlRequest is an operation a ControlAuthorizer decides.
+
+### type Log
+
+```go
+type Log struct {
+
+	// identifies the continuation points of the log
+
+	// by (time, seq)
+
+	// gone is the greatest key a deleted record had; valid with lost.
+
+	// time.Now; tests replace it
+
+}
+```
+
+Log is a LogObject (OPC 10000-26 §5): the records of a log, oldest first, and its GetRecords Method. It is safe for concurrent use.
+
+#### func (Log) Add
+
+```go
+func (l *Log) Add(r ua.LogRecord)
+```
+
+Add adds r to the log, unless its Severity is below the MinimumSeverity (§5.2). A zero Time is the time of the call; the time is kept in UTC with the 100 ns resolution of a DateTime (OPC 10000-6 §5.2.2.5), and a Severity outside 1 to 1000 is moved into that range (§5.5 Table 8). When the log is full, the oldest record is deleted (MaxRecords, §5.2). The log keeps r: the caller must not change it, or what it points to, afterwards.
+
+#### func (Log) Node
+
+```go
+func (l *Log) Node() *ua.NodeID
+```
+
+Node returns the NodeId of the LogObject.
+
+#### func (Log) Records
+
+```go
+func (l *Log) Records() []*ua.LogRecord
+```
+
+Records returns the records of the log, oldest first. They must not be changed.
+
+### type LogOptions
+
+```go
+type LogOptions struct {
+	// MaxRecords is the capacity of the log, its MaxRecords Property
+	// (§5.2): when the log holds MaxRecords records, a new record deletes
+	// the oldest one. 0: DefaultLogMaxRecords.
+	MaxRecords uint32
+	// MinimumSeverity is the MinimumSeverity Property (§5.2): a record with
+	// a lower Severity is not kept. 0: no restriction and no Property;
+	// otherwise 1 to 1000.
+	MinimumSeverity uint16
+	// MaxReturnRecords is the most records one GetRecords call returns,
+	// whatever the MaxReturnRecords of the call (§5.3); the rest comes with
+	// a continuation point. 0: DefaultLogMaxReturnRecords.
+	MaxReturnRecords uint32
+}
+```
+
+LogOptions configure a LogObject of OPC 10000-26 (§5): the AutomationComponentLog of the AutomationComponents (Part 81 §6.2.2) or the ConnectionManagerLog (§6.7.2). The records are kept in memory: a restart of the process loses them.
 
 ### type Model
 

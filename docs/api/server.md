@@ -2598,6 +2598,12 @@ type MethodCaller struct {
 	// the client sent with CreateSession (Part 4 §5.6.2); "" without a
 	// session.
 	ClientApplicationURI string
+	// SpanContext is the SpanContextDataType the client passed in the
+	// AdditionalHeader of the request header (OPC 10000-26 §5.6.4, OPC
+	// 10000-4 §7.32): the trace the LogRecords of the call belong to. Nil
+	// when the request has none, or one with SpanId 0 (an invalid SpanId,
+	// OPC 10000-26 §5.6.2).
+	SpanContext *ua.SpanContextDataType
 }
 ```
 

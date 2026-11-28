@@ -98,6 +98,16 @@ type Options struct {
 	// one reached over OPC UA. Nil: the SecurityKeyServer of a set is
 	// validated and otherwise not used.
 	SecurityKeyServer SecurityKeyServer
+	// TraceCalls passes a SpanContext with every EstablishConnections and
+	// CloseConnections call, a TraceId per run and a SpanId per call, in
+	// the AdditionalHeader of the request (OPC 10000-26 §5.6.4), and
+	// reports it as Event.Trace, so that the records of the
+	// AutomationComponentLogs follow those of the ConnectionManagerLog
+	// ("the ConnectionManager shall provide the SpanContextDataType as part
+	// of the EstablishConnection Method Call", Part 81 §6.7.2). A
+	// ConnectionManager with a log needs it
+	// (fxserver.ConnectionManagerOptions.Log).
+	TraceCalls bool
 }
 
 // RetryPolicy is when a set in Error is processed again: after Initial,
@@ -141,6 +151,8 @@ type Manager struct {
 	wg     sync.WaitGroup
 
 	runs atomic.Uint64
+	// spans are the SpanIds of the calls (span).
+	spans atomic.Uint64
 
 	mu     sync.Mutex
 	sets   map[string]*set

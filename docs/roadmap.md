@@ -241,7 +241,17 @@ the SecurityGroups of a set, kept as `sks/` records of the Store, and names
 the SKS in the SecurityKeyServices; `fxserver.ConnectionOptions.SecurityKeys`
 (`sks.Puller`, `sks.EndpointDialer`) pulls the keys on the
 AutomationComponents. Not done: the push model and PubSubKeyPushTargets;
-no ledger row (no peer of opcua-interop implements UAFX). Next: the logs.
+no ledger row (no peer of opcua-interop implements UAFX). The
+AutomationComponentLog and the ConnectionManagerLog (Part 81 §6.2.2, §6.7.2;
+OPC 10000-26 §5): `fxserver.ConnectionOptions.Log` and
+`fxserver.ConnectionManagerOptions.Log` add the LogObjects with GetRecords,
+fed by the calls, cleanups, runs, transitions and writes; the Manager passes
+a SpanContext with its calls (`fxcm.Options.TraceCalls`), so that the
+records of the AutomationComponents follow those of the ConnectionManager;
+the client reads them with `uafx.ReadLog`. Not done: persistent storage of
+the records (so no Logging Facet of Part 84), MaxStorageDuration,
+LogOverflowEventType, the records of monitored state changes. Next:
+publisher QoS.
 
 ## Later, on demand
 

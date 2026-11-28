@@ -105,6 +105,17 @@ type ConnectionManagerOptions struct {
 	MaxInactiveLockTime time.Duration
 	// Logger receives debug messages; nil is slog.Default.
 	Logger *slog.Logger
+	// Log adds the ConnectionManagerLog (Part 81 §6.7.2), a LogObject of
+	// OPC 10000-26, or completes the one the ConnectionManager has: a
+	// record for every call of EditConnectionConfigurationSets and
+	// ProcessConnectionConfigurationSets, every EstablishConnections and
+	// CloseConnections call of the Manager, every failure of a run
+	// (§8.10, §8.11), every transition of a set state machine (§6.9.2)
+	// and every SelectionList write (§6.8.2); and the ConditionClassId
+	// LogEntryConditionClassType on the events of §8.4 to §8.6. It needs
+	// fxcm.Options.TraceCalls on the Manager (§6.7.2). nil: no log (Table
+	// 77: Optional).
+	Log *LogOptions
 }
 
 // ConnectionManager exposes an fxcm.Manager as the ConnectionManager
@@ -133,6 +144,8 @@ type ConnectionManager struct {
 	clock       func() time.Time // nil is time.Now
 
 	file *cmFile
+	// records is the ConnectionManagerLog, nil without opts.Log.
+	records *Log
 
 	// The events of the Manager, handled in order by loop. amu is held
 	// while events are applied, so that a drain of a Method handler or of
@@ -161,6 +174,16 @@ func EnableConnectionManager(srv *server.Server, ns Namespaces, opts ConnectionM
 	}
 	if opts.Manager == nil {
 		return nil, fmt.Errorf("%w: no Manager", ErrConnectionManager)
+	}
+	if opts.Log != nil {
+		if err := opts.Log.check(); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrConnectionManager, err)
+		}
+		if !opts.Manager.Options().TraceCalls {
+			// §6.7.2: with the log, the SpanContext is passed with
+			// each EstablishConnections call.
+			return nil, fmt.Errorf("%w: %w: a log needs fxcm.Options.TraceCalls (Part 81 §6.7.2)", ErrConnectionManager, ErrLog)
+		}
 	}
 	c := &ConnectionManager{srv: srv, ns: ns, opts: opts, m: opts.Manager, log: opts.Logger,
 		id:     ua.NewNumericNodeID(ns.CM, fxcmid.FxRootConnectionManager),
@@ -192,6 +215,12 @@ func EnableConnectionManager(srv *server.Server, ns Namespaces, opts ConnectionM
 			return nil, fmt.Errorf("%w: %w", ErrConnectionManager, err)
 		}
 		c.file = f
+	}
+	if opts.Log != nil {
+		if err := c.addLog(); err != nil {
+			c.dropAll()
+			return nil, fmt.Errorf("%w: ConnectionManagerLog: %w", ErrConnectionManager, err)
+		}
 	}
 	srv.RegisterMethod(c.id, edit, c.editHandler)
 	srv.RegisterMethod(c.id, process, c.processHandler)
@@ -293,6 +322,12 @@ func (c *ConnectionManager) authorize(ctx context.Context, r CMRequest) ua.Statu
 
 // --- the Methods ------------------------------------------------------------
 
+// The Message tags of the records of the Methods (§6.7.4, §6.7.5).
+const (
+	cmEditTag    = "ConnectionManager/EditConnection"
+	cmProcessTag = "ConnectionManager/ProcessConnection"
+)
+
 // lookupSet resolves an element of the sets argument (Tables 82 and 86).
 func (c *ConnectionManager) lookupSet(n *ua.NodeID) (*cmSet, ua.StatusCode) {
 	if n == nil || n.Type() == ua.NodeIDTypeTwoByte && n.IntID() == 0 && n.Namespace() == 0 {
@@ -367,17 +402,20 @@ func ownerOf(sessionID *ua.NodeID) fxcm.LockOwner {
 func (c *ConnectionManager) editHandler(ctx context.Context, object, method *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	if c.isClosed() {
 		c.auditCall(ctx, method, args, nil, ua.StatusBadShutdown)
+		c.logMethod(ctx, cmEditTag, "", nil, nil, ua.StatusBadShutdown)
 		return nil, ua.StatusBadShutdown
 	}
 	a, sets, sc := setsArgs(args)
 	if sc != ua.StatusGood {
 		// §6.7.4: an audit event for all calls.
 		c.auditCall(ctx, method, args, nil, sc)
+		c.logMethod(ctx, cmEditTag, "", nil, nil, sc)
 		return nil, sc
 	}
 	action := uafx.FxEdit(a)
 	if action != uafx.StartEditing && action != uafx.CommitUpdates && action != uafx.DiscardUpdates {
 		c.auditCall(ctx, method, args, nil, ua.StatusBadInvalidArgument)
+		c.logMethod(ctx, cmEditTag, action.String(), nil, nil, ua.StatusBadInvalidArgument)
 		return nil, ua.StatusBadInvalidArgument
 	}
 	mc, _ := server.MethodCallerFromContext(ctx)
@@ -394,6 +432,7 @@ func (c *ConnectionManager) editHandler(ctx context.Context, object, method *ua.
 	out := []*ua.Variant{ua.MustVariant(results)}
 	st := methodStatus(results)
 	c.auditCall(ctx, method, args, out, st)
+	c.logMethod(ctx, cmEditTag, action.String(), sets, results, st)
 	return out, st
 }
 
@@ -478,17 +517,20 @@ func statusOr(err error, def ua.StatusCode) ua.StatusCode {
 func (c *ConnectionManager) processHandler(ctx context.Context, object, method *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	if c.isClosed() {
 		c.auditCall(ctx, method, args, nil, ua.StatusBadShutdown)
+		c.logMethod(ctx, cmProcessTag, "", nil, nil, ua.StatusBadShutdown)
 		return nil, ua.StatusBadShutdown
 	}
 	a, sets, sc := setsArgs(args)
 	if sc != ua.StatusGood {
 		// §6.7.5: an audit event for all calls.
 		c.auditCall(ctx, method, args, nil, sc)
+		c.logMethod(ctx, cmProcessTag, "", nil, nil, sc)
 		return nil, sc
 	}
 	action := uafx.FxProcess(a)
 	if fxcm.Activity(action) == 0 {
 		c.auditCall(ctx, method, args, nil, ua.StatusBadNotSupported)
+		c.logMethod(ctx, cmProcessTag, action.String(), nil, nil, ua.StatusBadNotSupported)
 		return nil, ua.StatusBadNotSupported
 	}
 	results := make([]ua.StatusCode, len(sets))
@@ -519,6 +561,7 @@ func (c *ConnectionManager) processHandler(ctx context.Context, object, method *
 	out := []*ua.Variant{ua.MustVariant(results)}
 	status := methodStatus(results)
 	c.auditCall(ctx, method, args, out, status)
+	c.logMethod(ctx, cmProcessTag, action.String(), sets, results, status)
 	return out, status
 }
 
@@ -538,18 +581,22 @@ func (c *ConnectionManager) auditCall(ctx context.Context, method *ua.NodeID, ar
 	if n := c.srv.Node(method); n != nil && n.BrowseName() != nil {
 		name = n.BrowseName().Name
 	}
+	fields := map[string]*ua.Variant{
+		"Status":          ua.MustVariant(sc.Uint32()&0x80000000 == 0),
+		"MethodId":        ua.MustVariant(method),
+		"InputArguments":  ua.MustVariant(variants(args)),
+		"OutputArguments": ua.MustVariant(variants(out)),
+		"StatusCodeId":    ua.MustVariant(sc),
+	}
+	if c.records != nil {
+		fields = logEntryClass(fields)
+	}
 	c.srv.ReportAuditEvent(ctx, &server.BaseEvent{
 		EventType:  ua.NewNumericNodeID(c.ns.Data, fxdataid.AuditUpdateMethodResultEventType),
 		SourceNode: c.id,
 		SourceName: "Method/" + name,
 		Message:    ua.NewLocalizedText(name + ": " + sc.Error()),
-		Fields: map[string]*ua.Variant{
-			"Status":          ua.MustVariant(sc.Uint32()&0x80000000 == 0),
-			"MethodId":        ua.MustVariant(method),
-			"InputArguments":  ua.MustVariant(variants(args)),
-			"OutputArguments": ua.MustVariant(variants(out)),
-			"StatusCodeId":    ua.MustVariant(sc),
-		},
+		Fields:     fields,
 	}, c.id)
 }
 
@@ -614,6 +661,7 @@ func (c *ConnectionManager) drain() {
 func (c *ConnectionManager) Flush() { c.drain() }
 
 func (c *ConnectionManager) apply(e fxcm.Event) {
+	c.logEvent(e)
 	switch e.Kind {
 	case fxcm.EventTransition:
 		c.mu.Lock()
@@ -669,6 +717,9 @@ func (c *ConnectionManager) emitTransition(s *cmSet, e fxcm.Event) {
 			"Name":                           ua.MustVariant(name),
 			"Action":                         ua.MustVariant(int32(action)),
 		},
+	}
+	if c.records != nil {
+		ev.Fields = logEntryClass(ev.Fields)
 	}
 	if err := c.srv.EmitBaseEvent(c.id, ev); err != nil {
 		c.log.Debug("uafx: event not emitted", "set", s.key.String(), "err", err)

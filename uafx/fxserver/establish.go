@@ -36,6 +36,7 @@ func (c *Connections) establishHandler(ac *automationComponent) server.MethodHan
 	return func(ctx context.Context, obj, method *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 		out, sc := c.establish(ctx, ac, args)
 		c.auditCall(ctx, ac, method, args, out, sc)
+		c.logCall(ctx, ac, "EstablishConnections", sc)
 		return out, sc
 	}
 }
@@ -1722,18 +1723,22 @@ func (c *Connections) auditCall(ctx context.Context, ac *automationComponent, me
 	} else if !strings.Contains(msg, "?") {
 		msg += ": " + sc.Error()
 	}
+	fields := map[string]*ua.Variant{
+		"Status":          ua.MustVariant(ok),
+		"MethodId":        ua.MustVariant(method),
+		"InputArguments":  ua.MustVariant(variants(args)),
+		"OutputArguments": ua.MustVariant(variants(out)),
+		"StatusCodeId":    ua.MustVariant(sc),
+	}
+	if ac.log != nil {
+		fields = logEntryClass(fields)
+	}
 	c.srv.ReportAuditEvent(ctx, &server.BaseEvent{
 		EventType:  ua.NewNumericNodeID(c.ns.Data, fxdataid.AuditUpdateMethodResultEventType),
 		SourceNode: ac.id,
 		SourceName: "Method/" + name,
 		Message:    ua.NewLocalizedText(msg),
-		Fields: map[string]*ua.Variant{
-			"Status":          ua.MustVariant(ok),
-			"MethodId":        ua.MustVariant(method),
-			"InputArguments":  ua.MustVariant(variants(args)),
-			"OutputArguments": ua.MustVariant(variants(out)),
-			"StatusCodeId":    ua.MustVariant(sc),
-		},
+		Fields:     fields,
 	}, ac.id)
 }
 

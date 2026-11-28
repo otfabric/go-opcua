@@ -317,7 +317,8 @@ func (c *Connections) expire(e *endpoint) {
 	if rel == nil {
 		rel = &ua.Variant{}
 	}
-	ok := c.closeEndpoint(e, true) == ua.StatusOK
+	sc := c.closeEndpoint(e, true)
+	ok := sc == ua.StatusOK
 	if !ok {
 		// The endpoint stays with what could not be removed; try again
 		// after another CleanupTimeout, at the earliest after a second.
@@ -328,6 +329,14 @@ func (c *Connections) expire(e *endpoint) {
 		c.mu.Unlock()
 	}
 	if c.srv.Auditing() {
+		fields := map[string]*ua.Variant{
+			"Status":          ua.MustVariant(ok),
+			"RemovedEndpoint": ua.MustVariant(e.name),
+			"RelatedEndpoint": rel,
+		}
+		if e.ac.log != nil {
+			fields = logEntryClass(fields)
+		}
 		// The server's own action: no Method call, so no caller in the
 		// context. SourceNode is the FunctionalEntity (Part 81 §8.3).
 		c.srv.ReportAuditEvent(context.Background(), &server.BaseEvent{
@@ -336,13 +345,10 @@ func (c *Connections) expire(e *endpoint) {
 			SourceName: "UAFX/CleanupTimeout",
 			Message:    ua.NewLocalizedText("CleanupTimeout of the ConnectionEndpoint " + e.name + " expired"),
 			Severity:   500,
-			Fields: map[string]*ua.Variant{
-				"Status":          ua.MustVariant(ok),
-				"RemovedEndpoint": ua.MustVariant(e.name),
-				"RelatedEndpoint": rel,
-			},
+			Fields:     fields,
 		}, e.fe)
 	}
+	c.logCleanup(e, sc, rel)
 	c.refreshHealth()
 }
 
