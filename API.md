@@ -288,7 +288,7 @@ Path: `NodeFromPath` / `NodeFromPathInNamespace` use dot-separated browse names 
 ```go
 func (c *Client) HistoryReadEvent(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadEventDetails) (*ua.HistoryReadResponse, error)
 func (c *Client) HistoryReadRawModified(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadRawModifiedDetails) (*ua.HistoryReadResponse, error)
-func (c *Client) HistoryReadProcessed(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadProcessedDetails) (*ua.HistoryReadResponse, error)
+func (c *Client) HistoryReadProcessed(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadProcessedDetails) (*ua.HistoryReadResponse, error) // TimestampsToReturn Source
 func (c *Client) HistoryReadAtTime(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadAtTimeDetails) (*ua.HistoryReadResponse, error)
 func (c *Client) ReadHistory(ctx context.Context, nodeID *ua.NodeID, start, end time.Time, maxValues uint32) ([]*ua.DataValue, error)
 func (c *Client) ReadHistoryAll(ctx context.Context, nodeID *ua.NodeID, start, end time.Time) iter.Seq2[*ua.DataValue, error]
@@ -2531,6 +2531,18 @@ type ProcessedHistoryReader interface {
     ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error)
 }
 
+// Optional: the configuration the server calculates the Aggregates of a
+// Variable with (AggregateConfiguration and Stepped Property).
+type AggregateConfigProvider interface {
+    AggregateConfig(nodeID *ua.NodeID) aggregate.Config
+}
+
+// Optional on a ProcessedHistoryReader: the Aggregates it calculates, listed
+// in the AggregateFunctions folder of the HistoryServerCapabilities.
+type AggregateFunctionLister interface {
+    AggregateFunctions() []*ua.NodeID
+}
+
 type Historian struct { /* in-memory implementation */ }
 
 func NewHistorian() *Historian
@@ -2547,6 +2559,9 @@ func (h *Historian) DeleteAtTime(nodeID *ua.NodeID, reqTimes []time.Time) *ua.Hi
 func (h *Historian) ReadAtTime(nodeID *ua.NodeID, reqTimes []time.Time, useSimpleBounds bool) (*ua.HistoryReadResult, error)
 func (h *Historian) ReadModified(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
 func (h *Historian) ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error)
+func (h *Historian) AggregateFunctions() []*ua.NodeID
+func (h *Historian) SetAggregateConfig(nodeID *ua.NodeID, cfg aggregate.Config)
+func (h *Historian) AggregateConfig(nodeID *ua.NodeID) aggregate.Config
 
 func (s *Server) SetHistorian(h HistoryProvider)
 ```
@@ -2568,7 +2583,26 @@ Supported by default `*Historian`:
 - DeleteAtTime
 - ReadAtTime (nearest previous)
 - ReadModified
-- ReadProcessed aggregates Average / Minimum / Maximum / Count
+- ReadProcessed: every standard Aggregate of Part 13 §5.4.3 but
+  AnnotationCount, calculated by `server/aggregate` with the configuration of
+  `SetAggregateConfig` (default `aggregate.DefaultConfig()`), overridden by
+  the aggregateConfiguration of the request
+
+Processed reads (Part 11 §6.5.4) through the server:
+- one aggregateType per node to read, else the service result is
+  `Bad_AggregateListMismatch`; TimestampsToReturn Server or Neither is
+  `Bad_TimestampsToReturnInvalid` per node (Part 13 §5.4.3.1; Source and
+  Both are accepted)
+- a `ProcessedHistoryReader` calculates the Aggregates itself; for any
+  other `HistoryProvider` the server reads the raw values with `ReadRaw`
+  (one ProcessingInterval beyond the request on each side, following its
+  continuation points) and calculates them with `server/aggregate`, with
+  the configuration of `AggregateConfigProvider` when the provider has it
+- the AggregateFunctions folder of the HistoryServerCapabilities (Part 11
+  §5.7.2) organizes the Aggregates of the provider: `aggregate.Functions()`
+  for a provider without ReadProcessed, those of `AggregateFunctionLister`
+  for one with it (none without the lister); each AggregateFunction Object
+  has the Description of Part 13 Table 5
 
 Limitations:
 - `returnBounds` is accepted and stored on continuation points, but interpolated /
@@ -2659,6 +2693,56 @@ Peer HistoryRead raw interoperability: all four directions verified
 open62541→Go and Milo→Go. Go↔Go covered.
 
 ---
+
+### Package `server/aggregate`
+
+```go
+type Config struct {
+    TreatUncertainAsBad    bool
+    PercentDataBad         uint8
+    PercentDataGood        uint8
+    UseSlopedExtrapolation bool
+    Stepped                bool // the Stepped Property of the Variable (Part 11 §5.2.2)
+}
+func DefaultConfig() Config // TreatUncertainAsBad, 100 %, 100 %, not sloped, not stepped
+func (c Config) Valid() bool
+func (c Config) Override(ac *ua.AggregateConfiguration) Config
+func (c Config) AggregateConfiguration() *ua.AggregateConfiguration
+
+type Request struct {
+    Aggregate          *ua.NodeID // an AggregateFunction Object of Part 13 §4.2.2
+    Start, End         time.Time  // End before Start reads backwards
+    ProcessingInterval time.Duration // 0: one interval
+    Config             Config
+}
+func (r Request) Check() ua.StatusCode
+func (r Request) Intervals() int
+func (r Request) Interval(i int) (start, end time.Time)
+func (r Request) Window(first, last int) (from, to time.Time)
+func (r Request) Calculate(raw []*ua.DataValue) ([]*ua.DataValue, ua.StatusCode)
+func (r Request) CalculateIntervals(raw []*ua.DataValue, first, last int) ([]*ua.DataValue, ua.StatusCode)
+
+const MaxIntervals = 1 << 20
+const Resolution = time.Millisecond
+
+func Supported(aggregateType *ua.NodeID) bool
+func Functions() []*ua.NodeID
+func Name(aggregateType *ua.NodeID) string
+func Description(aggregateType *ua.NodeID) string
+```
+
+The 36 standard Aggregates of Part 13 §5.4.3 but AnnotationCount, with the
+intervals of §5.4.2.2 (Table 49), Interpolated and Simple Bounding Values
+(§3.1.8, §3.1.9), the PercentValues and PercentTime StatusCode calculation
+(§5.4.3.2) and the Aggregate bits of Part 4 §7.38.1 (`ua.StatusCodeHistorianBits` and the constants it masks,
+with `ua.StatusCodeInfoTypeDataValue`). `Check` returns
+`Bad_AggregateNotSupported`, `Bad_InvalidArgument` (no start or end time,
+Start = End, a negative ProcessingInterval, more than `MaxIntervals`
+intervals) or `Bad_AggregateInvalidInputs` (a Config that is not `Valid`).
+Arrays are `Bad_NotSupported` for the Aggregates that calculate with numbers
+(Part 11 §6.5.4.2). Evidence: every example of Annex A
+(`server/aggregate/testdata/AggregateExamples.csv`), with the rows where the
+package follows a clause instead listed in `deviations_test.go`.
 
 ### ServerMetrics
 

@@ -71,6 +71,14 @@ behaviour you may notice, and the deviations of peers are in
   persisted across a restart (Part 14 §9.1.2), outside the components UAFX
   persists.
 - mDNS has no probing or conflict resolution.
+- Part 13 Aggregates: the AnnotationCount Aggregate (the server keeps no
+  Annotations, Part 11 §5.1.2) and the AggregateFilter of monitored items
+  (Part 4 §7.22.4, refused with `Bad_MonitoredItemFilterUnsupported`) are not
+  implemented; the ServerCapabilities AggregateFunctions folder is empty.
+  A processed read returns all its intervals at once (at most
+  `aggregate.MaxIntervals`), without continuation points, and the server
+  searches bounding values one ProcessingInterval beyond the request of a
+  raw-only provider.
 
 ## Verification
 
@@ -112,6 +120,29 @@ behaviour you may notice, and the deviations of peers are in
   Limits) leaves the records of the AutomationComponent out of line with
   the runtime (`PersistenceStatus.Diverged`) until a later write or a
   restart replaces them; the store is not fenced.
+- Part 13 Aggregates (`server/aggregate`) follow the clauses where the
+  examples of Annex A (AggregateExamples.csv) give other results, in 64 of
+  its 1358 rows, each listed with its clause in
+  `server/aggregate/deviations_test.go`: TimeAverage and Total extrapolate
+  after the end of data (Tables 54 and 56); Total is always sloped
+  (§5.4.3.8; the file steps for a Stepped Variable); the PercentTime status
+  of four TimeAverage2/Total2 intervals is Bad at 60 % Bad data with
+  PercentDataBad 50 (§5.4.3.2.1); Maximum, MaximumActualTime and Range are
+  Uncertain when an Uncertain value exceeds the maximum (Tables 59, 61, 62);
+  MinimumActualTime and MaximumActualTime set Calculated when Uncertain
+  (Tables 60, 61); Count and NumberOfTransitions set Calculated when Bad
+  (Tables 69, 72); the first region of DurationBad/PercentBad takes the
+  status of the value at or before the start (§5.4.3.32); WorstQuality2
+  includes the start bound only and ignores TreatUncertainAsBad (§5.4.3.36).
+  Where the clauses leave room the package reads them as the file and
+  UA-.NETStandard do: a leading Bad_NoData raw value marks the start of the
+  history, an Uncertain value never counts as Good for PercentValues, an
+  all-zero aggregateConfiguration is no override, WorstQuality sets
+  MultipleValues only when the worst status is not Good, DurationInState
+  counts no region that starts with a non-Good value or bound, and the
+  end bound of MinimumActualTime2/MaximumActualTime2 is Interpolated.
+  TimestampsToReturn Both is accepted for processed reads, although Part 13
+  §5.4.3.1 names the source timestamp only.
 - ECC follows open62541, not Part 6 1.05.07, for curve25519 key material
   and ChannelThumbprint
   ([docs/interop-gaps.md](docs/interop-gaps.md)).

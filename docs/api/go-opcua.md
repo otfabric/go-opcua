@@ -753,6 +753,8 @@ func (c *Client) HistoryReadEvent(ctx context.Context, nodes []*ua.HistoryReadVa
 func (c *Client) HistoryReadProcessed(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadProcessedDetails) (*ua.HistoryReadResponse, error)
 ```
 
+HistoryReadProcessed reads Aggregates of the history of nodes (Part 11 §6.5.4): details.AggregateType holds one Aggregate per node, in the order of nodes. It asks for source timestamps (Part 13 §5.4.3.1).
+
 #### func (Client) HistoryReadRawModified
 
 ```go

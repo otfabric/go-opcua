@@ -4,12 +4,14 @@ package server
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server/aggregate"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -273,27 +275,78 @@ func TestHistorian_ReadProcessed_MinMaxCount(t *testing.T) {
 		})
 	}
 
+	// One interval [base, base+5s) over the five values, which ends after
+	// the last of them: Partial (Part 13 §5.3.3.2). Minimum is the raw value
+	// at the start of the interval, "Good, Raw" (Table 58); Maximum and
+	// Count are Calculated; each keeps the type of its source value.
 	end := base.Add(5 * time.Second)
-	for _, agg := range []uint32{id.AggregateFunctionMinimum, id.AggregateFunctionMaximum, id.AggregateFunctionCount} {
-		res, err := h.ReadProcessed(nodeID, base, end, 5000, ua.NewNumericNodeID(0, agg), nil)
-		if err != nil {
-			t.Fatalf("agg %d: %v", agg, err)
-		}
-		if res.StatusCode != ua.StatusOK {
-			t.Fatalf("agg %d status=%v", agg, res.StatusCode)
-		}
+	partial := ua.StatusCodeInfoTypeDataValue | ua.StatusCodeHistorianPartial
+	for _, tc := range []struct {
+		agg    uint32
+		value  any
+		status ua.StatusCode
+	}{
+		{id.AggregateFunctionMinimum, float32(1), partial},
+		{id.AggregateFunctionMaximum, uint32(9), partial | ua.StatusCodeHistorianCalculated},
+		{id.AggregateFunctionCount, int32(5), partial | ua.StatusCodeHistorianCalculated},
+	} {
+		res, err := h.ReadProcessed(nodeID, base, end, 5000, ua.NewNumericNodeID(0, tc.agg), nil)
+		require.NoError(t, err)
+		require.Equal(t, ua.StatusOK, res.StatusCode, id.Name(tc.agg))
 		hd := res.HistoryData.Value.(*ua.HistoryData)
-		if len(hd.DataValues) == 0 || hd.DataValues[0].Status != ua.StatusOK {
-			t.Fatalf("agg %d empty/bad result", agg)
-		}
+		require.Len(t, hd.DataValues, 1, id.Name(tc.agg))
+		require.Equal(t, tc.value, hd.DataValues[0].Value.Value(), id.Name(tc.agg))
+		require.Equal(t, tc.status, hd.DataValues[0].Status, id.Name(tc.agg))
+		require.Equal(t, base, hd.DataValues[0].SourceTimestamp, id.Name(tc.agg))
 	}
 
-	if st, _ := h.ReadProcessed(nodeID, base, end, 1000, ua.NewNumericNodeID(0, 99999), nil); st.StatusCode != ua.StatusBadHistoryOperationUnsupported {
-		t.Fatalf("unsupported agg: %v", st.StatusCode)
+	read := func(start, end time.Time, pi float64, agg uint32, ac *ua.AggregateConfiguration) ua.StatusCode {
+		res, err := h.ReadProcessed(nodeID, start, end, pi, ua.NewNumericNodeID(0, agg), ac)
+		require.NoError(t, err)
+		return res.StatusCode
 	}
-	if st, _ := h.ReadProcessed(nodeID, end, base, 1000, ua.NewNumericNodeID(0, id.AggregateFunctionCount), nil); st.StatusCode != ua.StatusBadHistoryOperationInvalid {
-		t.Fatalf("invalid window: %v", st.StatusCode)
+	require.Equal(t, ua.StatusBadAggregateNotSupported, read(base, end, 1000, 99999, nil))
+	require.Equal(t, ua.StatusBadAggregateNotSupported, read(base, end, 1000, id.AggregateFunctionAnnotationCount, nil))
+	// Part 11 §6.5.4.2: startTime equal to endTime is Bad_InvalidArgument,
+	// an endTime before the startTime reads backwards.
+	require.Equal(t, ua.StatusBadInvalidArgument, read(base, base, 1000, id.AggregateFunctionCount, nil))
+	require.Equal(t, ua.StatusOK, read(end, base, 1000, id.AggregateFunctionCount, nil))
+	require.Equal(t, ua.StatusBadInvalidArgument, read(base, end, -1, id.AggregateFunctionCount, nil))
+	require.Equal(t, ua.StatusBadInvalidArgument, read(base, end, math.NaN(), id.AggregateFunctionCount, nil))
+	require.Equal(t, ua.StatusOK, read(base, end, math.Inf(1), id.AggregateFunctionCount, nil))
+	// Part 13 §4.2.1.2: PercentDataGood < 100 - PercentDataBad.
+	require.Equal(t, ua.StatusBadAggregateInvalidInputs, read(base, end, 1000, id.AggregateFunctionCount, &ua.AggregateConfiguration{PercentDataBad: 10, PercentDataGood: 10}))
+
+	res, err := h.ReadProcessed(ua.NewStringNodeID(2, "nope"), base, end, 1000, ua.NewNumericNodeID(0, id.AggregateFunctionCount), nil)
+	require.NoError(t, err)
+	require.Equal(t, ua.StatusBadHistoryOperationUnsupported, res.StatusCode)
+}
+
+// TestHistorian_AggregateConfig: the configuration of a node is the default
+// one until it is set, and a read overrides it with its own.
+func TestHistorian_AggregateConfig(t *testing.T) {
+	h := NewHistorian()
+	nodeID := ua.NewStringNodeID(2, "Hist.Cfg")
+	h.EnableNode(nodeID, 100)
+	require.Equal(t, aggregate.DefaultConfig(), h.AggregateConfig(nodeID))
+	cfg := aggregate.Config{PercentDataBad: 50, PercentDataGood: 100, Stepped: true}
+	h.SetAggregateConfig(nodeID, cfg)
+	require.Equal(t, cfg, h.AggregateConfig(nodeID))
+	require.Equal(t, aggregate.Functions(), h.AggregateFunctions())
+
+	// A Good value and a Bad one: with PercentDataBad 50 the interval is
+	// Bad, with the default 100 it is Uncertain.
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	h.RecordValue(nodeID, &ua.DataValue{EncodingMask: ua.DataValueValue | ua.DataValueSourceTimestamp, Value: ua.MustVariant(1.0), SourceTimestamp: base})
+	h.RecordValue(nodeID, &ua.DataValue{EncodingMask: ua.DataValueStatusCode | ua.DataValueSourceTimestamp, Status: ua.StatusBad, SourceTimestamp: base.Add(time.Second)})
+	h.RecordValue(nodeID, &ua.DataValue{EncodingMask: ua.DataValueValue | ua.DataValueSourceTimestamp, Value: ua.MustVariant(2.0), SourceTimestamp: base.Add(3 * time.Second)})
+	status := func(ac *ua.AggregateConfiguration) ua.StatusCode {
+		res, err := h.ReadProcessed(nodeID, base, base.Add(2*time.Second), 0, ua.NewNumericNodeID(0, id.AggregateFunctionAverage), ac)
+		require.NoError(t, err)
+		return res.HistoryData.Value.(*ua.HistoryData).DataValues[0].Status &^ ua.StatusCodeHistorianBits &^ ua.StatusCodeInfoTypeDataValue
 	}
+	require.Equal(t, ua.StatusBad, status(nil))
+	require.Equal(t, ua.StatusUncertainDataSubNormal, status(aggregate.DefaultConfig().AggregateConfiguration()))
 }
 
 func TestHistoryCPRegistry_SessionBound(t *testing.T) {

@@ -1016,10 +1016,60 @@ h.RecordValue(nodeID, dv)
 ```
 
 Clients then call HistoryRead / HistoryUpdate against the provider. Default `*Historian`
-supports raw, modified, at-time, and processed aggregates (Average/Minimum/Maximum/Count),
-plus UpdateData and raw/at-time deletes. Continuations are session-bound (30s TTL, max 100).
+supports raw, modified, at-time, and processed reads with the Part 13 Aggregates (see
+below), plus UpdateData and raw/at-time deletes. Continuations are session-bound (30s TTL, max 100).
 `returnBounds` is accepted but bounding/interpolation is not implemented. Without
 `SetHistorian`, HistoryRead reports unsupported / non-historized.
+
+### Processed reads (Part 13 Aggregates)
+
+HistoryRead `ReadProcessedDetails` (Part 11 §6.5.4) returns one value per interval
+of every standard Aggregate of Part 13 §5.4.3 but AnnotationCount, calculated by
+the `server/aggregate` package: the intervals of Table 49 (reverse reads, a
+ProcessingInterval of 0 for one interval), Interpolated and Simple Bounding
+Values, the PercentValues and PercentTime StatusCode calculation and the
+Aggregate bits Calculated, Interpolated, Partial and MultipleValues (Part 4
+§7.38.1) with the InfoType DataValue.
+
+```go
+h := server.NewHistorian()
+h.EnableNode(nodeID, 0)
+// The AggregateConfiguration (Part 13 §4.2.1.2) and the Stepped Property
+// (Part 11 §5.2.2) of the Variable; without it aggregate.DefaultConfig().
+h.SetAggregateConfig(nodeID, aggregate.Config{
+    TreatUncertainAsBad: true, PercentDataBad: 100, PercentDataGood: 100, Stepped: true,
+})
+s.SetHistorian(h)
+```
+
+The aggregateConfiguration of a request overrides the configuration unless its
+useServerCapabilitiesDefaults is set or it is all zero (what a client that leaves
+it unset sends). The request needs one aggregateType per node to read (the service
+result is `Bad_AggregateListMismatch` otherwise) and source timestamps:
+TimestampsToReturn Server or Neither is `Bad_TimestampsToReturnInvalid`
+(Part 13 §5.4.3.1); Both is accepted.
+
+A custom `HistoryProvider` gets the Aggregates for free: when it does not implement
+`ProcessedHistoryReader`, the server reads its raw values with `ReadRaw` from one
+ProcessingInterval before the first interval to one after the last (Part 13 §3.1.8:
+the search for bounding values covers at least a ProcessingInterval), follows its
+continuation points, and calculates. Implement `AggregateConfigProvider` to give the
+configuration of each Variable. A provider that implements `ProcessedHistoryReader`
+calculates the Aggregates itself; with `AggregateFunctionLister` it lists them in
+the AggregateFunctions folder of the HistoryServerCapabilities, which otherwise
+lists `aggregate.Functions()` for a provider without `ProcessedHistoryReader` and
+nothing for one with it. The package can also be used directly:
+
+```go
+r := aggregate.Request{Aggregate: ua.NewNumericNodeID(0, id.AggregateFunctionTimeAverage),
+    Start: start, End: end, ProcessingInterval: time.Minute, Config: aggregate.DefaultConfig()}
+from, to := r.Window(0, r.Intervals()) // the raw values the intervals need
+values, status := r.Calculate(raw)
+```
+
+The last raw value read is taken as the end of the history: an interval after it is
+"After End of Data". Where the examples of Annex A conflict with a clause the
+package follows the clause; LIMITATIONS.md lists those cases.
 
 ### Historical events
 
