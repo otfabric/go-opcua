@@ -772,11 +772,22 @@ var errBusy = errors.New("fxcm: a set on the server is being processed")
 // sets collect returns, and applies the verdicts. It returns an error when
 // a record stays Unverified or a verdict was not written, and busy when a
 // set was skipped because a run or a claim holds it.
+//
+// It records the outcome of the attempt (noteAttempt, reported in
+// Recovery.Unreachable) only when it had work on addr: a pass that skipped
+// every set of addr because a run holds them contacted no server and proved
+// nothing, so it keeps the error of the last attempt (the run's own, which
+// verifies that set itself).
 func (m *Manager) verifyServer(ctx context.Context, addr ServerAddress, owner *set) (busy bool, err error) {
 	ws, busy := m.collect(addr, owner)
 	if len(ws) == 0 {
+		if !busy && owner == nil {
+			// No set has anything Unverified on addr any more.
+			m.p.noteAttempt(addr, nil)
+		}
 		return busy, nil
 	}
+	defer func() { m.p.noteAttempt(addr, err) }()
 	sess, err := m.pool.get(ctx, addr)
 	if err != nil {
 		return busy, err
@@ -1235,7 +1246,6 @@ func (m *Manager) verifyLoop() {
 				cancel()
 				mu.Lock()
 				defer mu.Unlock()
-				p.noteAttempt(a, err)
 				if err == nil && !busy {
 					proved[a] = true
 				}
@@ -1323,7 +1333,6 @@ func (x *run) verifyRun(ctx context.Context) {
 			vctx, cancel := context.WithTimeout(ctx, o.Timeout)
 			defer cancel()
 			_, err := m.verifyServer(vctx, a, x.s)
-			m.p.noteAttempt(a, err)
 			if err != nil {
 				m.log.Warn("fxcm: the records of the set were not all verified", "set", x.r.key.String(), "run", x.r.id, "address", a.Address, "error", err)
 			}

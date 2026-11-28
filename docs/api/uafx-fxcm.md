@@ -1135,7 +1135,8 @@ type Recovery struct {
 	Fenced []OwedWork
 	// Unreachable are the servers (by Address) of Unverified records whose
 	// last verification attempt failed, with its error; they are tried
-	// again with a bounded backoff (VerifyOptions).
+	// again with a bounded backoff (VerifyOptions). A background pass that
+	// skips a set a run holds is no attempt: the run verifies that set.
 	Unreachable map[string]string
 	// Blocked, when not empty, is why the remote operations of the set
 	// are refused: a record of it in the store is not valid.

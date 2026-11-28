@@ -1279,7 +1279,10 @@ address, at most `VerifyOptions.Parallelism` servers at once (by default
 `Options.Parallelism`), each attempt bounded by `VerifyOptions.Timeout`
 (30 s). A server that cannot be reached keeps its records Unverified, is
 reported in `Recovery.Unreachable` with the error, and is tried again
-with a backoff from `RetryInitial` (1 s) to `RetryMax` (1 min). `Close`
+with a backoff from `RetryInitial` (1 s) to `RetryMax` (1 min). The report
+is the outcome of the last attempt that had work on the server: a
+background pass that skips a set because a run holds it contacts nothing
+and keeps it, and the run's own attempt is recorded. `Close`
 cancels the pass; what it had not written stays as it was stored.
 `VerifyOptions.Manual` turns the background pass off. Every run with a
 Store verifies the records of its set as its first step, also in Manual
@@ -1309,7 +1312,10 @@ Unresolved:
   ConnectionManagerApplicationUri read with the Diagnostics is checked as
   well, so that one that changed between the two reads drops the record;
 - the incarnation: the Diagnostics CreationTime (§6.6.2 Table 74) equal
-  to the recorded one; one of them missing is Unresolved; neither is
+  to the recorded one, both as they are after their binary encoding (OPC
+  10000-6 §5.2.2.5: a time at or after 9999-12-31 23:59:59 UTC is the
+  latest time that can be represented, as the record keeps it); one of
+  them missing is Unresolved; neither is
   proven only with `ExclusiveApplicationURI` and our
   ConnectionManagerApplicationUri on the endpoint;
 - the configuration: Mode, InputVariables, OutputVariables, IsPersistent,
