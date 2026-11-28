@@ -461,6 +461,21 @@ type Event struct {
 	// of the processing events (§8.6 Table 114). ActionRemoveSet and
 	// ActionReconcile are the runs of Remove and Reconcile.
 	Action uafx.FxProcess
+	// Connections are the Connections whose endpoints an EventCall
+	// carried, each once, in the order of the call.
+	Connections []string
+	// CommandMask is the CommandMask of an EventCall of
+	// EstablishConnections (§6.2.3).
+	CommandMask uafx.FxCommandMask
+	// Trace is the TraceContext of an EventCall with Options.TraceCalls:
+	// the TraceId of the run and the SpanId of the SpanContext the call
+	// passed (OPC 10000-26 §5.6.4, Part 81 §6.7.2). ParentSpanId and
+	// ParentIdentifier are not set. Nil without Options.TraceCalls.
+	Trace *ua.TraceContextDataType
+	// Failures are the failures of the run, on the EventTransition at its
+	// end: one per endpoint that failed, with the first failure of the
+	// endpoint, and those without a Connection (Part 81 §8.10, §8.11).
+	Failures []RunFailure
 }
 ```
 
@@ -634,6 +649,8 @@ LostResponse is what a ConnectionManager knows of an endpoint that a call whose 
 
 ```go
 type Manager struct {
+
+	// spans are the SpanIds of the calls (span).
 
 	// reserved are the keys an Update with requireComplete adds, which no
 	// other Add may take meanwhile (updateComplete).
@@ -874,7 +891,7 @@ type Observer interface {
 }
 ```
 
-Observer receives the Events of a Manager: transitions, calls, endpoints, settles, retries and monitor findings (design §4.3; the facts a LogObject of OPC 10000-26 would record, CM-8). It must not block, and it is called from several goroutines at once.
+Observer receives the Events of a Manager: transitions, calls, endpoints, settles, retries and monitor findings (design §4.3; the facts a ConnectionManagerLog of fxserver records, CM-8). It must not block, and it is called from several goroutines at once.
 
 ### type ObserverFunc
 
@@ -975,6 +992,16 @@ type Options struct {
 	// one reached over OPC UA. Nil: the SecurityKeyServer of a set is
 	// validated and otherwise not used.
 	SecurityKeyServer SecurityKeyServer
+	// TraceCalls passes a SpanContext with every EstablishConnections and
+	// CloseConnections call, a TraceId per run and a SpanId per call, in
+	// the AdditionalHeader of the request (OPC 10000-26 §5.6.4), and
+	// reports it as Event.Trace, so that the records of the
+	// AutomationComponentLogs follow those of the ConnectionManagerLog
+	// ("the ConnectionManager shall provide the SpanContextDataType as part
+	// of the EstablishConnection Method Call", Part 81 §6.7.2). A
+	// ConnectionManager with a log needs it
+	// (fxserver.ConnectionManagerOptions.Log).
+	TraceCalls bool
 }
 ```
 
@@ -1299,6 +1326,17 @@ func (r *Run) Wait(ctx context.Context) (*RunResult, error)
 ```
 
 Wait waits for the end of the run and returns its result, or the error of ctx.
+
+### type RunFailure
+
+```go
+type RunFailure struct {
+	Endpoint EndpointRef
+	Failure
+}
+```
+
+RunFailure is a failure of a run (Event.Failures): of the endpoint Endpoint, or, with a zero Endpoint, of the run without a Connection to report it on (Part 81 §8.10: SourceName "ConnectionManager").
 
 ### type RunID
 

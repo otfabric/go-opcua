@@ -272,6 +272,7 @@ func TestEstablishPaths(t *testing.T) {
 	calls := map[string]int{}
 	for _, e := range events.of(fxcm.EventCall) {
 		calls[e.Address]++
+		assert.Nil(t, e.Trace, "no SpanContext without TraceCalls")
 	}
 	// a: reserve, configure; b: reserve, two configure calls.
 	assert.Equal(t, 2, calls[a.url])

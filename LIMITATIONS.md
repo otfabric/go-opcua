@@ -32,7 +32,10 @@ behaviour you may notice, and the deviations of peers are in
   server does not have).
   The ConnectionManager (`uafx/fxcm`, served by
   `fxserver.EnableConnectionManager`) keeps its sets and the records of its
-  endpoints in memory, and with a Store also durably; it has no ConnectionManagerLog, lists no
+  endpoints in memory, and with a Store also durably; its ConnectionManagerLog and the
+  AutomationComponentLogs keep their records in memory only (no LogObject Persistent
+  Storage, no MaxStorageDuration, no LogOverflowEventType, no records of the changes of
+  state of monitored Connections, see docs/uafx.md#logs); it lists no
   GlobalDiscoveryServers, reflects no Qos or ReceiveQos of an edited flow
   onto the PubSub configuration; it configures the SecurityKeyServer of a
   set with the pull model only (no PubSubKeyPushTargets, no RolePermissions,

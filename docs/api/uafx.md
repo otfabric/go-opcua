@@ -40,7 +40,21 @@ var ErrInspect = errors.New("uafx: inspect")
 
 ErrInspect wraps the errors of Inspect that end the inspection: a failed service call, not a deviation of the model, which is a Finding.
 
+```go
+var MaxLogTime = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
+```
+
+MaxLogTime is the EndTime GetRecords sends for a zero EndTime: the latest DateTime (OPC 10000-6 §5.2.2.5), so that the call has no end.
+
 ## Functions
+
+### func AutomationComponentLog
+
+```go
+func AutomationComponentLog(ctx context.Context, c *opcua.Client, ac *ua.NodeID) (*ua.NodeID, error)
+```
+
+AutomationComponentLog returns the NodeId of the AutomationComponentLog of the AutomationComponent ac (Part 81 §6.2.2 Table 4), an error when the server has no AC namespace or ac has none.
 
 ### func CloseConnections
 
@@ -49,6 +63,14 @@ func CloseConnections(ctx context.Context, c *opcua.Client, ac *ua.NodeID, endpo
 ```
 
 CloseConnections calls the CloseConnections Method of the AutomationComponent ac (Part 81 §6.2.5) for the ConnectionEndpoints endpoints, with remove to remove what EstablishConnections created for them. It returns the status of the call, Good or Uncertain (Table 23), and one result per endpoint (Table 24).
+
+### func ConnectionManagerLog
+
+```go
+func ConnectionManagerLog(ctx context.Context, c *opcua.Client) (*ua.NodeID, error)
+```
+
+ConnectionManagerLog returns the NodeId of the ConnectionManagerLog of FxRoot.ConnectionManager (Part 81 §6.7.2 Table 77, §12.3), an error when the server has no CM namespace or the ConnectionManager has none.
 
 ### func ConnectionManagerNode
 
@@ -97,6 +119,14 @@ func ProcessConnectionConfigurationSets(ctx context.Context, c *opcua.Client, ac
 ```
 
 ProcessConnectionConfigurationSets calls ProcessConnectionConfigurationSets of the ConnectionManager of the server (Part 81 §6.7.5, §12.3) with action for the ConnectionConfigurationSet Objects sets. The Method returns once the processing started; the ConnectionConfigurationSet events (§8.7 to §8.9) and the state machines of the sets tell the outcome. It returns the status of the call (Table 85) and one result per set (Table 86).
+
+### func ReadLog
+
+```go
+func ReadLog(ctx context.Context, c *opcua.Client, log *ua.NodeID, req GetRecordsRequest) ([]*ua.LogRecord, error)
+```
+
+ReadLog calls GetRecords with req until the server returns no continuation point, and returns the records, oldest first. The records added between two calls may or may not be in the result.
 
 ## Types
 
@@ -308,6 +338,47 @@ type FunctionalEntity struct {
 ```
 
 FunctionalEntity is an instance of FunctionalEntityType (Part 81 §6.4.2) or of a subtype.
+
+### type GetRecordsRequest
+
+```go
+type GetRecordsRequest struct {
+	// StartTime and EndTime bound the Time of the records; a zero EndTime
+	// is MaxLogTime.
+	StartTime, EndTime time.Time
+	// MaxReturnRecords is the most records of one call, 0 no limit of the
+	// client (the server may return fewer, with a continuation point).
+	MaxReturnRecords uint32
+	// MinimumSeverity is the lowest Severity returned, 1 to 1000; 0 is 1.
+	MinimumSeverity uint16
+	// RequestMask selects the optional fields of the records (§5.8).
+	RequestMask ua.LogRecordMask
+	// ContinuationPoint is the ContinuationPointOut of the previous call,
+	// nil on the first one.
+	ContinuationPoint []byte
+}
+```
+
+GetRecordsRequest are the arguments of GetRecords (OPC 10000-26 §5.3 Table 2).
+
+### type GetRecordsResult
+
+```go
+type GetRecordsResult struct {
+	Records           []*ua.LogRecord
+	ContinuationPoint []byte
+}
+```
+
+GetRecordsResult is what GetRecords returns: the records, oldest first, and the continuation point for the rest, nil when there is none.
+
+#### func GetRecords
+
+```go
+func GetRecords(ctx context.Context, c *opcua.Client, log *ua.NodeID, req GetRecordsRequest) (*GetRecordsResult, error)
+```
+
+GetRecords calls the GetRecords Method of the LogObject log (OPC 10000-26 §5.3), such as the AutomationComponentLog of an AutomationComponent or the ConnectionManagerLog (Part 81 §6.2.2, §6.7.2). A Bad status of the call (Table 3), such as Bad\_ContinuationPointInvalid, is an error with the status in its chain.
 
 ### type Limits
 

@@ -117,6 +117,13 @@ type ConnectionOptions struct {
 	// runtime has keys for from another source is left to it. nil: the
 	// application supplies the keys (pubsub.WithKeySource).
 	SecurityKeys *sks.PullerOptions
+	// Log adds the AutomationComponentLog of every AutomationComponent
+	// (Part 81 §6.2.2), a LogObject of OPC 10000-26, or completes the one
+	// its instance has: a record for every EstablishConnections and
+	// CloseConnections call and every cleanup of a ConnectionEndpoint
+	// (§6.6.2), and the ConditionClassId LogEntryConditionClassType on the
+	// audit events of §8.2 to §8.4. nil: no log (Table 5: Optional).
+	Log *LogOptions
 	// maxControlled replaces maxControlled in tests; 0 is maxControlled.
 	maxControlled int
 	// failCapabilities, set by tests, makes setSupportsPersistence fail
@@ -208,6 +215,7 @@ type automationComponent struct {
 	health   *server.Node // AggregatedHealth, nil if absent
 	feFolder *ua.NodeID   // FunctionalEntities
 	assets   *ua.NodeID   // Assets
+	log      *Log         // AutomationComponentLog, nil without ConnectionOptions.Log
 }
 
 // EnableConnections makes srv serve EstablishConnections and
@@ -229,6 +237,11 @@ func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions
 	}
 	if opts.SecurityKeys != nil && opts.SecurityKeys.Dial == nil {
 		return nil, fmt.Errorf("%w: SecurityKeys without a Dial", ErrConnections)
+	}
+	if opts.Log != nil {
+		if err := opts.Log.check(); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrConnections, err)
+		}
 	}
 	if opts.UDPPort == 0 {
 		opts.UDPPort = 4840
@@ -297,6 +310,15 @@ func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions
 	}
 	if len(c.acs) == 0 {
 		return nil, fmt.Errorf("%w: the server has no AutomationComponent below FxRoot", ErrConnections)
+	}
+	if opts.Log != nil {
+		for _, ac := range c.acs {
+			l := newLog(*opts.Log)
+			if _, err := logNodes(srv, ac.id, &ua.QualifiedName{NamespaceIndex: ns.AC, Name: "AutomationComponentLog"}, "uafx-log:"+ac.id.String(), l); err != nil {
+				return nil, fmt.Errorf("%w: AutomationComponentLog of %v: %w", ErrConnections, ac.id, err)
+			}
+			ac.log = l
+		}
 	}
 	for _, ac := range c.acs {
 		for _, fe := range c.functionalEntities(ac) {
@@ -435,6 +457,20 @@ func (c *Connections) Status(endpoint *ua.NodeID) (uafx.ConnectionEndpointStatus
 		return 0, false
 	}
 	return e.Status(), true
+}
+
+// Log returns the AutomationComponentLog of the AutomationComponent ac
+// (Part 81 §6.2.2), nil without ConnectionOptions.Log or for a node that is
+// not one of its AutomationComponents. The application may add its own
+// records ("LogObject records can also be generated without the generation
+// of an Event", §6.2.2).
+func (c *Connections) Log(ac *ua.NodeID) *Log {
+	for _, a := range c.acs {
+		if a.id.Equal(ac) {
+			return a.log
+		}
+	}
+	return nil
 }
 
 // RefreshHealth recomputes the AggregatedOperationalHealth of every

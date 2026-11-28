@@ -76,6 +76,12 @@ type cmServer struct {
 
 func newCMServer(t *testing.T, m *fxcm.Manager) *cmServer {
 	t.Helper()
+	return newCMServerWith(t, fxserver.ConnectionManagerOptions{Manager: m, Editable: true, File: true})
+}
+
+// newCMServerWith is newCMServer with opts.
+func newCMServerWith(t *testing.T, opts fxserver.ConnectionManagerOptions) *cmServer {
+	t.Helper()
 	srv, err := server.New(
 		server.EndPoint("localhost", 0),
 		server.InsecureNoSecurity(),
@@ -88,9 +94,8 @@ func newCMServer(t *testing.T, m *fxcm.Manager) *cmServer {
 	require.NoError(t, err)
 	ns, err := fxserver.AddModel(srv, fxserver.ModelCM)
 	require.NoError(t, err)
-	cm, err := fxserver.EnableConnectionManager(srv, ns, fxserver.ConnectionManagerOptions{
-		Manager: m, Editable: true, File: true, Logger: slog.New(slog.DiscardHandler),
-	})
+	opts.Logger = slog.New(slog.DiscardHandler)
+	cm, err := fxserver.EnableConnectionManager(srv, ns, opts)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
 	cleanup.Register(t, func() {

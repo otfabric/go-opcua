@@ -11,6 +11,9 @@ import (
 	"github.com/otfabric/go-opcua/uafx/fxcm"
 )
 
+// LogEvent records e in the ConnectionManagerLog of c as apply does.
+func LogEvent(c *ConnectionManager, e fxcm.Event) { c.logEvent(e) }
+
 // SetPubSubOps replaces the runtime operations that close ConnectionEndpoints;
 // a nil function keeps the current one.
 func SetPubSubOps(c *Connections, disable, removeReader, removeWriter func(pubsub.ComponentID) error) {

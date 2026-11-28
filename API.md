@@ -2554,6 +2554,7 @@ func (c *Client) ResetAlarmMetrics(ctx context.Context, metricsID *ua.NodeID) er
 func NewAuditConditionEventFilter() *ua.EventFilter
 func ParseAuditConditionEvent(ev *ua.EventFieldList) (*AuditConditionEvent, error)
 func WithAuditEntryID(ctx context.Context, auditEntryID string) context.Context
+func WithSpanContext(ctx context.Context, sc *ua.SpanContextDataType) context.Context // OPC 10000-26 §5.6.4
 
 // package ua
 func (b *EventFilterBuilder) SelectPaths(paths ...string) *EventFilterBuilder
@@ -3565,6 +3566,15 @@ OperationalHealth, ConnectionEndpoints, SubFunctionalEntities), `ConnectionEndpo
 NodeIds: packages `uafx/fxdataid`, `uafx/fxacid`, `uafx/fxcmid` and `di/diid`, each with
 `NamespaceURI`. Reads stay within the MaxNodesPerRead of the server. See
 [docs/uafx.md](docs/uafx.md); examples in `examples/uafx`.
+
+The LogObjects of OPC 10000-26 ([docs/uafx.md](docs/uafx.md#logs)):
+
+```go
+func AutomationComponentLog(ctx context.Context, c *opcua.Client, ac *ua.NodeID) (*ua.NodeID, error)
+func ConnectionManagerLog(ctx context.Context, c *opcua.Client) (*ua.NodeID, error)
+func GetRecords(ctx context.Context, c *opcua.Client, log *ua.NodeID, req GetRecordsRequest) (*GetRecordsResult, error) // §5.3
+func ReadLog(ctx context.Context, c *opcua.Client, log *ua.NodeID, req GetRecordsRequest) ([]*ua.LogRecord, error)     // follows the continuation points
+```
 
 ## Package `uafx/fxserver`
 

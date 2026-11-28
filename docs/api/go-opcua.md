@@ -215,6 +215,14 @@ func WithAuditEntryID(ctx context.Context, auditEntryID string) context.Context
 
 WithAuditEntryID returns a context whose requests carry auditEntryID as the AuditEntryId of their RequestHeader (Part 4 §7.33), unless the request sets one itself. A server reports it as the ClientAuditEntryId of the audit events of the request.
 
+### func WithSpanContext
+
+```go
+func WithSpanContext(ctx context.Context, sc *ua.SpanContextDataType) context.Context
+```
+
+WithSpanContext returns a context whose requests carry sc in the AdditionalHeader of their RequestHeader (OPC 10000-4 §7.32): an AdditionalParametersType (§7.1) with the parameter "SpanContext", as OPC 10000-26 §5.6.4 passes the trace of a Client to a Server. A request whose AdditionalHeader has a SpanContext already keeps it; other parameters of the header are kept. A nil sc, or one with SpanId 0 (an invalid SpanId, §5.6.2), adds nothing.
+
 ## Types
 
 ### type AlarmMetrics

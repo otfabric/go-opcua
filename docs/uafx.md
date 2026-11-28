@@ -1777,6 +1777,137 @@ F.3.2 recommend; the others get `Bad_UserAccessDenied`.
 `ConnectionManagerOptions.Authorizer` (`CMAuthorizer`, `CMRequest`,
 `CMOperation`) replaces that policy.
 
+## Logs
+
+An AutomationComponent can have an AutomationComponentLog and a
+ConnectionManager a ConnectionManagerLog (Part 81 §6.2.2 Table 4, §6.7.2
+Table 77, both Optional): LogObjects of OPC 10000-26 v1.05.07. Both are
+opt in. `fxserver.ConnectionOptions.Log` gives every AutomationComponent
+its log and `fxserver.ConnectionManagerOptions.Log` gives the
+ConnectionManager its log. Each takes a `fxserver.LogOptions`. Without it
+nothing changes.
+
+The LogObject (§5.2 Table 1) is a component of the AutomationComponent or
+of FxRoot.ConnectionManager, of LogObjectType. It has the GetRecords
+Method and the MaxRecords Property, and the MinimumSeverity Property when
+one is set. The Logs folder of the Server Object organizes it (§7.3). An
+instance a NodeSet gave the AutomationComponent is kept, and the members
+it lacks are added. The nodes added get string NodeIds:
+`uafx-log:<AutomationComponent NodeId>` in the namespace of the
+AutomationComponent, and `cm.ConnectionManagerLog` in the CM namespace.
+
+| `LogOptions` | Default | |
+|---|---|---|
+| `MaxRecords` | 1000 (`DefaultLogMaxRecords`) | The capacity. A full log deletes its oldest record for a new one (§5.2: "a hard limit"). |
+| `MinimumSeverity` | none | A record with a lower Severity is not kept (§5.2). 1 to 1000; a higher value is `ErrLog`. |
+| `MaxReturnRecords` | 100 (`DefaultLogMaxReturnRecords`) | The most records one GetRecords call returns (§5.3: "The Server can also impose a limit"). |
+
+The records are kept in memory only: a restart of the process loses them
+(§5.1 leaves storage to the server; the ConformanceUnit LogObject
+Persistent Storage is not implemented, see [Limits](#limits)).
+`Connections.Log(ac)` and `ConnectionManager.Log()` return the `*Log`.
+`Log.Add` adds a record of the application (§6.2.2: "LogObject records can
+also be generated without the generation of an Event"), and `Log.Records`
+returns the records.
+
+GetRecords (§5.3 Table 2) returns the records between StartTime and
+EndTime, inclusive, with at least MinimumSeverity, oldest first, in pages
+of MaxReturnRecords or the limit of the log. The fields the RequestMask
+does not select are left out (§5.8). Time, Severity and Message are always
+returned. The continuation point holds the position in the log, with no
+state on the server, so it needs no ReleaseContinuationPoint (§5.4,
+Optional) and has no Bad_NoContinuationPoints. Errors (Table 3):
+
+- EndTime earlier than StartTime: `Bad_InvalidArgument`.
+- MinimumSeverity outside 1 to 1000: `Bad_InvalidArgument`. The text of
+  §5.3 asks for it; Table 3 lists `Bad_OutOfRange` for the same case, and
+  the text is followed.
+- A continuation point of another log, or one whose next record was
+  deleted since: `Bad_ContinuationPointInvalid`.
+- A continuation point with other arguments than the call that returned
+  it: `Bad_InvalidArgument` (§5.3 lets the server "detect any changes to
+  the parameters and report an error").
+- The wrong number of arguments (`Bad_ArgumentsMissing`) or types
+  (`Bad_TypeMismatch`).
+
+Access is that of a Method of the server (RolePermissions, the
+AccessController). §5.11 recommends restricting it.
+
+The client: `uafx.AutomationComponentLog(ctx, c, ac)` and
+`uafx.ConnectionManagerLog(ctx, c)` find the LogObject by its BrowseName,
+`uafx.GetRecords` makes one call (`GetRecordsRequest`, `GetRecordsResult`)
+and `uafx.ReadLog` follows the continuation points.
+
+```go
+logNode, err := uafx.AutomationComponentLog(ctx, c, acID)
+recs, err := uafx.ReadLog(ctx, c, logNode, uafx.GetRecordsRequest{
+	MinimumSeverity: 200,
+	RequestMask:     ua.LogRecordMaskSourceName | ua.LogRecordMaskAdditionalData,
+})
+```
+
+### The records of an AutomationComponent
+
+| What | Severity | EventType | SourceNode | SourceName | AdditionalData |
+|---|---|---|---|---|---|
+| A call of EstablishConnections or CloseConnections (§6.2.2: "shall produce LogRecords for all calls") | 100 Good, 200 Uncertain, 250 Bad | AuditUpdateMethodResultEventType | the AutomationComponent | `Method/<name>` | StatusCodeId (§8.4); ErrorCode when not Good |
+| The cleanup of an endpoint whose CleanupTimeout expired (§6.6.2) | 200; 250 when the close failed | AuditConnectionCleanupEventType | the FunctionalEntity | the BrowseName of the endpoint | RemovedEndpoint, RelatedEndpoint (§8.3); ErrorCode when the close failed |
+
+A call that carries a SpanContext (`opcua.WithSpanContext`) gets a
+TraceContext (§5.6.3, §5.6.4). The TraceId is the TraceId of the call, the
+SpanId is new, the ParentSpanId is the SpanId of the call, and the
+ParentIdentifier is the ApplicationUri of the client. With the log, the
+AuditUpdateMethodResultEventType and AuditConnectionCleanupEventType
+events have the ConditionClassId LogEntryConditionClassType (§8.2 to §8.4).
+
+### The records of the ConnectionManager
+
+| What | SourceNode | SourceName | Message | AdditionalData |
+|---|---|---|---|---|
+| A call of EditConnectionConfigurationSets, one record per set (§6.7.4) | the set | the ApplicationUri of the client | `ConnectionManager/EditConnection <FxEdit> of <set>: <result>` | StatusCodeId; ErrorCode |
+| A call of ProcessConnectionConfigurationSets, one record per set (§6.7.5) | the set | the ApplicationUri of the client | `ConnectionManager/ProcessConnection <FxProcess> of <set>: <result>` | StatusCodeId; ErrorCode |
+| A call of either without sets or with wrong arguments (§6.7.2: "all calls") | the ConnectionManager | the ApplicationUri of the client | the tag, the action and the result | StatusCodeId; ErrorCode |
+| An EstablishConnections or CloseConnections call of the Manager, one record per Connection it carried (§6.7.3.2) | the set | the BrowseName of the Connection, `ConnectionManager` for a call without endpoints | the Method, the CommandMask, the ServerAddress and the outcome | ServerAddress, CommandMask (establish), StatusCodeId; ErrorCode |
+| A failure of a run, one record per endpoint that failed (§8.10, §8.11) | the set | the BrowseName of the Connection, `ConnectionManager` for a failure without one | the action, the endpoint, the FxErrorEnum value and the StatusCode | ErrorCode, ErrorCodeNode, FxError |
+| A transition with a HasEffect (§6.9.2) | the set | the BrowseName of the Transition | the transition with its FromState and ToState and the Action | ConnectionConfigurationSetNode, Name, Action (§8.6) |
+| A write of a SelectionList Variable (§6.8.2) | the Variable | its BrowseName | the BrowseName of the set and the old and new values | OldValue, NewValue, StatusCodeId; ErrorCode |
+
+The ConnectionManagerLog needs `fxcm.Options.TraceCalls` on the Manager,
+otherwise `EnableConnectionManager` returns `ErrLog`. With it the Manager
+passes a SpanContext with every EstablishConnections and CloseConnections
+call (§6.7.2: "the ConnectionManager shall provide the SpanContextDataType
+as part of the EstablishConnection Method Call"). The run has one TraceId,
+each call has its own SpanId, and the Manager reports them in `Event.Trace`.
+The record of a call carries that TraceContext. The record an
+AutomationComponent makes for the call has it as its parent, so the two
+logs can be joined by SpanId. Without TraceCalls the requests carry no
+SpanContext, as before.
+
+The records come from the Events of the Manager. `Event.Connections`,
+`Event.CommandMask` and `Event.Trace` are set on an `EventCall`, and
+`Event.Failures` (`RunFailure`) on the EventTransition at the end of a run.
+The failure records have the EventType EstablishConnectionErrorEventType,
+or CloseConnectionErrorEventType for a CloseConnectionError. Both types
+are abstract, so these records are made without an Event (§6.7.2). With
+the log, the events of §8.4 (AuditUpdateMethodResultEventType) and §8.6
+(the processing events) have the ConditionClassId
+LogEntryConditionClassType. Library interpretation: the
+AuditUpdateConnectionConfigurationSetEventType event of a write gets it
+too, as the write is a record of the log.
+
+Library interpretations:
+
+- The record of a call has the ServerAddress and the CommandMask as
+  AdditionalData, not the configuration structures of the call (§6.7.3.2:
+  "any related data that was passed in in the Call").
+- ErrorCodeNode is the Connection, which §8.11 requires for a close. The
+  Manager does not report the node inside the Connection that failed, so
+  for an establish it is the Connection too (§8.10: "It may be null if no
+  specific Node is related"). It is null without a Connection.
+- The EventType of the records of a call of the Manager is
+  AuditClientUpdateMethodResultEventType, the audit event of such a call
+  (§6.7.3.2).
+
 ## Examples
 
 [`examples/uafx/server`](../examples/uafx/server) runs a server with the
@@ -1834,7 +1965,7 @@ The test address space is `internal/testutil/fxtest`.
   interpreted. A ControlGroup a client controls has no Controls Reference
   (§6.5.2 wants it from the Object of the client connection, which the
   server does not have). An item in two lists of one ControlGroup is not
-  refused. No AutomationComponent log.
+  refused.
 - Persistence ([Persistence](#persistence)) keeps the endpoints, their
   control and their PubSub components, not ConfigurationData and not the
   Methods of §6.4.6 (VariableStorage): §6.2.4.3.7 requires
@@ -1880,7 +2011,17 @@ The test address space is `internal/testutil/fxtest`.
   generate a PubSub configuration from the flows
   ([Running a ConnectionManager](#running-a-connectionmanager)), or
   reflect Qos and ReceiveQos of an edited flow
-  ([Editing](#editing)). It has no ConnectionManagerLog (LogObject).
+  ([Editing](#editing)).
+- The AutomationComponentLog and the ConnectionManagerLog ([Logs](#logs))
+  keep their records in memory: the ConformanceUnit LogObject Persistent
+  Storage of the Logging Facets of Part 84 (Tables 20 and 48) is not
+  implemented, so neither Facet is claimed. They have no
+  MaxStorageDuration and no ReleaseContinuationPoint (both Optional, §5.2,
+  §5.4), and they generate no LogOverflowEventType when they delete a
+  record (§5.2 "should"; the type is abstract, §6.4). The
+  ConnectionManager does not log the changes of state of the Connections
+  it monitors (§6.8.2 "should"), and the AdditionalData of the record of a
+  call are its ServerAddress and CommandMask, not its structures.
 - The CleanupTimeout and the Status are checked every `Interval`, so they
   lag by up to one Interval.
 - No offline engineering descriptors (Part 83), no networking or time

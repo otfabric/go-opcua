@@ -36,6 +36,12 @@ type MethodCaller struct {
 	// the client sent with CreateSession (Part 4 §5.6.2); "" without a
 	// session.
 	ClientApplicationURI string
+	// SpanContext is the SpanContextDataType the client passed in the
+	// AdditionalHeader of the request header (OPC 10000-26 §5.6.4, OPC
+	// 10000-4 §7.32): the trace the LogRecords of the call belong to. Nil
+	// when the request has none, or one with SpanId 0 (an invalid SpanId,
+	// OPC 10000-26 §5.6.2).
+	SpanContext *ua.SpanContextDataType
 }
 
 type methodCallerKey struct{}
@@ -67,4 +73,37 @@ func withMethodCaller(ctx context.Context, sess *session, sc *uasc.SecureChannel
 		sess.diag.mu.Unlock()
 	}
 	return context.WithValue(ctx, methodCallerKey{}, c)
+}
+
+// spanContextName is the name of the AdditionalHeader parameter that
+// carries a SpanContextDataType (OPC 10000-26 §5.6.4), in namespace 0.
+const spanContextName = "SpanContext"
+
+// spanContextOf returns the SpanContext the AdditionalHeader of hdr
+// carries (OPC 10000-26 §5.6.4), nil when it has none or one that is not a
+// SpanContextDataType with a SpanId.
+func spanContextOf(hdr *ua.RequestHeader) *ua.SpanContextDataType {
+	if hdr == nil || hdr.AdditionalHeader == nil {
+		return nil
+	}
+	ap, ok := hdr.AdditionalHeader.Value.(*ua.AdditionalParametersType)
+	if !ok || ap == nil {
+		return nil
+	}
+	for _, p := range ap.Parameters {
+		if p == nil || p.Key == nil || p.Key.NamespaceIndex != 0 || p.Key.Name != spanContextName || p.Value == nil {
+			continue
+		}
+		eo, _ := p.Value.Value().(*ua.ExtensionObject)
+		if eo == nil {
+			return nil
+		}
+		sc, _ := eo.Value.(*ua.SpanContextDataType)
+		if sc == nil || sc.SpanID == 0 {
+			return nil
+		}
+		cp := *sc
+		return &cp
+	}
+	return nil
 }

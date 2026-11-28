@@ -18,6 +18,7 @@ func (c *Connections) closeHandler(ac *automationComponent) server.MethodHandler
 	return func(ctx context.Context, obj, method *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 		out, sc := c.closeCall(ctx, ac, args)
 		c.auditCall(ctx, ac, method, args, out, sc)
+		c.logCall(ctx, ac, "CloseConnections", sc)
 		return out, sc
 	}
 }

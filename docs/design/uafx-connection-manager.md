@@ -211,14 +211,14 @@ what part is planned.
 | CM-5 | §6.7.2 | C2.3 | |
 | CM-6 | §6.7.2 | C2.2 (counting), C2.3 (nodes) | |
 | CM-7 | §6.7.2 | later | Needs CL-3; see decision D3 |
-| CM-8 | §6.7.2 | out (C2) | go-opcua has no LogObject (OPC 10000-26). The engine reports the same facts to an `Observer` and `slog`, so a later LogObject can be fed from them |
+| CM-8 | §6.7.2 | v1.43.0 | `ConnectionManagerOptions.Log`: the ConnectionManagerLog, fed from the Events of the Manager and the Method handlers; `fxcm.Options.TraceCalls` passes the SpanContext (docs/uafx.md#logs). Records in memory only |
 | CM-9 | §6.7.6 | C2.3 | MaxConnectionConfigurationSets; MonitorsLocal/All from the Monitor option |
 | CM-10, FC-1 to FC-6 | Annex F | C2.1 (F.2 codec), C2.3 (F.3 file) | The file codec is how sets get in; the FileType Methods follow `server/pubsub_config_file.go` |
 | CS-1 | §6.8.2 | C2.3 | |
 | CS-2 | §6.8.2 | C2.3 | Reuses the LockingServices of `fxserver/control.go` (C1) |
 | CS-3 | §6.8.1 | C2.3 | SelectionListType writes checked against Selections and RestrictToList; no vendor-writable Variables besides them |
 | CS-4 | §6.8.1 | C2.3 | When the server audits |
-| CS-5 | §6.8.1 | out (C2) | LogObject, as CM-8 |
+| CS-5 | §6.8.1 | v1.43.0 | A record per SelectionList write, as CM-8 |
 | CS-6 | §6.8.2 | C2.1 | |
 | CS-7 | §6.8.2 | C2.2 | |
 | CS-8 | §6.8.2 | C2.1 (validation), C2.3 (References) | The Conf indexes are the References (F.1.2.1) |
@@ -234,7 +234,7 @@ what part is planned.
 | SM-1 to SM-3, SM-8 | §6.9 | C2.1 (machine), C2.3 (nodes) | Pure state machine in C2.1 |
 | SM-4 | §6.9.1 | C2.2 | Re-processing; optional retry policy, D5 |
 | SM-5, SM-6 | §6.9, §8.6 to §8.9 | C2.3 | Events through the server's event emitter |
-| SM-7 | §6.9.2 | out (C2) | LogObject |
+| SM-7 | §6.9.2 | v1.43.0 | A record per transition with a HasEffect, as CM-8 |
 | ED-1 to ED-8 | §6.7.4 | C2.3 | Audit part when the server audits |
 | PR-1 to PR-9 | §6.7.5 | C2.2 (engine), C2.3 (Method) | All six actions |
 | PR-10 | Part 84 | C2.3 | Met by PR-3 to PR-8 |
@@ -243,7 +243,7 @@ what part is planned.
 | EC-10, EC-15 | §6.7.3 | C2.2 | See §5 |
 | EC-11 | §6.7.3.2 | C2.2 | As CS-10 |
 | EC-12 | §6.7.3.2 | C2.2 (AuditEntryId, `opcua.WithAuditEntryID`), C2.3 (client audit event on the CM's server) | |
-| EC-13 | §6.7.3.2 | out (C2) | LogObject |
+| EC-13 | §6.7.3.2 | v1.43.0 | A record per Connection of each call (`Event.Connections`), as CM-8 |
 | EC-14 | §6.7.3.2 | C2.2 | The Dialer's identity is the application's; the docs say to grant ConnectionAdmin |
 | EC-17, EC-18, EC-19 | Annex E, F.1.5 | C2.2 | E.2.2 is informative: the order is a library choice within EC-2 |
 | CL-1 | §13.1 | C2.2 | `opcua.Client` reconnect and session recovery; an interrupted Call is an unknown outcome (§5.4) |
@@ -257,7 +257,7 @@ what part is planned.
 | CL-11 | Part 84 | partial | NTP and DNS are the host's |
 | DG-1 to DG-5, DG-8 | §10.19, §10.30 | C2.2 | |
 | DG-6, DG-7 | §10.19, §10.20 | C2.2 | ConnectionNotMonitored when the Monitor option is not set | |
-| DG-9 | §8.10, §8.11 | out (C2) | LogObject |
+| DG-9 | §8.10, §8.11 | v1.43.0 | A record per failure of a run (`Event.Failures`); the error EventTypes are abstract, so no Event, as CM-8 |
 | ClientServer communication model | §6.13.4, §6.16.4 | out | Not defined in Part 81 1.00.04 |
 | Persistent connections (IsPersistent TRUE) | §6.12, §5.5.5 | later (C3) | The AC side refuses them today (`Bad_NotSupported`, docs/uafx.md Persistence) |
 
