@@ -13,8 +13,13 @@ behaviour you may notice, and the deviations of peers are in
 - A file-based certificate store for the push model: `server.CertificateStore`
   has no implementation in the library, so without one, pushed trust lists,
   certificates and keys live in memory only.
-- Dynamic decoding of custom structures from the server's DataTypeDefinition:
-  unknown structures stay ExtensionObject bodies.
+- Dynamic decoding of custom structures (`opcua.DynamicTypeDecoding`) reads
+  the DataTypeDefinition Attribute only: a server that describes its types
+  with a DataTypeDictionary (OPC 10000-5 Annex D, the 1.03 mechanism) and not
+  with the Attribute is not supported, and its structures stay
+  ExtensionObject bodies. A JSON-encoded body (the UA JSON transports) of a
+  type without a Go type is still a decoding error; binary bodies inside JSON
+  and XML are decoded.
 - OPC UA FX (UAFX, OPC 10000-81): the information model, and
   connections with PubSub (EstablishConnections and CloseConnections, served
   by `uafx/fxserver` and called by `uafx`), with ControlGroups; a

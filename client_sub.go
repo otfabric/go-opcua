@@ -630,6 +630,9 @@ func (c *Client) notifySubscription(ctx context.Context, sub *Subscription, noti
 		// Part 4, 7.20.3 EventNotificationList parameter
 		// Part 4, 7.20.4 StatusChangeNotification parameter
 		case ua.Notification:
+			// The types of new structures are resolved in a session
+			// that is up; during a recovery the resolved ones are used.
+			c.decodeResponse(ctx, v, c.State() == Connected && !c.publishRecoveryInProgress())
 			sub.notify(ctx, &PublishNotificationData{
 				SubscriptionID: sub.id(),
 				Value:          v,
