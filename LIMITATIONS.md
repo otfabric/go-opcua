@@ -16,9 +16,7 @@ behaviour you may notice, and the deviations of peers are in
   0600 files. It does not keep the pending transaction, the rejected list or
   the key a CreateSigningRequest generated: after a restart UpdateCertificate
   with the certificate of such a request fails (`Bad_SecurityChecksFailed`)
-  unless it brings its key. ApplyChanges does not return `Bad_InvalidState`
-  for a TrustList still open for writing (Part 12 §7.10.9), and returns
-  Good, not `Bad_NothingToDo`, without a transaction.
+  unless it brings its key.
 - Dynamic decoding of custom structures (`opcua.DynamicTypeDecoding`) reads
   the DataTypeDefinition Attribute only: a server that describes its types
   with a DataTypeDictionary (OPC 10000-5 Annex D, the 1.03 mechanism) and not

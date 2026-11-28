@@ -160,7 +160,7 @@ func TestGDSPush_FileStoreFailedCommit(t *testing.T) {
 		require.Len(t, d.Errors, 1)
 		require.True(t, d.Errors[0].TargetID.Equal(gds.DefaultTrustList))
 		// The transaction is gone: there is nothing to apply.
-		require.NoError(t, g.ApplyChanges(ctx))
+		require.ErrorIs(t, g.ApplyChanges(ctx), ua.StatusBadNothingToDo)
 		require.Equal(t, [][]byte{p.clientCert}, srv.TrustList().TrustedCertificates)
 	}
 	// The store is fenced by the last fault; the next ApplyChanges
@@ -228,7 +228,7 @@ func TestGDSPush_FileStoreConcurrent(t *testing.T) {
 
 	require.NoError(t, a.AddCertificate(ctx, p.caCert, true))
 	require.ErrorIs(t, b.AddCertificate(ctx, p.userCert, true), ua.StatusBadTransactionPending)
-	require.ErrorIs(t, b.ApplyChanges(ctx), ua.StatusBadTransactionPending)
+	require.ErrorIs(t, b.ApplyChanges(ctx), ua.StatusBadSessionIDInvalid, "the session is not valid for the active transaction (Part 12 §7.10.9)")
 
 	gate := make(chan struct{})
 	gs.mu.Lock()

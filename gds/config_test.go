@@ -192,7 +192,7 @@ func TestDeleteCertificateAndGroups(t *testing.T) {
 	// The one of the endpoints is not.
 	require.NoError(t, g.DeleteCertificate(ctx, nil, gds.RsaSha256ApplicationCertificateType))
 	require.ErrorIs(t, g.ApplyChanges(ctx), ua.StatusBadInvalidState)
-	require.NoError(t, g.CancelChanges(ctx))
+	require.ErrorIs(t, g.CancelChanges(ctx), ua.StatusBadNothingToDo, "the failed ApplyChanges ended the transaction")
 
 	op, err := dial(t, url, ua.MessageSecurityModeSignAndEncrypt, identity{p.ClientCert, p.ClientKey}, opUser, opPass)
 	require.NoError(t, err)

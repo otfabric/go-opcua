@@ -687,7 +687,7 @@ func TestPushTransactionDiagnostics(t *testing.T) {
 	require.NoError(t, s.sb.Close(sess.AuthTokenID))
 	other, _ := adminCtx(s)
 	_, sc = pushCall(t, s, other, scObj, mCancel)
-	require.Equal(t, ua.StatusOK, sc)
+	require.Equal(t, ua.StatusBadNothingToDo, sc, "the closed session's transaction was cancelled")
 	require.Equal(t, ua.StatusBadSessionClosed, value(id.ServerConfigurationTransactionDiagnosticsResult))
 	_, sc = tlCall(t, s, other, mRemove, gdsThumb(p.CACert), true)
 	require.Equal(t, ua.StatusOK, sc)

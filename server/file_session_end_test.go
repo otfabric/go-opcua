@@ -190,7 +190,7 @@ func TestPushSessionEndCancelsTransaction(t *testing.T) {
 			_, sc = tlCall(t, s, ctx2, mClose, out[0].Value().(uint32))
 			require.Equal(t, ua.StatusOK, sc)
 			_, sc = pushCall(t, s, ctx2, scObj, mApply)
-			require.Equal(t, ua.StatusOK, sc)
+			require.Equal(t, ua.StatusBadNothingToDo, sc, "the ended session's transaction is gone (Part 12 §7.10.9)")
 			require.Equal(t, [][]byte{p.ClientCert}, s.TrustList().TrustedCertificates)
 			require.Empty(t, s.TrustList().IssuerCertificates)
 		})
