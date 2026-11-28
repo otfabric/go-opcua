@@ -408,7 +408,7 @@ you rely on.
 | **Services** | Read, Write, HistoryRead/HistoryUpdate of data and events (via `HistoryProvider`), Browse, BrowseNext, TranslateBrowsePaths, Call |
 | **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences (opt-in with `EnableNodeManagement`, authorized per operation) |
 | **Subscriptions** | Create, Modify, Delete, Publish, Republish, TransferSubscriptions, SetPublishingMode; revise clamps, `MoreNotifications`, Publish ACK |
-| **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering; exact `QueueSize`/`DiscardOldest`/Overflow; `DataChangeFilter` (Status / StatusValue / StatusValueTimestamp, absolute and percent deadband), sampling interval, per-item `IndexRange`; per-item rejection for unknown nodes and unusable filters |
+| **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering; exact `QueueSize`/`DiscardOldest`/Overflow; `DataChangeFilter` (Status / StatusValue / StatusValueTimestamp, absolute and percent deadband), `AggregateFilter` (every standard Part 13 Aggregate but AnnotationCount, `server/aggregate`), sampling interval, per-item `IndexRange`; per-item rejection for unknown nodes and unusable filters |
 | **View** | RegisterNodes, UnregisterNodes |
 | **Query** | Opt-in (`WithQuery`): QueryFirst, QueryNext with full ContentFilter evaluation (all 18 operators, 3-valued logic), type/subtype matching, access control, and session-bound continuation points |
 | **Session** | Create, Activate, Close (with DeleteSubscriptions), Cancel; `WithSessionObserver` (connections, sessions, refused requests); security audit events of the SecureChannel and Session services (`WithAuditing`) |

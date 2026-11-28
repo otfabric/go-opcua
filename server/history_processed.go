@@ -94,10 +94,7 @@ func readProcessed(h HistoryProvider, details *ua.ReadProcessedDetails, nodeID, 
 	if reader, ok := h.(ProcessedHistoryReader); ok {
 		return reader.ReadProcessed(nodeID, details.StartTime, details.EndTime, details.ProcessingInterval, aggregateType, details.AggregateConfiguration)
 	}
-	cfg := aggregate.DefaultConfig()
-	if p, ok := h.(AggregateConfigProvider); ok {
-		cfg = p.AggregateConfig(nodeID)
-	}
+	cfg := aggregateConfigOf(h, nodeID)
 	r, st := processedRequest(details.StartTime, details.EndTime, details.ProcessingInterval, aggregateType, cfg.Override(details.AggregateConfiguration))
 	if st != ua.StatusOK {
 		return &ua.HistoryReadResult{StatusCode: st}, nil
@@ -146,15 +143,27 @@ func readRawRange(h HistoryProvider, nodeID *ua.NodeID, from, to time.Time) ([]*
 // does not support Aggregates the Folder is left empty" (Part 11 §5.7.2).
 const aggregateFunctionsFolder = id.HistoryServerCapabilitiesAggregateFunctions
 
+// serverAggregateFunctionsFolder is the AggregateFunctions folder of the
+// ServerCapabilities, "an entry point to browse to all AggregateFunctions
+// supported by the Server" (Part 5 §6.3.2). The AggregateFilter of a
+// MonitoredItem calculates every Aggregate of [aggregate.Functions] for any
+// Variable, so the folder organizes them all.
+const serverAggregateFunctionsFolder = id.ServerServerCapabilitiesAggregateFunctions
+
 // bindAggregateFunctions makes the AggregateFunction Objects (Part 13
 // §4.2.2) the server's own nodes, with "the Description Attribute ... is
-// mandatory" set to the text of Part 13 Table 5, and the AggregateFunctions
-// folder its own node.
+// mandatory" set to the text of Part 13 Table 5, makes both
+// AggregateFunctions folders its own nodes, and lets the folder of the
+// ServerCapabilities organize the Aggregates.
 func (s *Server) bindAggregateFunctions() {
 	s.ownNode(aggregateFunctionsFolder)
+	folder := s.ownNode(serverAggregateFunctionsFolder)
 	for _, nid := range aggregate.Functions() {
 		if n := s.ownNode(nid.IntID()); n != nil {
 			n.SetDescription(aggregate.Description(nid), "en")
+			if folder != nil {
+				folder.AddRef(n, RefType(id.Organizes), true)
+			}
 		}
 	}
 }

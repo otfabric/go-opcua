@@ -1155,6 +1155,10 @@ func (s *Subscription) run() {
 					lifetimeCounter = 0
 				}
 
+				// The intervals of the AggregateFilters that have completed
+				// are calculated when the publishing timer expires (Part 4
+				// §7.22.4).
+				s.srv.srv.MonitoredItemService.calculateAggregates(s.ID, time.Now())
 				hasQueued := unsent != nil || pendingData || s.srv.srv.MonitoredItemService.PendingReportableNotifications(s.ID)
 				if (!hasQueued && !s.pendingEvents()) || !enabled {
 					keepaliveCounter++
@@ -1211,6 +1215,7 @@ func (s *Subscription) run() {
 				if cur, _ := s.sessionChannel(); cur != nil {
 					sess = cur
 				}
+				s.srv.srv.MonitoredItemService.calculateAggregates(s.ID, time.Now())
 				lifetimeCounter++
 				if _, _, maxLifetime := s.timing(); lifetimeCounter > maxLifetime {
 					s.srv.srv.cfg.logger.Warn("subscription timed out", "sub_id", s.ID)

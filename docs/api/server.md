@@ -2002,6 +2002,9 @@ type MonitoredItem struct {
 
 	// non-zero while a postponed sample is pending
 
+	// agg is the state of an item with an AggregateFilter, nil for any
+	// other item; see monitored_item_aggregate.go.
+
 	// triggers are the ids of the items this item triggers (SetTriggering,
 	// Part 4 §5.12.1.6): when this item's notifications are reported, the
 	// queued notifications of those in Sampling mode are reported with them.
@@ -2028,6 +2031,9 @@ type MonitoredItemService struct {
 	// them; see monitored_item_filter.go. Guarded by Mu.
 
 	// samplerRuns is the number of sampler callbacks in flight (for tests).
+
+	// aggItems counts the items with an AggregateFilter, so that a
+	// publishing cycle without one does not take Mu to look for them.
 
 }
 ```

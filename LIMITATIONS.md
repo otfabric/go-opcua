@@ -71,10 +71,13 @@ behaviour you may notice, and the deviations of peers are in
   persisted across a restart (Part 14 §9.1.2), outside the components UAFX
   persists.
 - mDNS has no probing or conflict resolution.
-- Part 13 Aggregates: the AnnotationCount Aggregate (the server keeps no
-  Annotations, Part 11 §5.1.2) and the AggregateFilter of monitored items
-  (Part 4 §7.22.4, refused with `Bad_MonitoredItemFilterUnsupported`) are not
-  implemented; the ServerCapabilities AggregateFunctions folder is empty.
+- Part 13 Aggregates: the AnnotationCount Aggregate is not implemented (the
+  server keeps no Annotations, Part 11 §5.1.2). The AggregateFilter of a
+  monitored item (Part 4 §7.22.4) reads no history. A startTime in the past
+  is revised to the first boundary after the creation of the item. The
+  server does not wait for late samples before it calculates an interval
+  (Part 13 §4.3.2 allows that). An item keeps at most 65536 raw values
+  between two calculations. Beyond that the oldest are dropped.
   A processed read returns all its intervals at once (at most
   `aggregate.MaxIntervals`), without continuation points, and the server
   searches bounding values one ProcessingInterval beyond the request of a
