@@ -32,7 +32,7 @@ import (
 )
 
 // minCSRNonce is the least entropy a client gives CreateSigningRequest
-// when the key is regenerated (Part 12 §7.10.7).
+// when the key is regenerated (Part 12 §7.10.10).
 const minCSRNonce = 32
 
 // The certificate types of application instance certificates (Part 12
@@ -542,7 +542,7 @@ var oidDomainComponent = asn1.ObjectIdentifier{0, 9, 2342, 19200300, 100, 1, 25}
 
 // parseSubjectName parses the SubjectName of CreateSigningRequest and
 // CreateSelfSignedCertificate: X.500 name value pairs separated by '/'
-// (Part 12 §7.10.7, CN=App/O=Company) or by ','.
+// (Part 12 §7.10.10, CN=App/O=Company) or by ','.
 func parseSubjectName(s string) (pkix.Name, error) {
 	var n pkix.Name
 	sep := ","
@@ -585,7 +585,7 @@ func parseSubjectName(s string) (pkix.Name, error) {
 const defaultCertLifetime = 365
 
 // createSelfSignedCertificate is CreateSelfSignedCertificate (Part 12
-// §7.10.5): a new key and a self-signed certificate of the group and type,
+// §7.10.6): a new key and a self-signed certificate of the group and type,
 // which replaces the current one when the changes are applied. It returns
 // the certificate.
 func (m *pushManager) createSelfSignedCertificate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
@@ -676,7 +676,7 @@ func (m *pushManager) createSelfSignedCertificate(ctx context.Context, c *Method
 	return out.Pack(), ua.StatusOK
 }
 
-// deleteCertificate is DeleteCertificate (Part 12 1.05 §7.10): removes the
+// deleteCertificate is DeleteCertificate (Part 12 §7.10.7): removes the
 // certificate of the group and type when the changes are applied. It
 // fails with Bad_InvalidState if the group has no certificate of the type,
 // counting the changes of the session's transaction; ApplyChanges refuses

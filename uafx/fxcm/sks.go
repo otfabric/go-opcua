@@ -172,7 +172,7 @@ func (r *RemoteSKS) RemoveSecurityGroup(ctx context.Context, sks uafx.SecurityKe
 	if bad(res.StatusCode) || out.Unpack(res.OutputArguments) != nil || out.SecurityGroupNodeID == nil {
 		return fmt.Errorf("fxcm: GetSecurityGroup %q: %w", securityGroupID, orBad(res.StatusCode))
 	}
-	remove := uamethod.SecurityGroupFolderTypeRemoveSecurityGroupInput{SecurityGroupNodeID: out.SecurityGroupNodeID}
+	remove := uamethod.SecurityGroupFolderTypeRemoveSecurityGroupInput(out) // the SecurityGroupNodeId
 	res, err = callSKS(ctx, s, id.PublishSubscribeSecurityGroups, id.PublishSubscribeSecurityGroupsRemoveSecurityGroup, remove.Pack())
 	switch {
 	case err != nil:

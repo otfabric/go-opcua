@@ -209,7 +209,7 @@ func byteStrings(xs [][]byte) [][]byte {
 	return xs
 }
 
-// SigningRequest is the input of CreateSigningRequest (Part 12 §7.10.7).
+// SigningRequest is the input of CreateSigningRequest (Part 12 §7.10.10).
 type SigningRequest struct {
 	// CertificateGroup is the certificate group (nil: the
 	// DefaultApplicationGroup).
@@ -264,7 +264,7 @@ func (g *Client) CreateSigningRequest(ctx context.Context, req *SigningRequest) 
 	return o.CertificateRequest, nil
 }
 
-// CertificateUpdate is the input of UpdateCertificate (Part 12 §7.10.4).
+// CertificateUpdate is the input of UpdateCertificate (Part 12 §7.10.5).
 type CertificateUpdate struct {
 	// CertificateGroup is the certificate group (nil: the
 	// DefaultApplicationGroup).
@@ -323,14 +323,14 @@ func (g *Client) GetRejectedList(ctx context.Context) ([][]byte, error) {
 }
 
 // ApplyChanges makes the server apply the pending changes (Part 12
-// §7.10.6): the new trust list for new connections and the new
+// §7.10.9): the new trust list for new connections and the new
 // certificates for new SecureChannels.
 func (g *Client) ApplyChanges(ctx context.Context) error {
 	_, err := g.call(ctx, ServerConfiguration, "ApplyChanges", id.ServerConfigurationApplyChanges, 0)
 	return err
 }
 
-// CancelChanges drops the pending changes (Part 12 §7.10.10).
+// CancelChanges drops the pending changes (Part 12 §7.10.11).
 func (g *Client) CancelChanges(ctx context.Context) error {
 	_, err := g.call(ctx, ServerConfiguration, "CancelChanges", id.ServerConfigurationCancelChanges, 0)
 	return err

@@ -85,7 +85,7 @@ func nullArrays(out []*ua.Variant, null map[int]any) []*ua.Variant {
 }
 
 // SelfSignedCertificate is the input of CreateSelfSignedCertificate (Part
-// 12 §7.10.5).
+// 12 §7.10.6).
 type SelfSignedCertificate struct {
 	// CertificateGroup is the certificate group (nil: the
 	// DefaultApplicationGroup).
@@ -209,7 +209,7 @@ func (g *Client) TransactionDiagnostics(ctx context.Context) (*TransactionDiagno
 
 // DeleteCertificate has the server delete the certificate of a type of a
 // certificate group (nil: the DefaultApplicationGroup) when the changes are
-// applied (DeleteCertificate, Part 12 1.05 §7.10); certType nil is a null
+// applied (DeleteCertificate, Part 12 §7.10.7); certType nil is a null
 // NodeId. A server refuses it with Bad_InvalidState if the group has no
 // certificate of the type, and ApplyChanges fails with Bad_InvalidState
 // for a certificate one of its endpoints uses. Deleting a certificate and
