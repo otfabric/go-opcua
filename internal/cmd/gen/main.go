@@ -95,7 +95,9 @@ var generatedFiles = []string{
 	"uafx/fxdataid/id_Variable_gen.go",
 	"uafx/fxdataid/id_names_gen.go",
 	"uamethod/methods_gen.go",
+	"uamethod/pubsub_gen.go",
 	"uamethod/roles_gen.go",
+	"uamethod/trustlist_gen.go",
 }
 
 // generators lists the generators to run, in dependency order.
