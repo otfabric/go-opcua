@@ -1744,7 +1744,8 @@ The Namespaces Object of the Server Object (`i=11715`) holds a
 NamespaceMetadata Object (Part 5 §6.3.13) for each namespace: the one an
 imported NodeSet brings, or one the server creates for a `NodeNameSpace`
 at `Start` (and at once for one added after `Start`), with the NodeId
-`s=NamespaceMetadata` in that namespace. It has the mandatory Properties
+`s=NamespaceMetadata` in that namespace (a numeric NodeId in the namespace
+of the session diagnostics, whose string NodeIds name sessions). It has the mandatory Properties
 NamespaceUri, NamespaceVersion and NamespacePublicationDate (from the
 `Model` of the NodeSet, null otherwise), IsNamespaceSubset (FALSE for a
 namespace of the program, TRUE for one an import added without its own

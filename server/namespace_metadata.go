@@ -71,7 +71,8 @@ import (
 //     what protects the namespace.
 //   - A NamespaceMetadata Object the server creates has the NodeId
 //     s=NamespaceMetadata in its namespace and its Properties
-//     s=NamespaceMetadata.<BrowseName>; IsNamespaceSubset is FALSE for a
+//     s=NamespaceMetadata.<BrowseName> (numeric NodeIds in the namespace of
+//     the session diagnostics, whose string NodeIds name sessions); IsNamespaceSubset is FALSE for a
 //     namespace of the program and TRUE for one an import added without its
 //     own NamespaceMetadata ("If the completeness is unknown, this Property
 //     shall be set to TRUE", Part 5 §6.3.13); StaticNodeIdTypes and
@@ -489,6 +490,13 @@ func (s *Server) createNamespaceMetadata(ns NameSpace) *Node {
 		return nil
 	}
 	nid := ua.NewStringNodeID(nns.ID(), "NamespaceMetadata")
+	if nns.Name() == DiagnosticsNamespaceURI {
+		// A string NodeId of the diagnostics namespace names a node of a
+		// session (diagnosticsOwner), which only that session and the
+		// administrators may use: the Object and its Properties get
+		// numeric NodeIds there.
+		nid = ua.NewNumericNodeID(nns.ID(), nns.GetNextNodeID())
+	}
 	if nns.Node(nid) != nil {
 		s.cfg.logger.Warn("server: the NodeId of the NamespaceMetadata Object is taken", "node_id", nid)
 		return nil
