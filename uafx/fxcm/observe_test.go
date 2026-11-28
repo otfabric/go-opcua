@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/uafx"
 )
 
@@ -72,7 +73,7 @@ func newManager(t *testing.T, opts Options) *Manager {
 	}
 	m, err := New(opts)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = m.Close() })
+	cleanup.Register(t, func() { _ = m.Close() })
 	return m
 }
 

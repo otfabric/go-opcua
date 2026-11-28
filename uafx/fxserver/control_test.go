@@ -16,6 +16,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/fakeclock"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -58,7 +59,7 @@ func (f *fx) client(t *testing.T, uri string) *opcua.Client {
 		opcua.InsecureNoSecurity(), opcua.ApplicationURI(uri))
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(ctx))
-	t.Cleanup(func() { _ = c.Close(ctx) })
+	cleanup.Register(t, func() { _ = c.Close(ctx) })
 	return c
 }
 

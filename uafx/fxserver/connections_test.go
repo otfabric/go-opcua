@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/pubsub"
@@ -121,7 +122,7 @@ func newFXWith(t *testing.T, prepare func(*server.Server) (fxserver.Namespaces, 
 	}
 	f.conns, err = fxserver.EnableConnections(srv, ns, opts)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = f.conns.Close() })
+	cleanup.Register(t, func() { _ = f.conns.Close() })
 	f.c = start(t, srv)
 	return f
 }
