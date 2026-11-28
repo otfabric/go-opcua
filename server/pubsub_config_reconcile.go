@@ -10,7 +10,8 @@ import (
 // reconcilePubSub brings the runtime to configuration want with the fewest
 // changes: a component whose own parameters differ is removed and added
 // again with its children, one that is the same keeps running, and the
-// children of it are compared in turn.
+// children of it are compared in turn. The Enabled of the runtime follows
+// want too.
 func reconcilePubSub(rt *pubsub.PubSub, want *ua.PubSubConfigurationDataType) error {
 	return reconcilePubSubRecord(rt, want, nil)
 }
@@ -88,6 +89,14 @@ func reconcilePubSubRecord(rt *pubsub.PubSub, want *ua.PubSubConfigurationDataTy
 		if err := addMissingGroups(rt, cid, c, w, created); err != nil {
 			return err
 		}
+	}
+	// The Enabled of PublishSubscribe itself (the Enable and Disable
+	// Methods of its Status Object).
+	if rt.Configuration().Enabled != want.Enabled {
+		if want.Enabled {
+			return rt.Enable(pubsub.Root)
+		}
+		return rt.Disable(pubsub.Root)
 	}
 	return nil
 }

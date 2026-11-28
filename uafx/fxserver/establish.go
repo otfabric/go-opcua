@@ -73,6 +73,7 @@ func (c *Connections) establish(ctx context.Context, ac *automationComponent, ar
 	}
 	x := newCall(ctx, c, ac, req)
 	status := x.run()
+	c.persistServerPubSub(ctx)
 	out, err := uafx.EncodeEstablishConnectionsResult(x.res, c.ns.Data)
 	if err != nil {
 		c.log.Error("uafx: EstablishConnections result", "error", err)

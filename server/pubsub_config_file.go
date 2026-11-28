@@ -401,7 +401,7 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 			return nil, statusOf(err)
 		}
 		moved = movesBetween(ids, f.m.s.componentsByPath(), u.removed)
-		if h := f.m.s.pubsubHook(); h != nil {
+		if h := f.m.s.pubsubHook(); h != nil || f.m.s.cfg.pubsubStore != nil {
 			if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: ctx, Before: old, Moved: moved, ids: f.m.s.restorerOnly(h, ids)}); err != nil {
 				return nil, statusOf(err)
 			}
