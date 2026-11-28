@@ -185,6 +185,45 @@ Channels of opc.https and opcua+uajson are not opened or closed and have no
 SecureChannelId. OpenSecureChannel requests the server cannot decrypt or
 verify are not reported.
 
+### Change audit events
+
+With auditing on the server also reports the audit events of the services
+that change the address space or the history, for successful and failed
+calls (Part 4 §6.5.7, §6.5.8; Part 11 §5.8):
+
+| Event type | SourceName | SourceNode | Per |
+|------------|------------|------------|-----|
+| AuditWriteUpdateEventType | `Attribute/Write` | the node written | WriteValue |
+| AuditHistoryValueUpdateEventType | `Attribute/HistoryUpdate` | the node | UpdateDataDetails |
+| AuditHistoryAnnotationUpdateEventType | `Attribute/HistoryUpdate` | the node | UpdateStructureDataDetails |
+| AuditHistoryEventUpdateEventType | `Attribute/HistoryUpdate` | the notifier | UpdateEventDetails |
+| AuditHistoryRawModifyDeleteEventType | `Attribute/HistoryUpdate` | the node | DeleteRawModifiedDetails |
+| AuditHistoryAtTimeDeleteEventType | `Attribute/HistoryUpdate` | the node | DeleteAtTimeDetails |
+| AuditHistoryEventDeleteEventType | `Attribute/HistoryUpdate` | the notifier | DeleteEventDetails |
+| AuditAddNodesEventType, AuditDeleteNodesEventType, AuditAddReferencesEventType, AuditDeleteReferencesEventType | `NodeManagement/AddNodes` … | the Server object | call |
+
+Each carries the fields of AuditEventType (ActionTimeStamp, Status: false when
+the operation failed, ServerId, ClientAuditEntryId, ClientUserId) and its own
+(Part 5 §6.4.19 to §6.4.26):
+
+- Write: AttributeId, IndexRange, OldValue (the value before the write, limited
+  to the IndexRange; null for a node that is not there or not readable) and
+  NewValue.
+- HistoryUpdate: ParameterDataTypeId (the DataType of the details), UpdatedNode,
+  PerformInsertReplace, NewValues and OldValues: the values the provider held
+  before a Replace, Update or delete, read with its `ReadRaw`. A modified
+  delete has no OldValues; event updates and deletes have null OldValues (the
+  provider keeps no event before an update). An event insert lists the
+  EventIds of the inserted events in its Message (Part 11 §5.8.1).
+- NodeManagement: NodesToAdd, NodesToDelete, ReferencesToAdd or
+  ReferencesToDelete, the whole parameter of the call; Status is false when
+  any item failed and the Message names the first failure.
+
+A request the service refuses as a whole (a ServiceFault) reports one event of
+its type with Status false and the Server object as SourceNode.
+`server.WithChangeAuditing(false)` turns these events off while the security
+audit events stay on, the behaviour before v1.43.0.
+
 ---
 
 ## Minimal Server
@@ -1175,7 +1214,7 @@ below), plus UpdateData and raw/at-time deletes. Continuations are session-bound
 ### Processed reads (Part 13 Aggregates)
 
 HistoryRead `ReadProcessedDetails` (Part 11 §6.5.4) returns one value per interval
-of every standard Aggregate of Part 13 §5.4.3 but AnnotationCount, calculated by
+of every standard Aggregate of Part 13 §5.4.3, calculated by
 the `server/aggregate` package: the intervals of Table 49 (reverse reads, a
 ProcessingInterval of 0 for one interval), Interpolated and Simple Bounding
 Values, the PercentValues and PercentTime StatusCode calculation and the
@@ -1222,6 +1261,53 @@ The last raw value read is taken as the end of the history: an interval after it
 "After End of Data". Where the examples of Annex A conflict with a clause the
 package follows the clause; LIMITATIONS.md lists those cases.
 
+AnnotationCount (Part 13 §5.4.3.20) counts the Annotations of each interval: an
+Int32 with the Calculated bit and the interval's StartTime, Partial for an
+incomplete interval (Part 13 §5.3.3.2), `Bad_NoData` before and after the data,
+which the raw values give. The server reads the Annotations from an
+`AnnotationHistoryProvider`; `aggregate.Request.CalculateWithAnnotations` takes
+their times. Part 13 Table 5 says it "applies to Historical Aggregates only": the
+AggregateFilter of a monitored item refuses it (`aggregate.HistoricalOnly`).
+
+### Annotations
+
+An Annotation (Part 11 §6.6.6: message, userName, annotationTime) is a note on
+the history of a Variable or Object at a time. `EnableAnnotations` adds the
+Annotations Property (Part 11 §5.1.2: DataType Annotation, ValueRank -2,
+AccessLevel CurrentRead, HistoryRead and HistoryWrite, a null value) to the node:
+
+```go
+h := server.NewHistorian()
+h.EnableNode(nodeID, 0) // the Annotations live with the history of the node
+s.SetHistorian(h)
+if err := s.EnableAnnotations(nodeID); err != nil { // Bad_NodeClassInvalid for a Property
+    log.Fatal(err)
+}
+```
+
+- HistoryUpdate `UpdateStructureDataDetails` (Part 11 §6.9.3) on the node or on its
+  Property inserts (`Good_EntryInserted`, `Bad_EntryExists`), replaces
+  (`Good_EntryReplaced`, `Bad_NoEntryExists`), updates (either Good) or removes
+  (`Good`, `Bad_NoEntryExists`) Annotations. The SourceTimestamp of each DataValue
+  identifies the Annotation; a value that is no Annotation is
+  `Bad_TypeMismatch`, one without a SourceTimestamp `Bad_InvalidArgument`. An
+  empty annotationTime is set to the time of the update, an empty userName to the
+  user of the session (empty for an anonymous session).
+- HistoryRead `ReadAnnotationDataDetails` (Part 11 §6.5.6) returns one DataValue
+  per reqTime in the order of the request, `Bad_NoData` for a time without one.
+  `ReadRawModifiedDetails` on the Property returns the Annotations of the range in
+  time order, with continuation points; IsReadModified is
+  `Bad_HistoryOperationUnsupported`.
+- The raw values at a time with an Annotation carry the ExtraData bit (Part 4
+  §7.38.1).
+- A node without the Property is `Bad_HistoryOperationUnsupported`; the HistoryWrite
+  and HistoryRead bits and the RBAC permissions of the node apply to the Property
+  too. The Historian keeps the Annotations of a node until `EnableNode` starts a
+  new history; when its history is full an Annotation older than its oldest value
+  is `Bad_OutOfRange`.
+- Your own store implements `AnnotationHistoryProvider`, which also gives the
+  InsertAnnotationCapability of the HistoryServerCapabilities.
+
 ### Historical events
 
 A notifier (an Object or View whose EventNotifier has the HistoryRead bit) is a
@@ -1265,7 +1351,8 @@ _ = s.EmitBaseEvent(pumpID, &server.BaseEvent{ /* ... */ })
   `EventHistoryUpdater` / `EventHistoryDeleter`) on the value given to `SetHistorian`.
 - The HistoryServerCapabilities report what the provider implements.
 - ReadEventDetails2 with ReadModified and ReadEventDetailsSorted answer
-  `Bad_HistoryOperationUnsupported`; no audit events are reported for history updates.
+  `Bad_HistoryOperationUnsupported`; history updates are audited ([change audit
+  events](#change-audit-events)).
 
 ### Monitored-item queues and modes
 
@@ -1370,7 +1457,7 @@ next boundary. An item keeps at most 65536 raw values between two calculations.
 | Request | StatusCode |
 |---------|------------|
 | An attribute other than Value | `BadFilterNotAllowed` |
-| An Aggregate of no `aggregate.Functions()`, AnnotationCount among them | `BadAggregateNotSupported` |
+| An Aggregate of no `aggregate.Functions()`, or AnnotationCount (historical only, Part 13 Table 5) | `BadAggregateNotSupported` |
 | An aggregateConfiguration that is not valid (Part 13 §4.2.1.2) | `BadMonitoredItemFilterInvalid` |
 | TimestampsToReturn Server or Neither (Part 13 §5.4.3.1; Both is accepted) | `BadTimestampsToReturnInvalid` |
 

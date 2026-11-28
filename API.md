@@ -299,6 +299,14 @@ func (c *Client) ReadHistoryAll(ctx context.Context, nodeID *ua.NodeID, start, e
 func (c *Client) ReadEventHistory(ctx context.Context, nodeID *ua.NodeID, start, end time.Time, filter *ua.EventFilter, maxEvents uint32) ([]*ua.HistoryEventFieldList, error)
 func (c *Client) ReadEventHistoryAll(ctx context.Context, nodeID *ua.NodeID, start, end time.Time, filter *ua.EventFilter, pageSize uint32) iter.Seq2[*ua.HistoryEventFieldList, error]
 func (c *Client) HistoryReleaseContinuationPoints(ctx context.Context, details any, nodes ...*ua.HistoryReadValueID) ([]ua.StatusCode, error)
+func (c *Client) HistoryReadAnnotations(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadAnnotationDataDetails) (*ua.HistoryReadResponse, error)
+func (c *Client) ReadAnnotations(ctx context.Context, nodeID *ua.NodeID, reqTimes ...time.Time) ([]HistoryAnnotation, error)
+
+type HistoryAnnotation struct {
+    Time       time.Time      // the SourceTimestamp that identifies the Annotation
+    Annotation *ua.Annotation // nil when the node has none at Time
+    Status     ua.StatusCode  // of the read: Bad_NoData for a time without one
+}
 ```
 
 `ReadHistoryAll` returns a Go 1.23 iterator that pages through all historical
@@ -324,6 +332,11 @@ HistoryReadDetails the points came from (`*ua.ReadRawModifiedDetails`,
 `Bad_ContinuationPointInvalid` for a point that is unknown, already used or
 released, or of another session.
 
+`ReadAnnotations` reads the Annotations (Part 11 §6.6.6) of a node with the
+Annotations Property, or of the Property (§5.1.2), at `reqTimes` with
+ReadAnnotationDataDetails (§6.5.6): one per time, in order, following
+continuation points. A Bad status of the node is the error.
+
 #### History update
 
 ```go
@@ -332,10 +345,15 @@ func (c *Client) HistoryUpdateEvents(ctx context.Context, details ...*ua.UpdateE
 func (c *Client) HistoryDeleteRawModified(ctx context.Context, details ...*ua.DeleteRawModifiedDetails) (*ua.HistoryUpdateResponse, error)
 func (c *Client) HistoryDeleteAtTime(ctx context.Context, details ...*ua.DeleteAtTimeDetails) (*ua.HistoryUpdateResponse, error)
 func (c *Client) HistoryDeleteEvents(ctx context.Context, details ...*ua.DeleteEventDetails) (*ua.HistoryUpdateResponse, error)
+func (c *Client) HistoryUpdateStructureData(ctx context.Context, details ...*ua.UpdateStructureDataDetails) (*ua.HistoryUpdateResponse, error)
+func (c *Client) UpdateAnnotations(ctx context.Context, nodeID *ua.NodeID, perform ua.PerformUpdateType, annotations ...HistoryAnnotation) ([]ua.StatusCode, error)
 ```
 
 Each method wraps the typed details into `ExtensionObject` entries for the
-underlying `HistoryUpdateRequest`.
+underlying `HistoryUpdateRequest`. `UpdateAnnotations` sends one
+UpdateStructureDataDetails (Part 11 §6.9.3) with an Annotation per
+`HistoryAnnotation` at its `Time` (a Remove needs only the Time) and returns
+the OperationResults; a Bad status of the node is the error.
 
 #### Method calls
 
@@ -2427,8 +2445,13 @@ func (g *AlarmGroup) SetSuppressing(on bool) error // suppression groups
 func (g *AlarmGroup) Evaluate() error              // from the DigitalVariables
 
 // Audit events (AuditConditionEventType and subtypes; the SecureChannel and
-// Session service sets; certificate errors); off by default
+// Session service sets; certificate errors; Write, HistoryUpdate and
+// NodeManagement); off by default
 func WithAuditing(enabled bool) Option
+// the audit events of Write, HistoryUpdate and NodeManagement with auditing
+// on (Part 4 §6.5.7, §6.5.8; Part 11 §5.8); default true, false is the
+// behaviour before v1.43.0
+func WithChangeAuditing(enabled bool) Option
 func (s *Server) SetAuditing(enabled bool)
 func (s *Server) Auditing() bool
 // an audit event of the application (Part 5 §6.4.3), to the sessions an
@@ -2720,8 +2743,8 @@ Supported by default `*Historian`:
 - DeleteAtTime
 - ReadAtTime (nearest previous)
 - ReadModified
-- ReadProcessed: every standard Aggregate of Part 13 §5.4.3 but
-  AnnotationCount, calculated by `server/aggregate` with the configuration of
+- ReadProcessed: every standard Aggregate of Part 13 §5.4.3, AnnotationCount
+  of the Annotations of the node too, calculated by `server/aggregate` with the configuration of
   `SetAggregateConfig` (default `aggregate.DefaultConfig()`), overridden by
   the aggregateConfiguration of the request
 
@@ -2822,8 +2845,42 @@ func (h *Historian) DeleteEvents(notifier *ua.NodeID, eventIDs [][]byte) *ua.His
 - Audit events in the history go to the sessions an `EventAccessController`
   allows.
 - The HistoryServerCapabilities (`AccessHistoryEventsCapability`,
-  `Insert/Replace/Update/DeleteEventCapability`, and the data capabilities)
-  report what the provider of `SetHistorian` implements.
+  `Insert/Replace/Update/DeleteEventCapability`, `InsertAnnotationCapability`
+  and the data capabilities) report what the provider of `SetHistorian`
+  implements.
+
+Annotations (Part 11 §5.1.2, §6.5.6, §6.9.3):
+
+```go
+// the Annotations Property on a Variable or Object: DataType Annotation,
+// ValueRank -2, CurrentRead | HistoryRead | HistoryWrite, a null value
+func (s *Server) EnableAnnotations(nodeID *ua.NodeID) error
+
+type AnnotationHistoryProvider interface {
+    UpdateAnnotations(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+    ReadAnnotations(nodeID *ua.NodeID, reqTimes []time.Time) (*ua.HistoryReadResult, error)
+    ReadRawAnnotations(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+}
+
+// *Historian implements it for the nodes it keeps history of:
+func (h *Historian) UpdateAnnotations(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+func (h *Historian) ReadAnnotations(nodeID *ua.NodeID, reqTimes []time.Time) (*ua.HistoryReadResult, error)
+func (h *Historian) ReadRawAnnotations(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+```
+
+- HistoryUpdate UpdateStructureDataDetails and HistoryRead
+  ReadAnnotationDataDetails on the node or its Property; ReadRawModifiedDetails
+  on the Property reads the Annotations of a range (IsReadModified is
+  `Bad_HistoryOperationUnsupported`). A node without the Property is
+  `Bad_HistoryOperationUnsupported`.
+- The SourceTimestamp identifies an Annotation: Insert `Good_EntryInserted` /
+  `Bad_EntryExists`, Replace `Good_EntryReplaced` / `Bad_NoEntryExists`, Update
+  either, Remove `Good` / `Bad_NoEntryExists`. A value that is no Annotation is
+  `Bad_TypeMismatch`; an empty annotationTime is the time of the update, an
+  empty userName the user of the session.
+- ReadAnnotations returns one DataValue per reqTime, `Bad_NoData` for a time
+  without one. The raw values at a time with an Annotation carry the ExtraData
+  bit (Part 4 §7.38.1). The processed Aggregate AnnotationCount counts them.
 
 Peer HistoryRead raw interoperability: all four directions verified
 (`history.read.raw`) since opcua-interop v0.6.0; continuation points verified
@@ -2866,9 +2923,13 @@ func Supported(aggregateType *ua.NodeID) bool
 func Functions() []*ua.NodeID
 func Name(aggregateType *ua.NodeID) string
 func Description(aggregateType *ua.NodeID) string
+func HistoricalOnly(aggregateType *ua.NodeID) bool // AnnotationCount (Part 13 Table 5)
+
+func (r Request) CalculateWithAnnotations(raw, annotations []*ua.DataValue) ([]*ua.DataValue, ua.StatusCode)
+func (r Request) CalculateIntervalsWithAnnotations(raw, annotations []*ua.DataValue, first, last int) ([]*ua.DataValue, ua.StatusCode)
 ```
 
-The 36 standard Aggregates of Part 13 §5.4.3 but AnnotationCount, with the
+The 37 standard Aggregates of Part 13 §5.4.3, with the
 intervals of §5.4.2.2 (Table 49), Interpolated and Simple Bounding Values
 (§3.1.8, §3.1.9), the PercentValues and PercentTime StatusCode calculation
 (§5.4.3.2) and the Aggregate bits of Part 4 §7.38.1 (`ua.StatusCodeHistorianBits` and the constants it masks,
@@ -2877,7 +2938,11 @@ with `ua.StatusCodeInfoTypeDataValue`). `Check` returns
 Start = End, a negative ProcessingInterval, more than `MaxIntervals`
 intervals) or `Bad_AggregateInvalidInputs` (a Config that is not `Valid`).
 Arrays are `Bad_NotSupported` for the Aggregates that calculate with numbers
-(Part 11 §6.5.4.2). Evidence: every example of Annex A
+(Part 11 §6.5.4.2). AnnotationCount (§5.4.3.20) counts the annotations
+`CalculateWithAnnotations` takes, by their SourceTimestamp, per interval;
+without them it counts none. `HistoricalOnly` reports the Aggregates that
+"apply to Historical Aggregates only" (Table 5), which the AggregateFilter
+refuses. Evidence: every example of Annex A
 (`server/aggregate/testdata/AggregateExamples.csv`), with the rows where the
 package follows a clause instead listed in `deviations_test.go`.
 

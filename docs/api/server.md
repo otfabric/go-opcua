@@ -407,6 +407,40 @@ type AlarmMetricsValues struct {
 
 AlarmMetricsValues are the values of an AlarmMetrics object.
 
+### type AnnotationHistoryProvider
+
+```go
+type AnnotationHistoryProvider interface {
+	// UpdateAnnotations serves HistoryUpdate UpdateStructureDataDetails
+	// (Part 11 §6.9.3) with one OperationResult per value: Insert is
+	// Bad_EntryExists when the Annotation exists, Replace and Remove
+	// Bad_NoEntryExists when it does not, Update replaces or inserts
+	// (Good_EntryReplaced, Good_EntryInserted), and a time the history
+	// cannot store is Bad_OutOfRange. The server has checked perform and
+	// each value: every value has a SourceTimestamp, and an Annotation but
+	// for Remove.
+	UpdateAnnotations(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+
+	// ReadAnnotations serves HistoryRead ReadAnnotationDataDetails (Part 11
+	// §6.5.6): a HistoryData with the Annotation at each of reqTimes, in
+	// their order, and a DataValue with a Bad StatusCode (Bad_NoData) for a
+	// time without one.
+	ReadAnnotations(nodeID *ua.NodeID, reqTimes []time.Time) (*ua.HistoryReadResult, error)
+
+	// ReadRawAnnotations serves HistoryRead ReadRawModifiedDetails of the
+	// Annotations Property (Part 11 §5.1.2): the Annotations from startTime
+	// to endTime as [HistoryProvider.ReadRaw] reads values, at most
+	// numValues of them (0: no limit) with a continuation point when more
+	// match. The server also reads them for the AnnotationCount Aggregate
+	// (Part 13 §5.4.3.20) of a provider that is no ProcessedHistoryReader.
+	ReadRawAnnotations(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+}
+```
+
+AnnotationHistoryProvider optionally keeps the Annotations of HistoricalDataNodes (Part 11 §5.1.2; the Annotation DataType, §6.6.6). The server calls it with the NodeId of the node that has the Annotations Property ([Server.EnableAnnotations](#func-server-enableannotations)), also when the client names the Property. An Annotation is a DataValue whose Value is a \*ua.Annotation in an ExtensionObject and whose SourceTimestamp is the time of the value it annotates; the provider decides what makes an Annotation unique (§6.9.3.2), the default [\*Historian](#type-historian) the timestamp.
+
+The server answers ReadRawModifiedDetails with IsReadModified on the Annotations Property with Bad\_HistoryOperationUnsupported. The provider's continuation points are released through [HistoryProvider.ReleaseContinuation](#func-historyprovider-releasecontinuation).
+
 ### type AtTimeHistoryDeleter
 
 ```go
@@ -1776,6 +1810,10 @@ type Historian struct {
 	// aggConfig is the Aggregate configuration of nodes
 	// (SetAggregateConfig), keyed by NodeID.String().
 
+	// annotations holds the Annotations of the enabled nodes (Part 11
+	// §5.1.2), keyed by NodeID.String(), in the order of their
+	// SourceTimestamp; created by the first insert.
+
 }
 ```
 
@@ -1865,6 +1903,14 @@ func (h *Historian) IsEnabled(nodeID *ua.NodeID) bool
 
 IsEnabled reports whether the given node is enabled for history.
 
+#### func (Historian) ReadAnnotations
+
+```go
+func (h *Historian) ReadAnnotations(nodeID *ua.NodeID, reqTimes []time.Time) (*ua.HistoryReadResult, error)
+```
+
+ReadAnnotations implements [AnnotationHistoryProvider](#type-annotationhistoryprovider): the Annotation at each time, Bad\_NoData for a time without one. A node that is not enabled is Bad\_HistoryOperationUnsupported.
+
 #### func (Historian) ReadAtTime
 
 ```go
@@ -1897,7 +1943,7 @@ ReadModified implements ModifiedHistoryReader.
 func (h *Historian) ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error)
 ```
 
-ReadProcessed implements ProcessedHistoryReader: it calculates every Aggregate of [aggregate.Functions](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Functions) over the samples of nodeID (Part 11 §6.5.4, Part 13 §5.4), with the configuration of [Historian.AggregateConfig](#func-historian-aggregateconfig) overridden by aggregateConfiguration. A node without history is Bad\_HistoryOperationUnsupported; the other results are those of [aggregate.Request.Check](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Request.Check) and [aggregate.Request.Calculate](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Request.Calculate).
+ReadProcessed implements ProcessedHistoryReader: it calculates every Aggregate of [aggregate.Functions](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Functions) over the samples of nodeID (Part 11 §6.5.4, Part 13 §5.4), AnnotationCount over its Annotations, with the configuration of [Historian.AggregateConfig](#func-historian-aggregateconfig) overridden by aggregateConfiguration. A node without history is Bad\_HistoryOperationUnsupported; the other results are those of [aggregate.Request.Check](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Request.Check) and [aggregate.Request.Calculate](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Request.Calculate).
 
 #### func (Historian) ReadRaw
 
@@ -1906,6 +1952,16 @@ func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, num
 ```
 
 ReadRaw implements ReadRawModifiedDetails for a single node. It returns the matching DataValues and a continuation point if results are truncated.
+
+A sample with an Annotation at its SourceTimestamp has the Extra Data bit (Part 4 §7.38.1, Table 177): Part 11 §5.1.2 has a client find the times of the Annotations of a node in the values of a raw read of the node that carry the ExtraData flag.
+
+#### func (Historian) ReadRawAnnotations
+
+```go
+func (h *Historian) ReadRawAnnotations(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+```
+
+ReadRawAnnotations implements [AnnotationHistoryProvider](#type-annotationhistoryprovider): the Annotations of nodeID from startTime to endTime as [Historian.ReadRaw](#func-historian-readraw) reads samples, with its continuation points.
 
 #### func (Historian) RecordEvent
 
@@ -1938,6 +1994,21 @@ func (h *Historian) SetAggregateConfig(nodeID *ua.NodeID, cfg aggregate.Config)
 ```
 
 SetAggregateConfig sets the configuration the Aggregates of nodeID are calculated with: its AggregateConfiguration (Part 13 §4.2.1.2) and its Stepped Property (Part 11 §5.2.2). Without it a node uses [aggregate.DefaultConfig](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#DefaultConfig).
+
+#### func (Historian) UpdateAnnotations
+
+```go
+func (h *Historian) UpdateAnnotations(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+```
+
+UpdateAnnotations implements [AnnotationHistoryProvider](#type-annotationhistoryprovider): the Historian keeps the Annotations of the nodes of its EnableNode, as many as their samples, one per SourceTimestamp (Part 11 §6.9.3.2). Per value (OperationResults, Part 11 §6.9.3.3 to §6.9.3.6):
+
+  - Insert: Bad\_EntryExists when an Annotation has the timestamp; else insert, Good\_EntryInserted
+  - Replace: Bad\_NoEntryExists when none has it; else replace, Good\_EntryReplaced
+  - Update: replace (Good\_EntryReplaced) or insert (Good\_EntryInserted)
+  - Remove: Bad\_NoEntryExists when none has it; else remove, Good
+
+A full history drops its oldest Annotation for a new one; an Annotation older than all of a full history cannot be stored, Bad\_OutOfRange. A value without a SourceTimestamp, or without an Annotation but for Remove, is Bad\_InvalidArgument. A node that is not enabled is Bad\_HistoryOperationUnsupported; a PerformUpdateType that is none of the four is Bad\_InvalidArgument.
 
 #### func (Historian) UpdateData
 
@@ -3619,6 +3690,14 @@ func WithAuditing(enabled bool) Option
 
 WithAuditing turns the audit events on or off (default off).
 
+#### func WithChangeAuditing
+
+```go
+func WithChangeAuditing(enabled bool) Option
+```
+
+WithChangeAuditing sets whether a server with auditing on ([WithAuditing](#func-withauditing)) reports the audit events of Write, HistoryUpdate, AddNodes, DeleteNodes, AddReferences and DeleteReferences (Part 4 §6.5.7, §6.5.8). It is on by default; WithChangeAuditing(false) restores the behaviour of v1.42, which reported the audit events of the SecureChannel, Session and Method services only. A server without auditing reports none either way.
+
 #### func WithClientCertificateTrustList
 
 ```go
@@ -5014,6 +5093,16 @@ func (s *Server) EmitEvent(nodeID *ua.NodeID, fields *ua.EventFieldList) error
 ```
 
 EmitEvent sends an event notification to all monitored items watching the given node. The fields should contain the event fields matching the select clauses requested by clients.
+
+#### func (Server) EnableAnnotations
+
+```go
+func (s *Server) EnableAnnotations(nodeID *ua.NodeID) error
+```
+
+EnableAnnotations gives the Variable or Object nodeID the Annotations Property (Part 11 §5.1.2): "Any HistoricalDataNode that supports changing, deleting, or adding Annotations shall have the Annotations Property". The Property has the DataType Annotation and the HistoryRead and HistoryWrite bits; its history is the Annotations of the node, kept by the [AnnotationHistoryProvider](#type-annotationhistoryprovider) of the server (the default [\*Historian](#type-historian) keeps them for the nodes of its EnableNode). A node that has the Property already is left as it is.
+
+The errors are Bad\_NodeIdInvalid for a nil nodeID, Bad\_NodeIdUnknown for a node the address space does not hold and Bad\_NodeClassInvalid for a node other than a Variable or Object, or a Property: "Since Properties cannot have Properties, the Annotations Property can only exist on DataVariables or Objects" (§5.1.2).
 
 #### func (Server) EnableEventHistory
 

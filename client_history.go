@@ -8,6 +8,7 @@ import (
 	"iter"
 	"time"
 
+	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/stats"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -244,4 +245,124 @@ func (c *Client) releaseHistoryContinuation(ctx context.Context, details any, no
 		defer cancel()
 	}
 	_, _ = c.HistoryReleaseContinuationPoints(rctx, details, &ua.HistoryReadValueID{NodeID: nodeID, ContinuationPoint: cp})
+}
+
+// HistoryReadAnnotations sends a HistoryRead with ReadAnnotationDataDetails
+// (Part 11 §6.5.6): the Annotations of nodes at the reqTimes of details,
+// one DataValue per time, in the order of the times. The nodes are those
+// with an Annotations Property, or the Property (Part 11 §5.1.2).
+func (c *Client) HistoryReadAnnotations(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadAnnotationDataDetails) (*ua.HistoryReadResponse, error) {
+	stats.Client().Add("HistoryReadAnnotations", 1)
+	stats.Client().Add("HistoryReadValueID", int64(len(nodes)))
+
+	req := &ua.HistoryReadRequest{
+		TimestampsToReturn: ua.TimestampsToReturnBoth,
+		NodesToRead:        nodes,
+		HistoryReadDetails: &ua.ExtensionObject{
+			TypeID:       ua.NewFourByteExpandedNodeID(0, id.ReadAnnotationDataDetailsEncodingDefaultBinary),
+			EncodingMask: ua.ExtensionObjectBinary,
+			Value:        details,
+		},
+	}
+	return c.historyRead(ctx, req)
+}
+
+// HistoryUpdateStructureData sends a HistoryUpdate with
+// UpdateStructureDataDetails (Part 11 §6.9.3): it inserts, replaces,
+// updates or removes structured history, such as the Annotations of a
+// node.
+func (c *Client) HistoryUpdateStructureData(ctx context.Context, details ...*ua.UpdateStructureDataDetails) (*ua.HistoryUpdateResponse, error) {
+	stats.Client().Add("HistoryUpdateStructureData", 1)
+
+	eos := make([]*ua.ExtensionObject, len(details))
+	for i, d := range details {
+		eos[i] = &ua.ExtensionObject{
+			TypeID:       ua.NewFourByteExpandedNodeID(0, id.UpdateStructureDataDetailsEncodingDefaultBinary),
+			EncodingMask: ua.ExtensionObjectBinary,
+			Value:        d,
+		}
+	}
+	return send[ua.HistoryUpdateResponse](ctx, c, &ua.HistoryUpdateRequest{HistoryUpdateDetails: eos})
+}
+
+// HistoryAnnotation is an Annotation (Part 11 §6.6.6) of the history of a
+// node at Time, the SourceTimestamp of its DataValue. Status is the status
+// a read returned for the time: Bad_NoData, with a nil Annotation, when the
+// node has none at Time.
+type HistoryAnnotation struct {
+	Time       time.Time
+	Annotation *ua.Annotation
+	Status     ua.StatusCode
+}
+
+// ReadAnnotations reads the Annotations of nodeID at reqTimes (Part 11
+// §6.5.6), one HistoryAnnotation per time in the order of reqTimes. nodeID
+// is a node with an Annotations Property, or the Property (Part 11 §5.1.2).
+// ReadAnnotations follows continuation points. A Bad status of the node,
+// such as Bad_HistoryOperationUnsupported for a node without Annotations, is
+// returned as the error (a [ua.StatusCode]).
+func (c *Client) ReadAnnotations(ctx context.Context, nodeID *ua.NodeID, reqTimes ...time.Time) ([]HistoryAnnotation, error) {
+	details := &ua.ReadAnnotationDataDetails{ReqTimes: reqTimes}
+	return collectHistory(historyPages(ctx, c, nodeID, details, 0,
+		func(ctx context.Context, nodes []*ua.HistoryReadValueID) (*ua.HistoryReadResponse, error) {
+			return c.HistoryReadAnnotations(ctx, nodes, details)
+		},
+		func(r *ua.HistoryReadResult) ([]HistoryAnnotation, error) {
+			hd, err := historyBody[ua.HistoryData](r, "HistoryData")
+			if hd == nil {
+				return nil, err
+			}
+			out := make([]HistoryAnnotation, len(hd.DataValues))
+			for i, dv := range hd.DataValues {
+				out[i] = HistoryAnnotation{Time: dv.SourceTimestamp, Status: dv.Status, Annotation: annotationOf(dv)}
+			}
+			return out, nil
+		}))
+}
+
+// annotationOf returns the Annotation a decoded DataValue holds; nil for
+// one that holds none. The decoder gives each DataValue of an array, its
+// Variant and the ExtensionObject of a Variant, so none is nil.
+func annotationOf(dv *ua.DataValue) *ua.Annotation {
+	if eo, ok := dv.Value.Value().(*ua.ExtensionObject); ok {
+		a, _ := eo.Value.(*ua.Annotation)
+		return a
+	}
+	return nil
+}
+
+// UpdateAnnotations inserts, replaces, updates or removes Annotations of
+// nodeID with UpdateStructureDataDetails (Part 11 §6.9.3), one per
+// annotation, at its Time. A Remove needs only the Time; the other
+// operations need the Annotation. The result holds the OperationResults,
+// such as Good_EntryInserted, Good_EntryReplaced, Bad_EntryExists or
+// Bad_NoEntryExists, for each annotation in order. A Bad status of the
+// node is returned as the error (a [ua.StatusCode]).
+func (c *Client) UpdateAnnotations(ctx context.Context, nodeID *ua.NodeID, perform ua.PerformUpdateType, annotations ...HistoryAnnotation) ([]ua.StatusCode, error) {
+	values := make([]*ua.DataValue, len(annotations))
+	for i, a := range annotations {
+		dv := &ua.DataValue{EncodingMask: ua.DataValueSourceTimestamp, SourceTimestamp: a.Time}
+		if a.Annotation != nil {
+			dv.EncodingMask |= ua.DataValueValue
+			dv.Value = ua.MustVariant(&ua.ExtensionObject{
+				TypeID:       ua.NewFourByteExpandedNodeID(0, id.AnnotationEncodingDefaultBinary),
+				EncodingMask: ua.ExtensionObjectBinary,
+				Value:        a.Annotation,
+			})
+		}
+		values[i] = dv
+	}
+	resp, err := c.HistoryUpdateStructureData(ctx, &ua.UpdateStructureDataDetails{NodeID: nodeID, PerformInsertReplace: perform, UpdateValues: values})
+	if err != nil {
+		return nil, err
+	}
+	// The decoder gives each result of the array, so none is nil.
+	if len(resp.Results) != 1 {
+		return nil, ua.StatusBadUnknownResponse
+	}
+	r := resp.Results[0]
+	if r.StatusCode&ua.StatusBad != 0 {
+		return nil, r.StatusCode
+	}
+	return r.OperationResults, nil
 }

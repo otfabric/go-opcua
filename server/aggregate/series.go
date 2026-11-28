@@ -43,6 +43,36 @@ func isBad(st ua.StatusCode) bool       { return severity(st) >= 2 }
 type series struct {
 	pts []point
 	cfg Config
+	// annotations are the times of the Annotations of the Variable, in
+	// order (AnnotationCount).
+	annotations []time.Time
+}
+
+// annotationTimes returns the SourceTimestamps of the Annotations of a
+// Variable in order, without the entries that are Bad.
+func annotationTimes(annotations []*ua.DataValue) []time.Time {
+	var out []time.Time
+	for _, dv := range annotations {
+		if dv != nil && !isBad(dv.Status) {
+			out = append(out, dv.SourceTimestamp)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Before(out[j]) })
+	return out
+}
+
+// annotationsIn counts the Annotations from lo to hi: [lo, hi), or (lo, hi]
+// for a reverse interval, as the raw values of an interval are taken.
+func (s *series) annotationsIn(lo, hi time.Time, reverse bool) int {
+	pos := func(t time.Time) int {
+		return sort.Search(len(s.annotations), func(i int) bool {
+			if reverse {
+				return s.annotations[i].After(t)
+			}
+			return !s.annotations[i].Before(t)
+		})
+	}
+	return pos(hi) - pos(lo)
 }
 
 // newSeries sorts the raw values by their SourceTimestamp. Values before the

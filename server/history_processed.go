@@ -67,10 +67,11 @@ func processedRequest(start, end time.Time, processingInterval float64, aggregat
 	return r, r.Check()
 }
 
-// processedResult calculates r over raw as the HistoryReadResult of a
-// processed read, a HistoryData with one value per interval.
-func processedResult(r aggregate.Request, raw []*ua.DataValue) *ua.HistoryReadResult {
-	values, st := r.Calculate(raw)
+// processedResult calculates r over raw, and the Annotations of the node,
+// as the HistoryReadResult of a processed read, a HistoryData with one
+// value per interval.
+func processedResult(r aggregate.Request, raw, annotations []*ua.DataValue) *ua.HistoryReadResult {
+	values, st := r.CalculateWithAnnotations(raw, annotations)
 	if st != ua.StatusOK {
 		return &ua.HistoryReadResult{StatusCode: st}
 	}
@@ -104,17 +105,39 @@ func readProcessed(h HistoryProvider, details *ua.ReadProcessedDetails, nodeID, 
 	if err != nil || isBad(st) {
 		return &ua.HistoryReadResult{StatusCode: st}, err
 	}
-	return processedResult(r, raw), nil
+	var annotations []*ua.DataValue
+	if p, ok := h.(AnnotationHistoryProvider); ok && isAnnotationCount(aggregateType) {
+		annotations, st, err = readAnnotationRange(p, h, nodeID, from, to)
+		if err != nil || isBad(st) {
+			return &ua.HistoryReadResult{StatusCode: st}, err
+		}
+	}
+	return processedResult(r, raw, annotations), nil
+}
+
+// isAnnotationCount reports whether aggregateType is AnnotationCount (Part
+// 13 §5.4.3.20), the Aggregate of the Annotations of a node.
+func isAnnotationCount(aggregateType *ua.NodeID) bool {
+	return aggregateType != nil && aggregateType.Namespace() == 0 && aggregateType.IntID() == id.AggregateFunctionAnnotationCount
 }
 
 // readRawRange reads every raw value of nodeID from from to to, following
 // the continuation points of the provider. A read that stops early releases
 // its continuation point.
 func readRawRange(h HistoryProvider, nodeID *ua.NodeID, from, to time.Time) ([]*ua.DataValue, ua.StatusCode, error) {
+	return readPages(h, func(cp []byte) (*ua.HistoryReadResult, error) {
+		return h.ReadRaw(nodeID, from, to, 0, false, cp)
+	})
+}
+
+// readPages reads every page of a raw read of h, following its
+// continuation points. A read that stops early releases its continuation
+// point.
+func readPages(h HistoryProvider, read func(cp []byte) (*ua.HistoryReadResult, error)) ([]*ua.DataValue, ua.StatusCode, error) {
 	var raw []*ua.DataValue
 	var cp []byte
 	for range maxRawPages {
-		res, err := h.ReadRaw(nodeID, from, to, 0, false, cp)
+		res, err := read(cp)
 		if err != nil {
 			return nil, ua.StatusBadInternalError, err
 		}
@@ -124,17 +147,25 @@ func readRawRange(h HistoryProvider, nodeID *ua.NodeID, from, to time.Time) ([]*
 		if isBad(res.StatusCode) {
 			return nil, res.StatusCode, nil
 		}
-		if res.HistoryData != nil {
-			if hd, ok := res.HistoryData.Value.(*ua.HistoryData); ok {
-				raw = append(raw, hd.DataValues...)
-			}
-		}
+		raw = append(raw, historyDataValues(res)...)
 		if cp = res.ContinuationPoint; len(cp) == 0 {
 			return raw, ua.StatusOK, nil
 		}
 	}
 	h.ReleaseContinuation(cp)
 	return nil, ua.StatusBadInternalError, nil
+}
+
+// historyDataValues returns the DataValues of the HistoryData of a
+// HistoryReadResult; none for a result that is Bad or holds no HistoryData.
+func historyDataValues(res *ua.HistoryReadResult) []*ua.DataValue {
+	if res == nil || isBad(res.StatusCode) || res.HistoryData == nil {
+		return nil
+	}
+	if hd, ok := res.HistoryData.Value.(*ua.HistoryData); ok {
+		return hd.DataValues
+	}
+	return nil
 }
 
 // aggregateFunctionsFolder is the AggregateFunctions folder of the
@@ -147,7 +178,9 @@ const aggregateFunctionsFolder = id.HistoryServerCapabilitiesAggregateFunctions
 // ServerCapabilities, "an entry point to browse to all AggregateFunctions
 // supported by the Server" (Part 5 §6.3.2). The AggregateFilter of a
 // MonitoredItem calculates every Aggregate of [aggregate.Functions] for any
-// Variable, so the folder organizes them all.
+// Variable but AnnotationCount, which "applies to Historical Aggregates
+// only" (Part 13 §4.2.2.2, Table 5) and which processed reads support; the
+// folder organizes them all.
 const serverAggregateFunctionsFolder = id.ServerServerCapabilitiesAggregateFunctions
 
 // bindAggregateFunctions makes the AggregateFunction Objects (Part 13
