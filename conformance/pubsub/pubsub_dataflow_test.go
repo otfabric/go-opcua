@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	"github.com/otfabric/go-opcua"
@@ -39,7 +40,7 @@ func psBroker(t *testing.T) *mqttbroker.Broker {
 	t.Helper()
 	b := mqttbroker.New(mqttbroker.Options{})
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	return b
 }
 
@@ -49,7 +50,7 @@ func psRuntime(t *testing.T, cfg *ua.PubSubConfigurationDataType, opts ...pubsub
 	rt, err := pubsub.New(cfg, opts...)
 	require.NoError(t, err)
 	require.NoError(t, rt.Start(context.Background()))
-	t.Cleanup(func() { _ = rt.Close() })
+	cleanup.Register(t, func() { _ = rt.Close() })
 	return rt
 }
 
@@ -642,7 +643,7 @@ func TestPubSub_KeepAliveAndReceiveTimeout(t *testing.T) {
 	require.Equal(t, timeouts+1, st.Counters.Timeouts)
 	require.ErrorIs(t, st.LastError, ua.StatusBadTimeout)
 	pub = newPub()
-	t.Cleanup(func() { _ = pub.Close() })
+	cleanup.Register(t, func() { _ = pub.Close() })
 	psWaitState(t, sub, rid, ua.PubSubStateOperational)
 
 	// Disabling the group pauses the reader; enabling it resumes it.

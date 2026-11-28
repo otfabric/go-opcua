@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -68,7 +69,7 @@ func TestECC_PolicyModeMatrix(t *testing.T) {
 					Monitor(f.Writable).
 					Start(ctx)
 				require.NoError(t, err)
-				t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+				cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 				nextDataChanges(t, ch) // initial value
 				// The subtests share one server: each must write a value the
 				// previous one did not leave behind, or nothing changes.

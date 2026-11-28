@@ -24,6 +24,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/customtypes"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -56,7 +57,7 @@ func setupCustomTypes(t *testing.T) (*opcua.Client, map[string]*ua.NodeID, *ua.N
 	methodObjectID := obj.ID()
 
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 
 	c, err := opcua.NewClient(fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()),
 		opcua.InsecureNoSecurity(),
@@ -66,7 +67,7 @@ func setupCustomTypes(t *testing.T) (*opcua.Client, map[string]*ua.NodeID, *ua.N
 	require.NoError(t, err)
 	ctx := context.Background()
 	require.NoError(t, c.Connect(ctx))
-	t.Cleanup(func() { _ = c.Close(ctx) })
+	cleanup.Register(t, func() { _ = c.Close(ctx) })
 
 	return c, nodeIDs, methodObjectID, methodID, ctx
 }

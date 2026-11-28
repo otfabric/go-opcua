@@ -48,6 +48,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	opcua "github.com/otfabric/go-opcua"
@@ -262,7 +263,7 @@ func containerScratchDir(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("scratch dir: %v", err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	cleanup.Register(t, func() { _ = os.RemoveAll(dir) })
 	return dir
 }
 
@@ -350,7 +351,7 @@ func startAdapterServer(t *testing.T, imageEnvVar, defaultImage string) *serverH
 			endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath),
 			stopFn:   stop,
 		}
-		t.Cleanup(stop)
+		cleanup.Register(t, stop)
 		return h
 	}
 	t.Fatalf("no host port Docker could publish the adapter server on in %d attempts", publishAttempts)
@@ -1022,7 +1023,7 @@ func startGoServerWithOptions(t *testing.T, extra ...server.Option) (string, *se
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	port := s.Port()
 	if port == 0 {
 		t.Fatal("server.Start: bound port is 0")
@@ -1180,7 +1181,7 @@ func dialClient(t *testing.T, endpoint string) *opcua.Client {
 		t.Fatalf("Connect(%q): %v", endpoint, err)
 	}
 
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
 		_ = c.Close(ctx2)
@@ -1244,7 +1245,7 @@ func dialUsernameClient(t *testing.T, endpoint, user, pass string) (*opcua.Clien
 	if err := c.Connect(ctx); err != nil {
 		return nil, err
 	}
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
 		c.Close(ctx2) //nolint:errcheck
@@ -1448,7 +1449,7 @@ func startSecureAdapterServerIn(t *testing.T, imageEnvVar, defaultImage, adapter
 			endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath),
 			stopFn:   stop,
 		}
-		t.Cleanup(stop)
+		cleanup.Register(t, stop)
 		return h
 	}
 	t.Fatalf("no host port Docker could publish the secure adapter server on in %d attempts", publishAttempts)
@@ -1626,7 +1627,7 @@ func connectSecureClient(t *testing.T, endpoint, policy, mode string, tokenType 
 		return nil, err
 	}
 
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
 		c.Close(ctx2) //nolint:errcheck
@@ -1737,7 +1738,7 @@ func startSecureGoServer(t *testing.T) string {
 	addVar("Scalar.String", "hello")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		cancel()
 		_ = s.Close()
 	})
@@ -1919,7 +1920,7 @@ func startTrustGoServer(t *testing.T) string {
 	addVar("Scalar.Int32", int32(42))
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		cancel()
 		_ = s.Close()
 	})

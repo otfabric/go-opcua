@@ -12,6 +12,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -270,7 +271,7 @@ func watchAudit(t *testing.T, c *opcua.Client) *auditStream {
 	sub, ch, err := c.NewSubscription().Interval(fastInterval).
 		MonitorEvents(opcua.NewAuditConditionEventFilter(), ua.NewNumericNodeID(0, id.Server)).Start(context.Background())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	return &auditStream{ch: ch}
 }
 
@@ -406,7 +407,7 @@ func TestAlarms_AuditEventsRBAC(t *testing.T) {
 		MonitorEvents(opcua.NewAuditConditionEventFilter(), srvID).
 		MonitorEvents(opcua.NewConditionEventFilter(), srvID).Start(context.Background())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	require.NoError(t, operator.Suppress(context.Background(), cond.NodeID()))
 	got := adminAudit.next(t, id.AuditConditionSuppressionEventType)

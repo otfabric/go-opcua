@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/security"
@@ -185,7 +186,7 @@ func psSKS(t *testing.T, ks *security.KeyService, rings *security.KeyRings, opts
 	require.NoError(t, err)
 	require.NoError(t, srv.EnableSecurityKeyPush(rings))
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return srv, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 }
 
@@ -264,7 +265,7 @@ func TestPubSub_SecurityKeyService(t *testing.T) {
 			MinRetry:        50 * time.Millisecond,
 		})
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = src.Close() })
+		cleanup.Register(t, func() { _ = src.Close() })
 		return src
 	}
 	// The subscriber fetches first: a fetch returns no past keys, so a
@@ -308,7 +309,7 @@ func TestPubSub_SecurityKeyService(t *testing.T) {
 	defer cancel()
 	c, err := psDialSKS(ctx, url)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	require.NoError(t, sks.Push(ctx, ks, c, "push"))
 	cur, err := ks.CurrentTokenID("push")
 	require.NoError(t, err)

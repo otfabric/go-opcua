@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 const repoRoot = "../../.."
@@ -158,7 +160,7 @@ func fakeInputs(t *testing.T) {
 		{"schema/a.csv", "Schema/a.csv"},
 		{"model/b.xml", "B/b.xml"},
 	}
-	t.Cleanup(func() { inputs = saved })
+	cleanup.Register(t, func() { inputs = saved })
 }
 
 const fakeCommit = "0123456789abcdef0123456789abcdef01234567"
@@ -199,7 +201,7 @@ func fakeUpstream(t *testing.T, files map[string]string) upstream {
 		_, _ = w.Write([]byte(data))
 	})
 	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
+	cleanup.Register(t, srv.Close)
 	return upstream{api: srv.URL, raw: srv.URL, token: "secret", client: srv.Client()}
 }
 

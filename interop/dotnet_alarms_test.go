@@ -20,6 +20,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -108,7 +109,7 @@ func newDotnetAlarm105(t *testing.T, endpoint string) *dotnetAlarm105 {
 		ext:    ua.NewStringNodeID(ns, "Alarms.ExtAlarm"),
 		dlg:    ua.NewStringNodeID(ns, "Alarms.Dialog"),
 	}
-	t.Cleanup(func() { p.fixture(t, "Alarms.ResetExt") })
+	cleanup.Register(t, func() { p.fixture(t, "Alarms.ResetExt") })
 	return p
 }
 

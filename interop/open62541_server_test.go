@@ -18,6 +18,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -34,7 +35,7 @@ func findNS(t *testing.T, c interface {
 	// two calls: 5 s was too short for that against a peer starting cold
 	// on a loaded runner.
 	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
-	t.Cleanup(cancel)
+	cleanup.Register(t, cancel)
 
 	if err := c.UpdateNamespaces(ctx); err != nil {
 		t.Fatalf("UpdateNamespaces: %v", err)

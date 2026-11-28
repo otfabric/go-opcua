@@ -18,6 +18,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
@@ -120,7 +121,7 @@ func subscribe(t *testing.T, c *opcua.Client) uint32 {
 			}
 		}
 	}()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		cancel()
 		wg.Wait()
 	})
@@ -277,7 +278,7 @@ func TestClientCovMonitorTriggers(t *testing.T) {
 		// client neither rewinds its sequence numbers to it nor asks again
 		// and again.
 		ts.republishEmpty.Store(true)
-		t.Cleanup(func() { ts.republishEmpty.Store(false) })
+		cleanup.Register(t, func() { ts.republishEmpty.Store(false) })
 		rec.reset()
 		trigger(t, c, "SecureChannelIdInvalid")
 		rec.waitRecovered(t, c)
@@ -304,7 +305,7 @@ func TestClientCovMonitorTriggers(t *testing.T) {
 		t.Run("session invalid/"+tt.name, func(t *testing.T) {
 			ts.transferMode.Store(tt.mode)
 			ts.republishOne.Store(tt.republish)
-			t.Cleanup(func() {
+			cleanup.Register(t, func() {
 				ts.transferMode.Store(transferDelegate)
 				ts.republishOne.Store(false)
 			})
@@ -372,7 +373,7 @@ func TestClientCovMonitorTriggers(t *testing.T) {
 		ts.createFails.Store(true)
 		ts.createCalls.Store(0)
 		ts.transferMode.Store(transferUnsupported)
-		t.Cleanup(func() { ts.transferMode.Store(transferDelegate) })
+		cleanup.Register(t, func() { ts.transferMode.Store(transferDelegate) })
 		rec.reset()
 		trigger(t, c, "SessionIdInvalid")
 		rec.waitRecovered(t, c)

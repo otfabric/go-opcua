@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // tcpDisruptor is a stack-neutral localhost TCP forwarder that can drop all
@@ -32,7 +34,7 @@ func startTCPDisruptor(t *testing.T, backend string) *tcpDisruptor {
 	}
 	d := &tcpDisruptor{ln: ln, backend: backend, stop: make(chan struct{})}
 	go d.acceptLoop()
-	t.Cleanup(func() { d.Close() })
+	cleanup.Register(t, func() { d.Close() })
 	return d
 }
 

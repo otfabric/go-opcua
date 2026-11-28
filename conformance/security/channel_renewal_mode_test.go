@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -33,7 +34,7 @@ func TestChannelRenewal_ModeChangeIsRefused(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	url := fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -54,7 +55,7 @@ func TestChannelRenewal_ModeChangeIsRefused(t *testing.T) {
 		}
 		sc, err := uasc.NewSecureChannel(url, conn, cfg, make(chan error, 8))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = sc.Close() })
+		cleanup.Register(t, func() { _ = sc.Close() })
 		require.NoError(t, sc.Open(ctx))
 		return sc, cfg
 	}

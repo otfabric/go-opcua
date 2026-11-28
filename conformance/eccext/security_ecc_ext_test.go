@@ -13,6 +13,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uapolicy"
@@ -117,7 +118,7 @@ func TestECCExt_PolicyModeMatrix(t *testing.T) {
 
 				sub, ch, err := c.NewSubscription().Interval(fastInterval).Monitor(f.Writable).Start(ctx)
 				require.NoError(t, err)
-				t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+				cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 				nextDataChanges(t, ch)
 
 				// A renewal negotiates new ephemeral keys; the channel and

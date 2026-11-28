@@ -16,6 +16,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/schema"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -378,7 +379,7 @@ func TestNodeSet_ServersInParallel(t *testing.T) {
 		wg       sync.WaitGroup
 		start    = make(chan struct{})
 	)
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		for _, s := range stations {
 			s.close()
 		}
@@ -663,7 +664,7 @@ func TestNodeSet_ConcurrentImport(t *testing.T) {
 		wg       sync.WaitGroup
 		start    = make(chan struct{})
 	)
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		for _, s := range stations {
 			s.close()
 		}

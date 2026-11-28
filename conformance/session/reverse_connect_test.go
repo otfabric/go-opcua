@@ -14,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -100,7 +101,7 @@ func TestReverseConnect_None(t *testing.T) {
 
 	sub, ch, err := c.NewSubscription().Interval(fastInterval).Monitor(f.Int32).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 	awaitValue(t, ch, 0, int32(42))
 	writeInt32(t, c, f.Int32, 1001)
 	awaitValue(t, ch, 0, int32(1001))
@@ -547,7 +548,7 @@ func TestReverseConnect_RuntimeTargets(t *testing.T) {
 	// connection: another client waits in vain...
 	c2, err := opcua.NewClient("", opcua.InsecureNoSecurity(), reverse, opcua.DialTimeout(300*time.Millisecond), opcua.AutoReconnect(false))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c2.Close(ctx) })
+	cleanup.Register(t, func() { _ = c2.Close(ctx) })
 	require.ErrorIs(t, c2.Connect(ctx), context.DeadlineExceeded)
 	require.Zero(t, l.Pending())
 	require.Equal(t, 1, rc.Connections())

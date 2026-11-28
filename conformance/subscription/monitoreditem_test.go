@@ -10,6 +10,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -553,7 +554,7 @@ func TestSubscription_HighLevelItemLifecycle(t *testing.T) {
 	ch := make(chan *opcua.PublishNotificationData, 256)
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: fastInterval}, ch)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	mon, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth,
 		opcua.NewMonitoredItemCreateRequestWithDefaults(f.Int32, ua.AttributeIDValue, 1),

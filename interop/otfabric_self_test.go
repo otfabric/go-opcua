@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -556,7 +557,7 @@ func TestOtfabricClient_ProxiedPort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = l.Close() })
+	cleanup.Register(t, func() { _ = l.Close() })
 	go func() {
 		for {
 			conn, err := l.Accept()

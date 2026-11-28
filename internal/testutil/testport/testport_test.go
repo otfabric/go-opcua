@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 func TestUDP(t *testing.T) {
@@ -62,7 +64,7 @@ func TestFreeOnIPv6Wildcard(t *testing.T) {
 func TestBindUDP(t *testing.T) {
 	// The first port is taken between hand-out and bind: BindUDP moves on.
 	var conns []net.PacketConn
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		for _, c := range conns {
 			_ = c.Close()
 		}
@@ -97,7 +99,7 @@ func TestBindTCP(t *testing.T) {
 
 func TestEphemeral(t *testing.T) {
 	lo, hi := ephemeralLow, ephemeralHigh
-	t.Cleanup(func() { ephemeralLow, ephemeralHigh = lo, hi })
+	cleanup.Register(t, func() { ephemeralLow, ephemeralHigh = lo, hi })
 	ephemeralLow, ephemeralHigh = 25000, 40000
 	require.True(t, ephemeral(25000))
 	require.False(t, ephemeral(24999))

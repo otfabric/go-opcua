@@ -31,6 +31,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/message"
@@ -112,7 +113,7 @@ func startGoPubSubServer(t *testing.T, o goPubSubOpts, configure func(p *pubsub.
 	}
 	var once sync.Once
 	closeServer := func() { once.Do(func() { _ = s.Close() }) }
-	t.Cleanup(closeServer)
+	cleanup.Register(t, closeServer)
 	if configure != nil {
 		configure(s.PubSub(), ns.ID())
 	}
@@ -465,7 +466,7 @@ func startRuntime(t *testing.T, cfg *ua.PubSubConfigurationDataType, opts ...pub
 	if err := p.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	t.Cleanup(func() { _ = p.Close() })
+	cleanup.Register(t, func() { _ = p.Close() })
 	return p
 }
 
@@ -562,7 +563,7 @@ func TestPubSubRuntime_GoSubscriberPullsKeys_Open62541SKS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewKeySource: %v", err)
 	}
-	t.Cleanup(func() { _ = ks.Close() })
+	cleanup.Register(t, func() { _ = ks.Close() })
 	keys.ks.Store(ks)
 	values := psValues(c.vars, psFresh())
 	writePubSubVars(t, pub.endpoint, c.vars, values)

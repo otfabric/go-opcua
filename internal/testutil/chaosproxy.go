@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // Direction identifies one of the two byte streams of a proxied connection.
@@ -111,7 +113,7 @@ func NewChaosProxy(t testing.TB, backend string, seed int64) *ChaosProxy {
 	}
 	p.wg.Add(1)
 	go p.acceptLoop()
-	t.Cleanup(p.Close)
+	cleanup.Register(t, p.Close)
 	return p
 }
 

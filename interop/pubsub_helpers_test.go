@@ -43,6 +43,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/pubsub/transport"
@@ -546,7 +547,7 @@ func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 			}
 			continue
 		}
-		t.Cleanup(func() {
+		cleanup.Register(t, func() {
 			stop()
 			if t.Failed() {
 				t.Logf("%s PubSub server %s log:\n%s", p.name, name, logString())
@@ -627,7 +628,7 @@ func startMosquitto(t *testing.T) int {
 		if run.exited() {
 			t.Fatalf("mosquitto exited:\n%s", logString())
 		}
-		t.Cleanup(func() {
+		cleanup.Register(t, func() {
 			dockerStop(name)
 			run.wait()
 			if t.Failed() {
@@ -695,7 +696,7 @@ func psSubscribe(t *testing.T, cfg transport.Config, topic string) (<-chan *tran
 		_ = conn.Close()
 		return nil, fmt.Errorf("subscribe %s %s: %w", cfg.URL, topic, err)
 	}
-	t.Cleanup(func() { _ = conn.Close() })
+	cleanup.Register(t, func() { _ = conn.Close() })
 	return ch, nil
 }
 
@@ -708,7 +709,7 @@ func psDial(t *testing.T, cfg transport.Config) transport.Connection {
 	if err != nil {
 		t.Fatalf("open %s: %v", cfg.URL, err)
 	}
-	t.Cleanup(func() { _ = conn.Close() })
+	cleanup.Register(t, func() { _ = conn.Close() })
 	return conn
 }
 
@@ -747,7 +748,7 @@ func dialSecureUserClient(t *testing.T, endpoint, policy, mode, user, pass strin
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("Connect %s/%s as %s: %v", policy, mode, user, err)
 	}
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = c.Close(ctx)

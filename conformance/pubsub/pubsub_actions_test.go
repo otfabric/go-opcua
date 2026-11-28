@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/remote"
 	"github.com/otfabric/go-opcua/pubsub/transport"
@@ -60,7 +61,7 @@ func TestPubSub_ActionChunksServerResponder(t *testing.T) {
 		pubsub.WithKeySource("sg", ring))
 	require.NoError(t, err)
 	require.NoError(t, req.Start(context.Background()))
-	t.Cleanup(func() { _ = req.Close() })
+	cleanup.Register(t, func() { _ = req.Close() })
 
 	ids := map[string]pubsub.ComponentID{}
 	for _, c := range resp.Components() {

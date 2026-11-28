@@ -27,6 +27,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -503,7 +504,7 @@ func qualifyNodeOpcuaSubscriptionService(t *testing.T, kind string) (status stri
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	unsupported := func(msg string) bool {
 		return strings.Contains(msg, "BadServiceUnsupported") || strings.Contains(msg, "BadNotImplemented")
@@ -856,7 +857,7 @@ func TestNodeOpcuaServer_ReverseConnect(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListenReverse: %v", err)
 		}
-		t.Cleanup(func() { _ = l.Close() })
+		cleanup.Register(t, func() { _ = l.Close() })
 
 		startAdapterReverseServer(t, nodeOpcuaEnv, defaultNodeOpcuaImage, l.Addr().(*net.TCPAddr).Port)
 
@@ -875,7 +876,7 @@ func TestNodeOpcuaServer_ReverseConnect(t *testing.T) {
 		if err := c.Connect(ctx); err != nil {
 			t.Fatalf("Connect over reverse connection: %v", err)
 		}
-		t.Cleanup(func() {
+		cleanup.Register(t, func() {
 			ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel2()
 			_ = c.Close(ctx2)
@@ -985,7 +986,7 @@ func TestNodeOpcuaServer_ReverseConnect_Secure(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListenReverse: %v", err)
 		}
-		t.Cleanup(func() { _ = l.Close() })
+		cleanup.Register(t, func() { _ = l.Close() })
 		startNodeOpcuaSecureReverseServer(t, l.Addr().(*net.TCPAddr).Port)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*reverseDialTimeout)
