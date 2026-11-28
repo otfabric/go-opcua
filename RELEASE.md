@@ -20,7 +20,7 @@ Two fixes of the UAFX ConnectionManager (`uafx/fxcm`): `Recovery.Unreachable` co
 ---
 ## v1.42.0
 
-**Date:** 2026-11-27
+**Date:** 2026-11-28
 **Previous release:** v1.41.0
 
 Correctness fixes of phase 0 of docs/roadmap.md, each against the clause of the specification it follows, and phase 1: pinned code generator inputs and one NodeSet2 reader.
