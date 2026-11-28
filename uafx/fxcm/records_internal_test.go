@@ -215,3 +215,42 @@ func FuzzLoadState(f *testing.F) {
 		}
 	})
 }
+
+// TestCanonicalTime (OPC 10000-6 §5.2.2.5): a CreationTime is held as it is
+// after its binary encoding, so that the one read from an endpoint equals
+// the one its record keeps: a time at or after 9999-12-31 23:59:59 UTC is
+// the latest time that can be represented, the null DateTime stays null,
+// and the record of an endpoint loads in that form (the input FuzzDecodeRecord
+// found, testdata/fuzz/FuzzDecodeRecord/56a7c1d25486e914).
+func TestCanonicalTime(t *testing.T) {
+	t.Parallel()
+	latest := ua.NewBuffer([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f}).ReadTime()
+	now := time.Date(2026, 11, 28, 1, 2, 3, 400, time.UTC)
+	for _, tc := range []struct {
+		name string
+		in   time.Time
+		want time.Time
+	}{
+		{"null", time.Time{}, time.Time{}},
+		{"a time in range, to 100 ns", now.Add(50), now},
+		{"at the limit", time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC), latest},
+		{"after the limit", time.Date(12604, 5, 16, 11, 47, 2, 0, time.UTC), latest},
+		{"at or before 1601", time.Date(1500, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{}},
+	} {
+		require.True(t, tc.want.Equal(canonicalTime(tc.in)), "%s: %v", tc.name, canonicalTime(tc.in))
+		require.True(t, canonicalTime(tc.in).Equal(canonicalTime(canonicalTime(tc.in))), "%s: a fixed point", tc.name)
+	}
+
+	// A record whose CreationTime is after the limit but below the
+	// maximum Int64, which no Manager writes, loads canonical.
+	part, err := ua.Encode(&epStored{SetName: "s", CreationTime: now})
+	require.NoError(t, err)
+	enc := ua.NewBuffer(nil)
+	enc.WriteTime(now)
+	i := strings.Index(string(part), string(enc.Bytes()))
+	require.GreaterOrEqual(t, i, 0)
+	binary.LittleEndian.PutUint64(part[i:], math.MaxInt64-1)
+	rec := new(epStored)
+	require.NoError(t, decodeRecord(frame(part), rec))
+	require.True(t, latest.Equal(rec.CreationTime), "%v", rec.CreationTime)
+}

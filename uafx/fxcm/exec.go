@@ -2130,7 +2130,7 @@ func endpointEvidence(ctx context.Context, t *target, n *ua.NodeID) (cm string, 
 	if ctNode != nil {
 		created, _ = dvValue(res.Results[i]).(time.Time)
 	}
-	return cm, cmOK, created, nil
+	return cm, cmOK, canonicalTime(created), nil
 }
 
 func (x *run) relatedIsOurs(ctx context.Context, t *target, n *ua.NodeID, ours *uafx.RelatedEndpoint) bool {

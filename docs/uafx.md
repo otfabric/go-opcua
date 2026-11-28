@@ -1309,7 +1309,10 @@ Unresolved:
   ConnectionManagerApplicationUri read with the Diagnostics is checked as
   well, so that one that changed between the two reads drops the record;
 - the incarnation: the Diagnostics CreationTime (§6.6.2 Table 74) equal
-  to the recorded one; one of them missing is Unresolved; neither is
+  to the recorded one, both as they are after their binary encoding (OPC
+  10000-6 §5.2.2.5: a time at or after 9999-12-31 23:59:59 UTC is the
+  latest time that can be represented, as the record keeps it); one of
+  them missing is Unresolved; neither is
   proven only with `ExclusiveApplicationURI` and our
   ConnectionManagerApplicationUri on the endpoint;
 - the configuration: Mode, InputVariables, OutputVariables, IsPersistent,

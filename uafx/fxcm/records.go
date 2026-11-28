@@ -359,7 +359,25 @@ func decodeRecord(val []byte, v any) error {
 	if crc32.Checksum(part, crcTable) != binary.LittleEndian.Uint32(val[5+n:]) {
 		return fmt.Errorf("%w: checksum", errRecord)
 	}
-	return decodeExact(part, v)
+	if err := decodeExact(part, v); err != nil {
+		return err
+	}
+	if e, ok := v.(*epStored); ok {
+		e.CreationTime = canonicalTime(e.CreationTime)
+	}
+	return nil
+}
+
+// canonicalTime is t as it is after its binary encoding (OPC 10000-6
+// §5.2.2.5): a time at or after 9999-12-31 23:59:59 UTC is encoded as the
+// maximum Int64 and decodes as the latest time that can be represented, one
+// at or before 1601-01-01 as the null DateTime. A CreationTime is held in
+// this form, read from an endpoint or loaded from its record, so that the
+// two compare equal across a restart.
+func canonicalTime(t time.Time) time.Time {
+	b := ua.NewBuffer(nil)
+	b.WriteTime(t)
+	return ua.NewBuffer(b.Bytes()).ReadTime()
 }
 
 // decodeExact decodes b into v and fails unless it takes all of b.

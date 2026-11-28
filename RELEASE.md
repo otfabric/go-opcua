@@ -5,15 +5,17 @@
 **Date:** 2026-11-28
 **Previous release:** v1.41.0
 
-A fix of the recovery status of the UAFX ConnectionManager (`uafx/fxcm`, design §6.4): `Recovery.Unreachable` could lose the error of a server that cannot be reached while a run of the set was in progress.
+Two fixes of the UAFX ConnectionManager (`uafx/fxcm`): `Recovery.Unreachable` could lose the error of a server that cannot be reached while a run of the set was in progress (design §6.4), and a CreationTime past the year 9999 did not compare equal to its own record after a restart (design §6.5).
 
 ### Fixed
 
 - `fxcm`: a background verification pass that skipped a set because a run held it (the run verifies that set as its first step) recorded the skip as a successful attempt and cleared the error the run had just recorded, so `Status(k).Recovery.Unreachable` was empty while the records stayed Unverified and the server was down, until the next background retry (up to `VerifyOptions.RetryMax`, 1 min by default). A pass that contacts no server now keeps the last error; an attempt of a run on its own set is recorded, and the error is forgotten once no set has an Unverified record on the server. This was the intermittent failure of `TestCrash` "establish with an intent written".
+- `fxcm`: a Diagnostics CreationTime at or after 9999-12-31 23:59:59 UTC, which the binary encoding stores as the maximum Int64 (OPC 10000-6 §5.2.2.5), was compared as read against the clamped value its record loads after a restart, so the incarnation check left such an endpoint Unresolved instead of re-proving it. The CreationTime read from an endpoint and the one loaded from a record are now both held as they are after their encoding; the same mismatch made the record codec fail its round trip (found by `FuzzDecodeRecord` in CI).
 
 ### Tests
 
 - `TestVerifySkipKeepsUnreachable` (`uafx/fxcm`): a failed attempt is reported, a pass that skips the held set and the run of another set keep the report, the run's attempt on its set is recorded, and the report goes when nothing on the server is Unverified.
+- `TestCanonicalTime` (`uafx/fxcm`): CreationTimes in range, at and after the 9999 limit, before 1601 and null, and a record with a CreationTime after the limit, which loads canonical; the input `FuzzDecodeRecord` found is in its corpus.
 
 ---
 ## v1.41.0
