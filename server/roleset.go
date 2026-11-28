@@ -63,7 +63,15 @@ import (
 //     and from the DefaultRolePermissions of every namespace (§4.2.3).
 //   - An Anonymous rule is refused (Bad_RequestNotAllowed) for SecurityAdmin,
 //     ConfigureAdmin and SecurityKeyServerAdmin, the roles with
-//     administrator rights (§4.4.1).
+//     administrator rights: "a Server should refuse to allow an ANONYMOUS_5
+//     ... mapping rule to be added to Roles with administrator privileges"
+//     (§4.4.1).
+//   - "The Properties and Methods of the RoleType ... shall only be
+//     browseable, readable, writeable and callable by authorized
+//     administrators through an encrypted channel" (§4.4.1): the Methods
+//     and Writes check it themselves; Browse and Read of the Properties are
+//     left to the RolePermissions and AccessRestrictions of the nodes, which
+//     the [RBACAccessController] enforces.
 //   - A Client Certificate is trusted when the server validates client
 //     certificates ([WithClientCertificateTrustList],
 //     [WithClientCertificateValidator] or [WithPushManagement]) and the

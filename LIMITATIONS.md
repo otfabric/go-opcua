@@ -119,7 +119,10 @@ behaviour you may notice, and the deviations of peers are in
   configuration of the roles lives in memory and is lost when the process
   ends (persistence is phase 4 of docs/roadmap.md). The roles of namespace 0
   cannot be removed; Anonymous, AuthenticatedUser and TrustedApplication
-  cannot be changed. CustomConfiguration is always FALSE: no vendor-specific
+  cannot be changed. Browse and Read of the role Properties are limited to
+  administrators only by the `RBACAccessController` (or an own
+  `AccessController`), through the RolePermissions of the nodes, not by the
+  RoleSet itself (§4.4.1). CustomConfiguration is always FALSE: no vendor-specific
   mapping. The RoleMapper is not called again when a role changes: an active
   session keeps the RoleMapper roles of its last ActivateSession. Thumbprint
   rules use SHA-1 (Part 6 §3.1.1, the hash where no SecurityPolicy

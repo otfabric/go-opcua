@@ -734,6 +734,15 @@ ApplicationsExclude and EndpointsExclude. What it means for security:
   TrustedApplication. Grant permissions to Anonymous with that in mind.
 - An Anonymous rule cannot be given to SecurityAdmin, ConfigureAdmin or
   SecurityKeyServerAdmin (`Bad_RequestNotAllowed`, §4.4.1).
+- "The Properties and Methods of the RoleType ... shall only be
+  browseable, readable, writeable and callable by authorized
+  administrators through an encrypted channel" (§4.4.1). The Methods and
+  the Writes check it themselves. Browse and Read of the Properties follow
+  the RolePermissions (SecurityAdmin) and AccessRestrictions (signed and
+  encrypted) of the NodeSet: use the `RBACAccessController`, or an
+  `AccessController` of your own that keeps the Properties from other
+  users; the `DefaultAccessController` lets every session on an encrypted
+  channel read them.
 - Application rules and Applications use the ApplicationUri of the Client
   Certificate, and only of one the server validated
   (`WithClientCertificateTrustList`, `WithClientCertificateValidator` or
