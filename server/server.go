@@ -248,6 +248,9 @@ type serverConfig struct {
 	diagnosticsOff bool
 	// auditing turns the audit events on (WithAuditing).
 	auditing bool
+	// changeAuditOff: WithChangeAuditing(false), no audit events of Write,
+	// HistoryUpdate and the NodeManagement services.
+	changeAuditOff bool
 	// alarmClock is the clock of the alarm timers (WithAlarmClock).
 	alarmClock Clock
 	// push is the configuration of WithPushManagement (nil: none).

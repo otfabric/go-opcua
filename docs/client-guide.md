@@ -11,7 +11,7 @@
 | **Discovery** | `GetEndpoints`, `FindServers`, `FindServersWithFilter`, `FindServersOnNetwork`, `FindServersOnNetworkWithFilter`, `RegisterServer`, `RegisterServer2`, `DiscoverServers` | Fully implemented |
 | **Session** | Automatic via `Connect` / `Close` | Fully implemented |
 | **Attribute** | `Read`, `ReadValue`, `Write`, `WriteValue` | Fully implemented (`IndexRange`, `TimestampsToReturn`) |
-| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime`, `HistoryReadEvent`, `HistoryReleaseContinuationPoints`, `HistoryUpdateData`, `HistoryUpdateEvents`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, `HistoryDeleteEvents` | Fully implemented (server-dependent; go-opcua default `*Historian` covers raw/modified/at-time/processed and events + update/delete) |
+| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime`, `HistoryReadEvent`, `HistoryReleaseContinuationPoints`, `HistoryUpdateData`, `HistoryUpdateEvents`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, `HistoryDeleteEvents`; Annotations: `HistoryReadAnnotations`, `HistoryUpdateStructureData`, `ReadAnnotations`, `UpdateAnnotations` | Fully implemented (server-dependent; go-opcua default `*Historian` covers raw/modified/at-time/processed and events + update/delete) |
 | **Browse** | `Browse`, `BrowseNext` | Fully implemented (`ResultMask`, continuation release) |
 | **View** | `RegisterNodes`, `UnregisterNodes` | Fully implemented |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` | Fully implemented |
@@ -1383,6 +1383,28 @@ A loop that stops before the last page frees the point on the server (Part 4 §5
 st, err := c.HistoryReleaseContinuationPoints(ctx, d, &ua.HistoryReadValueID{NodeID: notifier, ContinuationPoint: cp})
 // st[0]: Good, or Bad_ContinuationPointInvalid for a point already used, released or of another session
 ```
+
+Annotations (Part 11 §6.6.6) of a node with the Annotations Property (§5.1.2) are
+written with `UpdateAnnotations` (UpdateStructureDataDetails, §6.9.3) and read with
+`ReadAnnotations` (ReadAnnotationDataDetails, §6.5.6); `HistoryUpdateStructureData`
+and `HistoryReadAnnotations` take the full details. The time of a
+`HistoryAnnotation` is the SourceTimestamp the server identifies it by:
+
+```go
+ops, err := c.UpdateAnnotations(ctx, nodeID, ua.PerformUpdateTypeInsert, opcua.HistoryAnnotation{
+    Time:       sampleTime,
+    Annotation: &ua.Annotation{Message: "sensor recalibrated", UserName: "olivia", AnnotationTime: time.Now()},
+})
+// ops[0]: Good_EntryInserted, or Bad_EntryExists for a time with one
+notes, err := c.ReadAnnotations(ctx, nodeID, sampleTime, otherTime)
+// one per time in order; notes[1].Status Bad_NoData and a nil Annotation for a time without one
+_, err = c.UpdateAnnotations(ctx, nodeID, ua.PerformUpdateTypeRemove, opcua.HistoryAnnotation{Time: sampleTime})
+```
+
+A Bad status of the node, such as `Bad_HistoryOperationUnsupported` for a node without
+Annotations, is the error. A raw read (`HistoryReadRawModified`) of the Annotations
+Property returns the Annotations of a range; the processed Aggregate AnnotationCount
+counts them per interval.
 
 Peer-proven history is raw HistoryRead (`history.read.raw`) in both directions with all six
 peers, and its continuation points (`history.read.continuation`) in both directions with all

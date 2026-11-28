@@ -76,9 +76,22 @@ behaviour you may notice, and the deviations of peers are in
   persisted across a restart (Part 14 §9.1.2), outside the components UAFX
   persists.
 - mDNS has no probing or conflict resolution.
-- Part 13 Aggregates: the AnnotationCount Aggregate is not implemented (the
-  server keeps no Annotations, Part 11 §5.1.2). The AggregateFilter of a
-  monitored item (Part 4 §7.22.4) reads no history. A startTime in the past
+- History Annotations (Part 11 §5.1.2): the SourceTimestamp identifies an
+  Annotation, so a node has at most one per time (§6.9.3 leaves the choice to
+  the server). The Annotations Property has a null value; deleting the node or
+  the Property does not delete the Annotations of the provider. An empty
+  userName is the user of the session, not left empty.
+- Change audit events (Part 4 §6.5.7, §6.5.8; Part 11 §5.8): the OldValues
+  of an event update or delete are null (the provider keeps no event before
+  an update) and a modified raw delete has none. The OldValues of a data
+  update are read from the provider before the update, outside the update:
+  a concurrent writer can change them in between. An event insert names the
+  EventIds of the inserted events in the Message. A Write or HistoryUpdate
+  the service refuses as a whole reports one event, with the Server object as
+  SourceNode.
+- Part 13 Aggregates: the AggregateFilter of a monitored item (Part 4
+  §7.22.4) reads no history, and refuses AnnotationCount, which "applies to
+  Historical Aggregates only" (Part 13 Table 5). A startTime in the past
   is revised to the first boundary after the creation of the item. The
   server does not wait for late samples before it calculates an interval
   (Part 13 §4.3.2 allows that). An item keeps at most 65536 raw values

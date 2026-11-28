@@ -149,7 +149,8 @@ func aggregateConfigOf(h HistoryProvider, nodeID *ua.NodeID) aggregate.Config {
 //   - Bad_FilterNotAllowed when the item is not on the Value Attribute:
 //     Aggregates are calculated from the values of a Variable.
 //   - Bad_AggregateNotSupported for an Aggregate the server does not
-//     calculate (Part 13 §5.3.2, Table 45).
+//     calculate (Part 13 §5.3.2, Table 45), and for AnnotationCount, which
+//     "applies to Historical Aggregates only" (Part 13 §4.2.2.2, Table 5).
 //   - Bad_MonitoredItemFilterInvalid for an aggregateConfiguration that is
 //     not valid (Part 13 §4.2.1.2).
 //   - Bad_TimestampsToReturnInvalid unless the source timestamp is asked
@@ -162,7 +163,7 @@ func newAggregateItem(rv *ua.ReadValueID, f *ua.AggregateFilter, cfg aggregate.C
 	if rv.AttributeID != ua.AttributeIDValue {
 		return nil, ua.StatusBadFilterNotAllowed
 	}
-	if !aggregate.Supported(f.AggregateType) {
+	if !aggregate.Supported(f.AggregateType) || aggregate.HistoricalOnly(f.AggregateType) {
 		return nil, ua.StatusBadAggregateNotSupported
 	}
 	cfg = cfg.Override(f.AggregateConfiguration)

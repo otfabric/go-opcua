@@ -501,40 +501,43 @@ func (s *Server) mayReadEvent(ctx context.Context, sess *session, eventType *ua.
 // Events matched by EventId; Insert and Update give an event without one a
 // new EventId, and null EventType and Time default to BaseEventType and the
 // current time.
-func (s *AttributeService) updateEventHistory(ctx context.Context, sc *uasc.SecureChannel, sess *session, h HistoryProvider, d *ua.UpdateEventDetails) *ua.HistoryUpdateResult {
+//
+// inserted are the EventIds of the events the provider inserted, for the
+// audit event (Part 11 §5.8.1).
+func (s *AttributeService) updateEventHistory(ctx context.Context, sc *uasc.SecureChannel, sess *session, h HistoryProvider, d *ua.UpdateEventDetails) (_ *ua.HistoryUpdateResult, inserted [][]byte) {
 	up, ok := h.(EventHistoryUpdater)
 	if !ok {
-		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}
+		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
 	}
 	n, st := s.srv.eventHistoryNode(ctx, sc, sess, d.NodeID, true)
 	if st != ua.StatusOK {
-		return &ua.HistoryUpdateResult{StatusCode: st}
+		return &ua.HistoryUpdateResult{StatusCode: st}, nil
 	}
 	perform := d.PerformInsertReplace
 	switch perform {
 	case ua.PerformUpdateTypeInsert, ua.PerformUpdateTypeReplace, ua.PerformUpdateTypeUpdate:
 	default:
-		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadInvalidArgument}
+		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadInvalidArgument}, nil
 	}
 	f := d.Filter
 	if f == nil || len(f.SelectClauses) == 0 || f.WhereClause != nil && len(f.WhereClause.Elements) > 0 {
-		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadEventFilterInvalid}
+		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadEventFilterInvalid}, nil
 	}
 	keys := make([]string, len(f.SelectClauses))
 	selected := map[string]bool{}
 	for i, c := range f.SelectClauses {
 		if c == nil {
-			return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadEventFilterInvalid}
+			return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadEventFilterInvalid}, nil
 		}
 		if c.IndexRange != "" {
-			return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadIndexRangeInvalid}
+			return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadIndexRangeInvalid}, nil
 		}
 		keys[i] = clauseKey(c)
 		selected[keys[i]] = true
 	}
 	if perform == ua.PerformUpdateTypeReplace && !selected["EventId"] ||
 		perform != ua.PerformUpdateTypeReplace && (!selected["EventType"] || !selected["Time"]) {
-		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadArgumentsMissing}
+		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadArgumentsMissing}, nil
 	}
 
 	stored := storedFields(s.srv.storageFilter(d.NodeID, n))
@@ -557,26 +560,29 @@ func (s *AttributeService) updateEventHistory(ctx context.Context, sc *uasc.Secu
 		ignored = append(ignored, ign)
 	}
 	if len(events) == 0 {
-		return &ua.HistoryUpdateResult{StatusCode: ua.StatusOK, OperationResults: ops}
+		return &ua.HistoryUpdateResult{StatusCode: ua.StatusOK, OperationResults: ops}, nil
 	}
 	res := up.UpdateEvents(d.NodeID, perform, events)
 	if res == nil {
-		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadInternalError}
+		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadInternalError}, nil
 	}
 	if isBad(res.StatusCode) {
-		return &ua.HistoryUpdateResult{StatusCode: res.StatusCode}
+		return &ua.HistoryUpdateResult{StatusCode: res.StatusCode}, nil
 	}
 	for j, i := range index {
 		op := ua.StatusBadInternalError
 		if j < len(res.OperationResults) {
 			op = res.OperationResults[j]
 		}
+		if op == ua.StatusGoodEntryInserted {
+			inserted = append(inserted, events[j].EventID())
+		}
 		if ignored[j] && op.Uint32()&0xC0000000 == 0 {
 			op = ua.StatusGoodDataIgnored
 		}
 		ops[i] = op
 	}
-	return &ua.HistoryUpdateResult{StatusCode: res.StatusCode, OperationResults: ops}
+	return &ua.HistoryUpdateResult{StatusCode: res.StatusCode, OperationResults: ops}, inserted
 }
 
 // historicalEventOf builds the event of one HistoryEventFieldList of
@@ -683,6 +689,7 @@ var historyCapabilities = []struct {
 	{id.HistoryServerCapabilitiesReplaceEventCapability, isA[EventHistoryUpdater]},
 	{id.HistoryServerCapabilitiesUpdateEventCapability, isA[EventHistoryUpdater]},
 	{id.HistoryServerCapabilitiesDeleteEventCapability, isA[EventHistoryDeleter]},
+	{id.HistoryServerCapabilitiesInsertAnnotationCapability, isA[AnnotationHistoryProvider]},
 }
 
 func isA[T any](h HistoryProvider) bool {

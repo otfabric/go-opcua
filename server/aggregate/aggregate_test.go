@@ -42,7 +42,7 @@ func TestCheck(t *testing.T) {
 		want ua.StatusCode
 	}{
 		"no aggregate":       {func(r *Request) { r.Aggregate = nil }, ua.StatusBadAggregateNotSupported},
-		"AnnotationCount":    {func(r *Request) { r.Aggregate = agg(id.AggregateFunctionAnnotationCount) }, ua.StatusBadAggregateNotSupported},
+		"unknown aggregate":  {func(r *Request) { r.Aggregate = agg(id.AggregateFunctionCount + 100000) }, ua.StatusBadAggregateNotSupported},
 		"other namespace":    {func(r *Request) { r.Aggregate = ua.NewNumericNodeID(1, id.AggregateFunctionCount) }, ua.StatusBadAggregateNotSupported},
 		"no start":           {func(r *Request) { r.Start = time.Time{} }, ua.StatusBadInvalidArgument},
 		"no end":             {func(r *Request) { r.End = time.Time{} }, ua.StatusBadInvalidArgument},
@@ -113,7 +113,7 @@ func TestWindow(t *testing.T) {
 
 func TestFunctions(t *testing.T) {
 	fs := Functions()
-	require.Len(t, fs, 36)
+	require.Len(t, fs, 37)
 	seen := map[uint32]bool{}
 	for _, n := range fs {
 		require.True(t, Supported(n))
@@ -123,7 +123,7 @@ func TestFunctions(t *testing.T) {
 		seen[n.IntID()] = true
 	}
 	require.Equal(t, "TimeAverage2", Name(agg(id.AggregateFunctionTimeAverage2)))
-	for _, n := range []*ua.NodeID{nil, agg(id.AggregateFunctionAnnotationCount), ua.NewStringNodeID(0, "Average"), ua.NewNumericNodeID(2, id.AggregateFunctionAverage)} {
+	for _, n := range []*ua.NodeID{nil, ua.NewStringNodeID(0, "Average"), ua.NewNumericNodeID(2, id.AggregateFunctionAverage)} {
 		require.False(t, Supported(n))
 		require.Empty(t, Name(n))
 		require.Empty(t, Description(n))
@@ -274,6 +274,7 @@ func TestInvalidInputs(t *testing.T) {
 		id.AggregateFunctionDurationGood: true, id.AggregateFunctionDurationBad: true,
 		id.AggregateFunctionPercentGood: true, id.AggregateFunctionPercentBad: true,
 		id.AggregateFunctionWorstQuality: true, id.AggregateFunctionWorstQuality2: true,
+		id.AggregateFunctionAnnotationCount: true,
 	}
 	for _, a := range Functions() {
 		r := Request{Aggregate: a, Start: at(1), End: at(6), ProcessingInterval: 0, Config: DefaultConfig()}

@@ -291,7 +291,7 @@ func (h *Historian) ReadModified(nodeID *ua.NodeID, startTime, endTime time.Time
 
 // ReadProcessed implements ProcessedHistoryReader: it calculates every
 // Aggregate of [aggregate.Functions] over the samples of nodeID (Part 11
-// §6.5.4, Part 13 §5.4), with the configuration of [Historian.AggregateConfig]
+// §6.5.4, Part 13 §5.4), AnnotationCount over its Annotations, with the configuration of [Historian.AggregateConfig]
 // overridden by aggregateConfiguration. A node without history is
 // Bad_HistoryOperationUnsupported; the other results are those of
 // [aggregate.Request.Check] and [aggregate.Request.Calculate].
@@ -304,13 +304,17 @@ func (h *Historian) ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Tim
 	}
 	cfg := h.aggregateConfigLocked(nodeID)
 	samples := slices.Clone(nh.samples)
+	var annotations []*ua.DataValue
+	if isAnnotationCount(aggregateType) {
+		annotations = h.annotationsOfLocked(nodeID.String())
+	}
 	h.mu.Unlock()
 
 	r, st := processedRequest(startTime, endTime, processingInterval, aggregateType, cfg.Override(aggregateConfiguration))
 	if st != ua.StatusOK {
 		return &ua.HistoryReadResult{StatusCode: st}, nil
 	}
-	return processedResult(r, samples), nil
+	return processedResult(r, samples, annotations), nil
 }
 
 // AggregateFunctions implements [AggregateFunctionLister]: the Historian
