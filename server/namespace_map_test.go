@@ -51,6 +51,17 @@ func TestMapNamespace_Attribute(t *testing.T) {
 		assert.Equal(t, "temp", lt.Text)
 	})
 
+	// The Mandatory Attributes of a Variable (Part 3 §5.6.2), AccessLevelEx
+	// with the AccessLevel as its first 8 bits (§8.58).
+	t.Run("read access levels and historizing", func(t *testing.T) {
+		nid := ua.NewStringNodeID(ns.ID(), "temp")
+		rw := byte(ua.AccessLevelTypeCurrentRead | ua.AccessLevelTypeCurrentWrite)
+		assert.Equal(t, rw, ns.Attribute(nid, ua.AttributeIDAccessLevel).Value.Value())
+		assert.Equal(t, rw, ns.Attribute(nid, ua.AttributeIDUserAccessLevel).Value.Value())
+		assert.Equal(t, uint32(rw), ns.Attribute(nid, ua.AttributeIDAccessLevelEx).Value.Value())
+		assert.Equal(t, false, ns.Attribute(nid, ua.AttributeIDHistorizing).Value.Value())
+	})
+
 	t.Run("unknown key returns StatusBadNodeIDUnknown", func(t *testing.T) {
 		dv := ns.Attribute(ua.NewStringNodeID(ns.ID(), "missing"), ua.AttributeIDValue)
 		assert.Equal(t, ua.StatusBadNodeIDUnknown, dv.Status)

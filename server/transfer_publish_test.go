@@ -329,3 +329,32 @@ func TestTransferSubscriptions_PublishDuringTheTransfer(t *testing.T) {
 		}
 	}
 }
+
+// TestAnnounceWithoutPublishRequest: a StatusChangeNotification announced
+// while the session has no queued Publish request is kept on the session
+// for the next one.
+func TestAnnounceWithoutPublishRequest(t *testing.T) {
+	srv, err := New(EndPoint("localhost", 0), InsecureNoSecurity(), EnableAuthMode(ua.UserTokenTypeAnonymous))
+	require.NoError(t, err)
+	require.NoError(t, srv.Start(context.Background()))
+	defer func() { _ = srv.Close() }()
+
+	resp, err := (&SessionService{srv: srv}).CreateSession(context.Background(), scNone(), &ua.CreateSessionRequest{
+		RequestHeader: reqHeader(), EndpointURL: "opc.tcp://localhost:4840",
+		RequestedSessionTimeout: 60000, ClientNonce: make([]byte, 32),
+	}, 1)
+	require.NoError(t, err)
+	sess := srv.sb.peek(resp.(*ua.CreateSessionResponse).AuthenticationToken)
+	require.NotNil(t, sess)
+	require.Empty(t, sess.PublishRequests)
+
+	sub := NewSubscription()
+	sub.srv = srv.SubscriptionService
+	sub.ID = 7
+	sub.Session = sess
+	change := pendingStatusChange{subID: 7, seq: 1, status: ua.StatusBadTimeout}
+	sub.announce(sess, nil, change)
+	got, ok := sess.takeStatusChange()
+	require.True(t, ok, "the notification waits on the session")
+	require.Equal(t, change, got)
+}

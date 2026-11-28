@@ -194,8 +194,9 @@ func TestDirectory_UpdateUnregister(t *testing.T) {
 	require.ErrorIs(t, e.pull(dialOpts{mode: ua.MessageSecurityModeNone, user: userDiscoveryAdmin}).UpdateApplication(ctx, rec), ua.StatusBadSecurityModeInsufficient)
 
 	c := e.dial(dialOpts{user: userDiscoveryAdmin})
+	// The Call service refuses the wrong type (Part 4 §5.12.2.2).
 	_, sc := e.rawCall(c, gdsid.DirectoryUnregisterApplication, ua.MustVariant("x"))
-	require.Equal(t, ua.StatusBadTypeMismatch, sc)
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	_, sc = e.rawCall(c, gdsid.DirectoryUpdateApplication, ua.MustVariant(ua.NewExtensionObject(&ua.Range{})))
 	require.Equal(t, ua.StatusBadDecodingError, sc)
 }

@@ -4245,6 +4245,11 @@ type PubReq struct {
 	// the session lives on a new channel, while the channel the subscription
 	// was created on is gone.
 	Channel *uasc.SecureChannel
+
+	// received is when the request arrived, from which its TimeoutHint
+	// counts (publishTimedOut); the zero time for a request queued
+	// without it, which never times out.
+
 }
 ```
 

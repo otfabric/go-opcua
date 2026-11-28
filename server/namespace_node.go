@@ -262,6 +262,13 @@ func (as *NodeNameSpace) Attribute(id *ua.NodeID, attr ua.AttributeID) *ua.DataV
 				a = &AttrValue{Value: DataValueFromValue(dt)}
 			}
 		}
+	case ua.AttributeIDAccessLevel, ua.AttributeIDUserAccessLevel, ua.AttributeIDHistorizing, ua.AttributeIDAccessLevelEx:
+		// The Mandatory Attributes of a Variable, with the values the
+		// server applies when the Node stores none (variable_attributes.go).
+		if dv, ok := variableAttribute(n, attr); ok {
+			return dv
+		}
+		a, err = n.Attribute(attr)
 	default:
 		a, err = n.Attribute(attr)
 	}

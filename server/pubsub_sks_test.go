@@ -300,7 +300,8 @@ func TestSKS_AddRemoveSecurityGroup(t *testing.T) {
 		{"lifetime", []any{"sg3", 0.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
 		{"negative lifetime", []any{"sg3", -1.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
 		{"name", []any{"", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
-		{"types", []any{"sg3", "1000", pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadTypeMismatch},
+		// A wrong type is refused by the Call service (Part 4 §5.12.2.2).
+		{"types", []any{"sg3", "1000", pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
 		// MaxPastKeyCount + MaxFutureKeyCount is at most 65534.
 		{"future keys", []any{"sg3", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(65535), uint32(0)}, ua.StatusBadInvalidArgument},
 		{"past keys", []any{"sg3", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(65535)}, ua.StatusBadInvalidArgument},
@@ -362,6 +363,9 @@ func TestSKS_AddRemoveSecurityGroup(t *testing.T) {
 	}
 	require.Equal(t, ua.StatusBadNodeIDUnknown, call(t, alice, groupsID, removeGroupID, nid).StatusCode)
 	require.Equal(t, ua.StatusBadNodeIDUnknown, call(t, alice, groupsID, removeGroupID, ua.NewNumericNodeID(0, 1)).StatusCode)
+	// SecurityGroupNodeId is a NodeId (OPC 10000-14 §8.5.3); a String broke
+	// a constraint (OPC 10000-4 §5.12.2.2).
+	require.Equal(t, ua.StatusBadInvalidArgument, call(t, alice, groupsID, removeGroupID, "sg2").StatusCode)
 
 	// Groups added through the Go API get nodes too; Close detaches.
 	require.NoError(t, ks.AddSecurityGroup(pubsubsec.SecurityGroupConfig{SecurityGroupID: "api", SecurityPolicyURI: pubsubsec.PolicyURIAes128CTR, KeyLifetime: time.Second}))
@@ -421,7 +425,11 @@ func TestSKS_SetSecurityKeys(t *testing.T) {
 		{"key length", []any{"pushed", p.URI(), uint32(1), []byte{1, 2}, [][]byte{}, 0.0, 1000.0}, ua.StatusBadSecurityChecksFailed},
 		{"token 0", []any{"pushed", p.URI(), uint32(0), key(1), [][]byte{}, 0.0, 1000.0}, ua.StatusBadInvalidArgument},
 		{"lifetime", []any{"pushed", p.URI(), uint32(1), key(1), [][]byte{}, 0.0, -5.0}, ua.StatusBadInvalidArgument},
-		{"scalar future keys", []any{"pushed", p.URI(), uint32(1), key(1), key(2), 0.0, 1000.0}, ua.StatusBadTypeMismatch},
+		{"scalar future keys", []any{"pushed", p.URI(), uint32(1), key(1), key(2), 0.0, 1000.0}, ua.StatusBadInvalidArgument},
+		// FutureKeys is ValueRank 1, "an array with one dimension" (OPC
+		// 10000-3 §5.6.2): a matrix of keys broke a constraint (OPC
+		// 10000-4 §5.12.2.2).
+		{"matrix of future keys", []any{"pushed", p.URI(), uint32(1), key(1), ua.MustVariant([][][]byte{{key(2)}, {key(3)}}), 0.0, 1000.0}, ua.StatusBadInvalidArgument},
 		{"missing", []any{"pushed", p.URI()}, ua.StatusBadArgumentsMissing},
 	}
 	for _, c := range cases {

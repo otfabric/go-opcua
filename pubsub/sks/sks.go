@@ -89,9 +89,16 @@ func SetSecurityKeys(ctx context.Context, c *opcua.Client, securityGroupID strin
 	if future == nil {
 		future = [][]byte{}
 	}
-	res, err := c.CallMethod(ctx, publishSubscribe, setSecurityKeys,
-		securityGroupID, keys.SecurityPolicyURI, keys.FirstTokenID, keys.Keys[0], future,
-		durationMS(keys.TimeToNextKey), durationMS(keys.KeyLifetime))
+	in := uamethod.PublishSubscribeTypeSetSecurityKeysInput{
+		SecurityGroupID:   securityGroupID,
+		SecurityPolicyURI: keys.SecurityPolicyURI,
+		CurrentTokenID:    keys.FirstTokenID,
+		CurrentKey:        keys.Keys[0],
+		FutureKeys:        future,
+		TimeToNextKey:     durationMS(keys.TimeToNextKey),
+		KeyLifetime:       durationMS(keys.KeyLifetime),
+	}
+	res, err := c.Call(ctx, &ua.CallMethodRequest{ObjectID: publishSubscribe, MethodID: setSecurityKeys, InputArguments: in.Pack()})
 	if err != nil {
 		return fmt.Errorf("pubsub/sks: SetSecurityKeys: %w", err)
 	}

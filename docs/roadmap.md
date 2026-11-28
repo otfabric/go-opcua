@@ -98,16 +98,29 @@ push certificate management and the `gds` client;
 PubSubConfigurationType (ReserveIds, CloseAndUpdate) for the
 PubSubConfiguration file and `pubsub/remote`; PubSubKeyServiceType
 (GetSecurityKeys, GetSecurityGroup) for the SKS and `pubsub/sks`. The
-RoleSet, Role and ServerType Methods are generated as well. What remains:
-the GDS DirectoryType and CertificateDirectoryType, whose arguments are
-DataTypes outside namespace 0 (ApplicationRecordDataType of the GDS
-NodeSet) or subtypes of built-in types the GDS NodeSet alone does not
-resolve (`TestNextFamilies`), need the generator to read a NodeSet with
-the one of namespace 0 and a contracts package per namespace; the
-Methods of ServerConfigurationType, SecurityGroupFolderType and
-PubSubKeyPushTargetType, still written by hand, and those of alarms and
-UAFX; and the events a Method generates, mandatory children and state
-machine transitions, which are not generated.
+RoleSet, Role and ServerType Methods are generated as well. The third
+families are done: ServerConfigurationType (OPC 10000-12 §7.10:
+UpdateCertificate, CreateSelfSignedCertificate, DeleteCertificate,
+GetCertificates, ApplyChanges, CreateSigningRequest, CancelChanges,
+GetRejectedList, ResetToServerDefaults) for push certificate management
+(`server/push_methods.go`) and the `gds` push client;
+SecurityGroupFolderType (OPC 10000-14 §8.5: AddSecurityGroup,
+RemoveSecurityGroup, AddSecurityGroupFolder, RemoveSecurityGroupFolder)
+for the SKS and the `uafx/fxcm` RemoteSKS; PublishSubscribeType (§9.1.3:
+SetSecurityKeys, AddConnection, RemoveConnection), whose SetSecurityKeys
+`EnableSecurityKeyPush` and `pubsub/sks` use; and PubSubKeyPushTargetType
+and PubSubKeyPushTargetFolderType (§8.6, §8.7), contracts only, as the
+server has no push targets. What remains: the GDS DirectoryType and
+CertificateDirectoryType, whose arguments are DataTypes outside namespace
+0 (ApplicationRecordDataType of the GDS NodeSet) or subtypes of built-in
+types the GDS NodeSet alone does not resolve (`TestNextFamilies`), need
+the generator to read a NodeSet with the one of namespace 0 and a
+contracts package per namespace; the PubSub configuration Methods of the
+server (AddConnection, RemoveConnection and the Methods of the
+PubSubConnection, group and DataSet types in `server/pubsub_model.go`),
+of alarms and of UAFX, still written by hand; and the events a Method
+generates (AlwaysGeneratesEvent), mandatory children and state machine
+transitions, which are not generated.
 
 ## Phase 3: core symmetry
 
@@ -210,17 +223,37 @@ includes and maps every ConformanceUnit, mandatory or optional, to tests and
 verified rows of `interop/coverage.json`, as evidenced, partial or missing;
 `make gen` renders the report and the default ServerProfileArray, and
 `go test ./internal/profiles` fails on a test that no longer exists or a
-ConformanceUnit without an entry. Micro Embedded Device 2025 Server: 16 of
-30 mandatory ConformanceUnits evidenced, 10 partial, 4 missing. Standard UA
-Client 2025: 33 of 48 evidenced, 12 partial, 3 missing. Neither is claimed,
-so the computed ServerProfileArray is empty; the gaps are listed in the
-report and in LIMITATIONS.md.
+ConformanceUnit without an entry. The first slice left Micro Embedded Device
+2025 Server with 16 of 30 mandatory ConformanceUnits evidenced, 10 partial
+and 4 missing.
 
-Next slices: close the mandatory gaps of the server Profile (AccessLevelEx,
-the missing ServerCapabilities and Server Object values, GetEndpoints
-ProfileUris, the RequestHandle of every ServiceFault, sessions served in
-parallel, the capacity and time synchronization documentation, a default
-certificate) and of the client Profile; make a claim depend on the
+The second slice (v1.43.0) closed 11 of those mandatory server gaps, each
+with tests:
+
+- AccessLevel, UserAccessLevel, Historizing and AccessLevelEx on every
+  Variable, and WriteFullArrayOnly (Address Space Base, Atomicity and Full
+  Array Only).
+- ServerArray, ServiceLevel and RedundancySupport (Core Structure 2).
+- MaxArrayLength, MaxStringLength, MaxByteStringLength,
+  MaxMonitoredItemsQueueSize and the ModellingRules and AggregateFunctions
+  Folders (Server Capabilities 2, MaxMonitoredItemsQueueSize and
+  Subscriptions).
+- The profileUris filter (Get Endpoints).
+- The requestHandle of every ServiceFault and the timeoutHint of Publish
+  (Session General Service Behaviour).
+- The capacities and time synchronization documentation (Core Capacities,
+  Time Sync - Support).
+
+The server Profile now has 27 of 30 evidenced, 3 partial and none missing.
+Standard UA Client 2025 has 33 of 48 evidenced, 12 partial and 3 missing.
+Neither is claimed, so the computed ServerProfileArray is empty; the gaps are
+listed in the report and in LIMITATIONS.md.
+
+Next slices: close the three partial units of the server Profile. These are
+sessions served in parallel (Session Multiple), a default certificate
+(Security Default ApplicationInstance Certificate) and the SemanticsChanged
+bit for a value from a data source (SemanticChange Bit). Then close the gaps
+of the client Profile; make a claim depend on the
 configuration of the server (a Profile is claimed only for the endpoints,
 security and limits it is configured with), and only then serve the
 ConformanceUnits Property; ledger rows against independent peers for the

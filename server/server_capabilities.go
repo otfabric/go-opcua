@@ -7,6 +7,7 @@ import (
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uacp"
 )
 
 // The Mandatory Properties of ServerCapabilitiesType (OPC 10000-5 §6.3.2)
@@ -74,6 +75,30 @@ func (s *serverConfig) localeIDArray() []string {
 //     refuses no HistoryRead for a count of continuation points (a
 //     HistoryProvider may release those it cannot keep, OPC 10000-4 §7.9);
 //   - SoftwareCertificates, the empty array: the server has none.
+//
+// and the Optional Properties the ConformanceUnits Base Info Server
+// Capabilities 2 and Base Info Server Capabilities
+// MaxMonitoredItemsQueueSize of OPC 10000-7 expose, from the limits the
+// server enforces:
+//
+//   - MaxArrayLength, "the maximum length of a one or multidimensional
+//     array supported by Variables, Method arguments and Event fields", in
+//     a multidimensional array "the overall length": [ua.MaxVariantArrayLength],
+//     the most elements the decoder accepts in a Variant, the type of every
+//     Variable value, Method argument and Event field (Part 6 §5.2.2.16),
+//     over all dimensions;
+//   - MaxStringLength and MaxByteStringLength, "the maximum number of bytes
+//     in Strings and LocalizedText" and "in a ByteString supported by
+//     Variables, Method arguments and Event fields": the largest request
+//     message the server accepts (requestMessageLimit). A String or
+//     ByteString a client writes or passes to a Method is part of a
+//     request, and the server refuses a request message larger than that
+//     (Part 6 §7.1.2.4, MaxMessageSize of the Acknowledge); the server
+//     imposes no other limit on them, so the value is an upper bound: the
+//     headers of the request take some of it;
+//   - MaxMonitoredItemsQueueSize, "the maximum size of data MonitoredItem
+//     queues": the largest QueueSize CreateMonitoredItems and
+//     ModifyMonitoredItems grant a data MonitoredItem (maxDataQueueSize).
 func (s *Server) bindServerCapabilities() {
 	for _, c := range []struct {
 		nodeID uint32
@@ -84,6 +109,10 @@ func (s *Server) bindServerCapabilities() {
 		{id.ServerServerCapabilitiesMinSupportedSampleRate, func() any { return float64(0) }},
 		{id.ServerServerCapabilitiesMaxHistoryContinuationPoints, func() any { return uint16(0) }},
 		{id.ServerServerCapabilitiesSoftwareCertificates, func() any { return []*ua.ExtensionObject{} }},
+		{id.ServerServerCapabilitiesMaxArrayLength, func() any { return capabilityValue(ua.MaxVariantArrayLength) }},
+		{id.ServerServerCapabilitiesMaxStringLength, func() any { return requestMessageLimit() }},
+		{id.ServerServerCapabilitiesMaxByteStringLength, func() any { return requestMessageLimit() }},
+		{id.ServerServerCapabilitiesMaxMonitoredItemsQueueSize, func() any { return s.cfg.maxDataQueueSize() }},
 	} {
 		n := s.ownNode(c.nodeID)
 		if n == nil {
@@ -94,4 +123,51 @@ func (s *Server) bindServerCapabilities() {
 		n.val = func() *ua.DataValue { return DataValueFromValue(value()) }
 		n.mu.Unlock()
 	}
+}
+
+// modellingRules are the ModellingRule Objects of OPC 10000-3 §6.4.4 the
+// server supports: those of namespace 0 (§6.4.4.5), which its node sets use.
+var modellingRules = []uint32{
+	id.ModellingRuleMandatory,
+	id.ModellingRuleOptional,
+	id.ModellingRuleExposesItsArray,
+	id.ModellingRuleOptionalPlaceholder,
+	id.ModellingRuleMandatoryPlaceholder,
+}
+
+// bindModellingRules lets the ModellingRules Folder of the
+// ServerCapabilities organize the ModellingRules: it "is an entry point to
+// browse to all ModellingRules supported by the Server. All ModellingRules
+// supported by the Server should be able to be browsed starting from this
+// Object" (OPC 10000-5 §6.3.2). The node set leaves the Folder empty.
+func (s *Server) bindModellingRules() {
+	folder := s.ownNode(id.ServerServerCapabilitiesModellingRules)
+	if folder == nil {
+		return
+	}
+	for _, nid := range modellingRules {
+		if n := s.ownNode(nid); n != nil {
+			folder.AddRef(n, RefType(id.Organizes), true)
+		}
+	}
+}
+
+// requestMessageLimit returns the largest request message, in bytes, the
+// server accepts: the MaxMessageSize of the Acknowledge of its opc.tcp and
+// opc.wss listeners (uacp.DefaultServerACK, Part 6 §7.1.2.4), which is also
+// the limit of an opc.https request body (httpsMaxRequestSize, equal by
+// default). Zero, which an application may set, is no limit.
+func requestMessageLimit() uint32 {
+	return uacp.DefaultServerACK.MaxMessageSize
+}
+
+// maxDataQueueSize returns the largest queue of a data MonitoredItem: that
+// of a durable subscription when durable subscriptions are enabled and
+// allow more (reviseDurableQueueSize), else maxMonitoredItemQueueSize
+// (reviseQueueSize).
+func (s *serverConfig) maxDataQueueSize() uint32 {
+	if !s.durable.Disabled {
+		return max(s.durable.maxQueueSize(), maxMonitoredItemQueueSize)
+	}
+	return maxMonitoredItemQueueSize
 }
