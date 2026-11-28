@@ -14,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/gds"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/pushstore"
@@ -32,7 +33,7 @@ func openPushStore(t *testing.T, dir string) *pushstore.Store {
 	t.Helper()
 	st, err := pushstore.OpenDir(context.Background(), dir, pushstore.Options{Owner: pushStoreOwner})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = st.Close() })
+	cleanup.Register(t, func() { _ = st.Close() })
 	return st
 }
 
@@ -240,7 +241,7 @@ func TestGDSPush_FileStoreConcurrent(t *testing.T) {
 		gs.mu.Unlock()
 		close(gate)
 	})
-	t.Cleanup(release) // before the server closes, if the test fails
+	cleanup.Register(t, release) // before the server closes, if the test fails
 	done := make(chan error, 1)
 	go func() { done <- a.ApplyChanges(ctx) }()
 	<-gs.entered
