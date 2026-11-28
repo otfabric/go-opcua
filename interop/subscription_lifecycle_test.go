@@ -12,6 +12,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -80,7 +81,7 @@ func TestGoServer_SubscriptionReviseParams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	if sub.RevisedPublishingInterval < 10*time.Millisecond {
 		t.Fatalf("RevisedPublishingInterval=%v, want >=10ms", sub.RevisedPublishingInterval)
@@ -134,7 +135,7 @@ func TestGoServer_MonitoringModeLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	monResp, err := sub.Monitor(ctx, ua.TimestampsToReturnNeither, req)
 	if err != nil {
@@ -224,7 +225,7 @@ func TestGoServer_PublishingModeQueueWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	drainInitial(t, notifyCh)
 	if _, err := sub.SetPublishingMode(ctx, false); err != nil {
@@ -284,7 +285,7 @@ func TestGoServer_ModifyMonitoredItemsLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	monResp, err := sub.Monitor(ctx, ua.TimestampsToReturnNeither, req)
 	if err != nil {
@@ -389,7 +390,7 @@ func TestGoServer_MoreNotificationsPartialDrain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	drainInitial(t, notifyCh)
 	for _, v := range []int32{1, 2, 3, 4, 5} {
@@ -433,7 +434,7 @@ func TestGoServer_IdleNoFabricatedDataChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	drainInitial(t, notifyCh)
 	expectNoDataChange(t, notifyCh, 800*time.Millisecond)
@@ -475,7 +476,7 @@ func TestGoServer_DeleteSubscriptionLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe B: %v", err)
 	}
-	t.Cleanup(func() { _ = subB.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = subB.Cancel(ctx) })
 
 	drainInitial(t, notifyA)
 	drainInitial(t, notifyB)
@@ -524,7 +525,7 @@ func TestGoServer_DeleteMonitoredItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	monResp, err := sub.Monitor(ctx, ua.TimestampsToReturnNeither, req)
 	if err != nil {

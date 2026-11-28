@@ -15,6 +15,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -37,7 +38,7 @@ func startWaiting(t *testing.T, name, endpoint string, opts ...opcua.Option) *wa
 		t.Fatalf("%s: %v", name, err)
 	}
 	w.c = c
-	t.Cleanup(func() { chaoskit.CloseClient(c, nil) })
+	cleanup.Register(t, func() { chaoskit.CloseClient(c, nil) })
 	go func() {
 		ctx, cancel := chaoskit.OpCtx()
 		defer cancel()

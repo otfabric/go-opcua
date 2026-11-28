@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	"github.com/otfabric/go-opcua"
@@ -357,7 +358,7 @@ func startSKS(t *testing.T, ks *security.KeyService) *sksServer {
 	t.Helper()
 	s := &sksServer{t: t, ks: ks, port: freeTCPPort(t)}
 	s.start()
-	t.Cleanup(s.stop)
+	cleanup.Register(t, s.stop)
 	return s
 }
 
@@ -464,7 +465,7 @@ func pullKeys(t *testing.T, s *sksServer, sg string) (*sks.KeySource, *atomic.In
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = src.Close() })
+	cleanup.Register(t, func() { _ = src.Close() })
 	return src, fails
 }
 

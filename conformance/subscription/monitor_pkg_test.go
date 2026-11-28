@@ -11,6 +11,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/monitor"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -61,7 +62,7 @@ func TestMonitor_ChannelSubscription(t *testing.T) {
 	ch := make(chan *monitor.DataChangeMessage, 256)
 	sub, err := m.ChanSubscribe(ctx, &opcua.SubscriptionParameters{Interval: fastInterval}, ch, f.Int32.String())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe(ctx) }) // also stops the pump goroutine
+	cleanup.Register(t, func() { _ = sub.Unsubscribe(ctx) }) // also stops the pump goroutine
 	require.NotZero(t, sub.SubscriptionID())
 	require.Contains(t, c.SubscriptionIDs(), sub.SubscriptionID())
 	require.Equal(t, 1, sub.Subscribed())
@@ -170,7 +171,7 @@ func TestMonitor_CallbackSubscription(t *testing.T) {
 		f.Int32.String(), f.String.String(),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe(ctx) })
+	cleanup.Register(t, func() { _ = sub.Unsubscribe(ctx) })
 	defer func() { _ = sub.Unsubscribe(ctx) }()
 	require.Equal(t, 2, sub.Subscribed())
 
@@ -295,7 +296,7 @@ func TestSubscription_Stats(t *testing.T) {
 	require.NoError(t, err)
 	msub, err := m.ChanSubscribe(ctx, &opcua.SubscriptionParameters{Interval: time.Hour}, make(chan *monitor.DataChangeMessage, 4))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = msub.Unsubscribe(ctx) })
+	cleanup.Register(t, func() { _ = msub.Unsubscribe(ctx) })
 	mu.Lock()
 	diag = append(diag, ua.NewExtensionObject(&ua.SubscriptionDiagnosticsDataType{SubscriptionID: msub.SubscriptionID(), NotificationsCount: 99}))
 	mu.Unlock()

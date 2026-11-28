@@ -15,6 +15,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
@@ -70,7 +71,7 @@ func startGoServerWithEvents(t *testing.T) (string, *server.Server) {
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	port := s.Port()
 	if port == 0 {
 		t.Fatal("server.Start: bound port is 0")
@@ -99,7 +100,7 @@ func TestGoServer_EventSubscription_BasicLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	// Create EventFilter with SelectClauses for standard fields.
 	filter := ua.NewEventFilter().
@@ -211,7 +212,7 @@ func TestGoServer_EventFilter_InvalidReject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	t.Run("NoFilter", func(t *testing.T) {
 		monReq := &ua.MonitoredItemCreateRequest{
@@ -314,7 +315,7 @@ func TestGoServer_EventMultipleEmissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	filter := ua.NewEventFilter().
 		Select("SourceName", "Severity").
@@ -451,7 +452,7 @@ func startGoServerWithCustomEventType(t *testing.T) (string, *server.Server, *ua
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	port := s.Port()
 	if port == 0 {
 		t.Fatal("server.Start: bound port is 0")
@@ -479,7 +480,7 @@ func TestGoServer_CustomEventSubtype(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	// Use the custom type as the OfType operand — this requires the server to
 	// accept namespace != 0 types that exist in the address space.
@@ -595,7 +596,7 @@ func TestGoServer_WhereClause_SeverityFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	// Filter: OfType(BaseEventType) AND Severity >= 500.
 	filter := ua.NewEventFilter().
@@ -706,7 +707,7 @@ func TestGoServer_CustomEventFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	// Request both standard and custom event fields.
 	filter := ua.NewEventFilter().
@@ -812,7 +813,7 @@ func TestGoServer_ModifyMonitoredItem_EventFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	// Create initial filter: accept all severities.
 	initialFilter := ua.NewEventFilter().

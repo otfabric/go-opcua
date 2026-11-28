@@ -9,6 +9,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/stretchr/testify/require"
@@ -25,7 +26,7 @@ func TestReverseConnectRefetchEndpoints(t *testing.T) {
 
 	l, err := uacp.ListenReverse(ctx, "127.0.0.1:0", nil)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = l.Close() })
+	cleanup.Register(t, func() { _ = l.Close() })
 
 	srv, _ := testutil.NewTestServer(t,
 		server.ApplicationURI(appURI),
@@ -42,7 +43,7 @@ func TestReverseConnectRefetchEndpoints(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(ctx))
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 
 	require.NoError(t, c.TestingRefetchEndpoints(ctx))
 

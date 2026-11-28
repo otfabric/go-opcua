@@ -18,6 +18,7 @@ import (
 
 	"github.com/otfabric/go-opcua/internal/amqp"
 	"github.com/otfabric/go-opcua/internal/testutil/amqpbroker"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 var bg = context.Background()
@@ -26,7 +27,7 @@ func startBroker(t *testing.T, opts amqpbroker.Options) *amqpbroker.Broker {
 	t.Helper()
 	b := amqpbroker.New(opts)
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	return b
 }
 
@@ -40,7 +41,7 @@ func dial(t *testing.T, opts amqp.Options) *amqp.Client {
 	defer cancel()
 	c, err := amqp.Dial(ctx, opts)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	cleanup.Register(t, func() { _ = c.Close() })
 	return c
 }
 

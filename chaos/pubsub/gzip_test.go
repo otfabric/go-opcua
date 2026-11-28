@@ -14,6 +14,7 @@ import (
 
 	imqtt "github.com/otfabric/go-opcua/internal/mqtt"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/ua"
@@ -115,7 +116,7 @@ func TestChaosGzipJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = att.Close() })
+	cleanup.Register(t, func() { _ = att.Close() })
 	bomb := gzipBytes(bytes.Repeat([]byte(" "), 32<<20))
 	stop := make(chan struct{})
 	var wg sync.WaitGroup

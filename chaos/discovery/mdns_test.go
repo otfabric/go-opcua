@@ -16,6 +16,7 @@ import (
 	"github.com/otfabric/go-opcua/internal/mdns"
 	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -120,7 +121,7 @@ func TestMulticastUnderFaults(t *testing.T) {
 		if err != nil {
 			t.Fatalf("discovery chaos: %v", err)
 		}
-		t.Cleanup(func() { _ = st.srv.Close() })
+		cleanup.Register(t, func() { _ = st.srv.Close() })
 		return st
 	}
 
@@ -427,7 +428,7 @@ func TestMulticastUnderFaults(t *testing.T) {
 	}
 	link.SetFault(nil)
 	delayed.Wait()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		for _, st := range churners {
 			_ = st.srv.Close()
 		}

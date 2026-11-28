@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
@@ -59,7 +60,7 @@ func newServer(t *testing.T, opts ...server.Option) (*server.Server, string) {
 	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, all...)...)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	require.NotZero(t, srv.Port())
 	return srv, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 }
@@ -99,7 +100,7 @@ func dialClient(t *testing.T, url string, opts ...opcua.Option) (*opcua.Client, 
 		_ = c.Close(context.Background())
 		return nil, err
 	}
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	return c, nil
 }
 

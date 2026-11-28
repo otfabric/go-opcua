@@ -14,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -218,6 +219,6 @@ func ReverseListener(t *testing.T, cfg *uacp.ReverseListenerConfig) (*uacp.Rever
 	t.Helper()
 	l, err := uacp.ListenReverse(context.Background(), "127.0.0.1:0", cfg)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = l.Close() })
+	cleanup.Register(t, func() { _ = l.Close() })
 	return l, "opc.tcp://" + l.Addr().String()
 }

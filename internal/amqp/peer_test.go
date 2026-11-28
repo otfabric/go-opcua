@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua/internal/amqp"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // peer is a hand-driven broker for the protocol corner cases the
@@ -31,7 +32,7 @@ func newPeer(t *testing.T) *peer {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	p := &peer{t: t, ln: ln}
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		_ = ln.Close()
 		if p.conn != nil {
 			_ = p.conn.Close()
@@ -156,7 +157,7 @@ func dialPeer(t *testing.T, p *peer, opts amqp.Options) *amqp.Client {
 	p.handshake(nil)
 	r := <-ch
 	require.NoError(t, r.err)
-	t.Cleanup(func() { _ = r.c.Close() })
+	cleanup.Register(t, func() { _ = r.c.Close() })
 	return r.c
 }
 

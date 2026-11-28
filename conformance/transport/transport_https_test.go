@@ -14,6 +14,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
@@ -126,7 +127,7 @@ func TestTransportHTTPS_Subscription(t *testing.T) {
 
 	sub, ch, err := c.NewSubscription().Interval(fastInterval).Monitor(f.Int32).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 	awaitValue(t, ch, 0, int32(42))
 	writeInt32(t, c, f.Int32, 4711)
 	awaitValue(t, ch, 0, int32(4711))
@@ -274,7 +275,7 @@ func TestTransportHTTPS_Reconnect(t *testing.T) {
 		opcua.WithConnStateChan(states))
 	sub, ch, err := c.NewSubscription().Interval(fastInterval).Monitor(f.Int32).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 	awaitValue(t, ch, 0, int32(42))
 
 	writer := newClient(t, urls[ua.TransportProfileUATCP])

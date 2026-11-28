@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // openPair returns a handshaken client and server connection of a listener
@@ -20,7 +22,7 @@ func openPair(t *testing.T, wait time.Duration) (client, server *Conn) {
 	ln, err := Listen(context.Background(), "opc.tcp://127.0.0.1:0", nil)
 	require.NoError(t, err)
 	ln.openTimeout = wait
-	t.Cleanup(func() { _ = ln.Close() })
+	cleanup.Register(t, func() { _ = ln.Close() })
 	accepted := make(chan *Conn, 1)
 	go func() {
 		c, err := ln.Accept(context.Background())
@@ -30,13 +32,13 @@ func openPair(t *testing.T, wait time.Duration) (client, server *Conn) {
 	}()
 	client, err = Dial(context.Background(), "opc.tcp://"+ln.Addr().String())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = client.Close() })
+	cleanup.Register(t, func() { _ = client.Close() })
 	select {
 	case server = <-accepted:
 	case <-time.After(5 * time.Second):
 		t.Fatal("not accepted")
 	}
-	t.Cleanup(func() { _ = server.Close() })
+	cleanup.Register(t, func() { _ = server.Close() })
 	return client, server
 }
 

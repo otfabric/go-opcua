@@ -33,6 +33,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -136,7 +137,7 @@ func startDotnetTransportServer(t *testing.T) *transportServerHandle {
 			stop()
 			t.Fatalf("waiting for dotnet transport server (container: %s): %v", containerName, err)
 		}
-		t.Cleanup(stop)
+		cleanup.Register(t, stop)
 		return &transportServerHandle{
 			tcp:   fmt.Sprintf("opc.tcp://localhost:%d%s", tcpPort, endpointPath),
 			https: fmt.Sprintf("opc.https://localhost:%d%s", httpsPort, endpointPath),
@@ -180,7 +181,7 @@ func dialTransportClient(t *testing.T, url string, user bool) *opcua.Client {
 	if err := c.Connect(ctx2); err != nil {
 		t.Fatalf("Connect(%s): %v", url, err)
 	}
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = c.Close(ctx)

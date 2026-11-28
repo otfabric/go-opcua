@@ -10,6 +10,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/monitor"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -21,7 +22,7 @@ func TestSubscription_MonitorPartialBatch(t *testing.T) {
 
 	sub, _, err := c.NewSubscription().Interval(100 * time.Millisecond).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	resp, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth,
 		opcua.NewMonitoredItemCreateRequestWithDefaults(f.Int32, ua.AttributeIDValue, 1),
@@ -49,7 +50,7 @@ func TestMonitor_ItemErrorPartialBatch(t *testing.T) {
 		Interval: 100 * time.Millisecond,
 	}, make(chan *monitor.DataChangeMessage, 8))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe(ctx) })
+	cleanup.Register(t, func() { _ = sub.Unsubscribe(ctx) })
 
 	items, err := sub.AddMonitorItems(ctx,
 		monitor.Request{NodeID: f.Int32},
