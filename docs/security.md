@@ -518,6 +518,30 @@ configuration of the server to disk (Part 14 §9.1.2):
 
 ---
 
+### PubSub keys of a ConnectionManager
+
+With `fxcm.Options.SecurityKeyServer` a ConnectionManager adds the
+SecurityGroups of its sets to an SKS, and AutomationComponents with
+`fxserver.ConnectionOptions.SecurityKeys` pull their keys from it
+(docs/uafx.md, The SecurityKeyServer of a set).
+
+- **Channels.** Both sides talk to the SKS over SignAndEncrypt only
+  (Part 81 §9.3; Part 14 §6.2.5.4 Table 40), with the SecurityPolicyUri of
+  the set, and check the ServerUri of the set against the ApplicationUri of
+  the SKS endpoint (`Bad_ServerUriInvalid`). Their `Options` must trust the
+  certificate of the SKS like any client.
+- **Identities.** The ConnectionManager's session (`fxcm.RemoteSKS.Dialer`)
+  calls AddSecurityGroup, GetSecurityGroup and RemoveSecurityGroup; the
+  AutomationComponents' (`sks.EndpointDialer`) call GetSecurityKeys. A
+  go-opcua SKS decides both with the Authorizer of its KeyService
+  (`security.DefaultAuthorizer` denies anonymous callers): give the
+  ConnectionManager an identity that may configure SecurityGroups and the
+  AutomationComponents one that may only get keys, with an Authorizer
+  that tells them apart.
+- **Ownership.** The ConnectionManager removes only the SecurityGroups it
+  added; one the SKS had before stays. Its record of them is in its Store
+  (`sks/` records): protect the Store like its other records.
+
 ## Authentication Modes
 
 Three authentication modes determine how clients identify themselves to the server:

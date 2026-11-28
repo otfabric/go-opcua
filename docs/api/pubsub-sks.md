@@ -20,6 +20,12 @@ const (
 
 Defaults of Config.
 
+```go
+const DefaultPullInterval = time.Second
+```
+
+DefaultPullInterval is how often a Puller reads the configuration of its runtime by default.
+
 ## Variables
 
 ```go
@@ -27,6 +33,12 @@ var ErrBadResponse = errors.New("pubsub/sks: malformed GetSecurityKeys response"
 ```
 
 ErrBadResponse is returned for a GetSecurityKeys response that does not have the output arguments of the method.
+
+```go
+var ErrEndpoint = errors.New("pubsub/sks: no SKS to pull keys from")
+```
+
+ErrEndpoint is in the chain of the error of EndpointDialer.Dial for an EndpointDescription that names no SKS to pull keys from: nil, without a Server, an ApplicationType other than SERVER (the push model), or without a URL (Part 14 §6.2.5.4 Table 40).
 
 ## Functions
 
@@ -86,6 +98,33 @@ type Config struct {
 ```
 
 Config configures a KeySource.
+
+### type EndpointDialer
+
+```go
+type EndpointDialer struct {
+	// Options are the options of every client: the certificate, key and
+	// trust of the application and the user identity the SKS grants
+	// the keys to. The security of the selected endpoint is added.
+	Options []opcua.Option
+	// Certificate is the DER certificate given in Options, used to
+	// select an endpoint whose policy can use it.
+	Certificate []byte
+	// AuthType is the user token type of the identity in Options.
+	// Default Anonymous.
+	AuthType ua.UserTokenType
+}
+```
+
+EndpointDialer opens a session with the SKS an element of the SecurityKeyServices of a PubSubGroup or DataSetReader describes (Part 14 §6.2.5.4 Table 40): GetEndpoints on its Server.DiscoveryUrls in order, the SignAndEncrypt endpoint of its SecurityPolicyUri (the best policy both support when it is empty), and a check that the endpoint has the ApplicationUri of its Server, the main key of the SKS. Table 40 leaves the EndpointUrl empty; one that is set is tried when there are no DiscoveryUrls (a tolerance).
+
+#### func (EndpointDialer) Dial
+
+```go
+func (d *EndpointDialer) Dial(ctx context.Context, ep *ua.EndpointDescription) (*opcua.Client, error)
+```
+
+Dial connects to the SKS ep describes. It is a PullerOptions.Dial.
 
 ### type KeySource
 
@@ -164,6 +203,73 @@ func (s *KeySource) Ring() *security.KeyRing
 ```
 
 Ring is the KeyRing the keys are kept in.
+
+### type Puller
+
+```go
+type Puller struct {
+	// contains filtered or unexported fields
+}
+```
+
+Puller supplies the keys of the secured groups of a PubSub runtime that pull them from an SKS (Part 14 §5.4.5.3, Figure 11): for every SecurityGroupId of a WriterGroup, ReaderGroup or DataSetReader with SecurityMode Sign or SignAndEncrypt whose SecurityKeyServices name an SKS with ApplicationType SERVER (the pull model, §6.2.5.4 Table 40), and whose keys the runtime has from no other source, it starts a KeySource on the first SKS that answers and sets it in the runtime (PubSub.SetKeySource). A first fetch that fails on every SKS is tried again with backoff (OPC 10000-81 E.5: the AutomationComponent retries with vendor-specific logic); until then the groups have no keys, which leaves them without secured messages (§5.4.5.3: PreOperational). When the configuration no longer has the SecurityGroupId, the Puller removes its KeySource from the runtime and closes it. A KeySource it set stays with the SKS it was started on while the group is configured.
+
+#### func NewPuller
+
+```go
+func NewPuller(rt *pubsub.PubSub, opts PullerOptions) (*Puller, error)
+```
+
+NewPuller starts a Puller on rt. It reads the configuration at once and then every Interval; Close stops it.
+
+#### func (Puller) Close
+
+```go
+func (p *Puller) Close() error
+```
+
+Close stops the Puller: the fetches in progress are cancelled, and the KeySources it set are removed from the runtime and closed.
+
+#### func (Puller) SecurityGroups
+
+```go
+func (p *Puller) SecurityGroups() []string
+```
+
+SecurityGroups returns the SecurityGroupIds the Puller supplies keys for, sorted.
+
+#### func (Puller) Sync
+
+```go
+func (p *Puller) Sync()
+```
+
+Sync reads the configuration of the runtime now: it starts the fetches of the SecurityGroups that need keys and drops the KeySources of those that are gone.
+
+### type PullerOptions
+
+```go
+type PullerOptions struct {
+	// Dial opens a session with the SKS an element of SecurityKeyServices
+	// describes, for one GetSecurityKeys call; the KeySource closes it
+	// afterwards. Required; (*EndpointDialer).Dial is the usual one.
+	Dial func(ctx context.Context, sks *ua.EndpointDescription) (*opcua.Client, error)
+	// Interval is how often the configuration is read; 0 is
+	// DefaultPullInterval.
+	Interval time.Duration
+	// Source is the Config of the KeySources the Puller starts; its
+	// SecurityGroupID, Client and Dial are set by the Puller. Its
+	// MinRetry and MaxRetry also bound the retries of the first fetch.
+	Source Config
+	// OnError, if set, is called with the error of a first fetch that
+	// failed on every SKS of a SecurityGroup (before the retry) and,
+	// through Source.OnError when that is not set, with the errors of
+	// the background refreshes. It must not block.
+	OnError func(securityGroupID string, err error)
+}
+```
+
+PullerOptions configure a Puller.
 
 ### type Result
 

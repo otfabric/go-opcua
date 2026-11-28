@@ -283,6 +283,13 @@ func TestSKS_AddRemoveSecurityGroup(t *testing.T) {
 	require.Equal(t, ua.StatusBadArgumentsMissing, call(t, alice, pubSubID, getGroupID).StatusCode)
 	require.Equal(t, ua.StatusBadTooManyArguments, call(t, alice, pubSubID, getGroupID, "sg2", "sg3").StatusCode)
 
+	// Part 14 §8.5.2: the same parameters again return the existing group
+	// with Good_DataIgnored; different ones are Bad_NodeIdExists (below).
+	res = call(t, alice, groupsID, addGroupID, "sg2", 1500.0, pubsubsec.PolicyURIAes128CTR, uint32(3), uint32(2))
+	require.Equal(t, ua.StatusGoodDataIgnored, res.StatusCode)
+	require.Equal(t, "sg2", res.OutputArguments[0].Value())
+	require.Equal(t, nid, res.OutputArguments[1].Value())
+
 	cases := []struct {
 		name string
 		args []any

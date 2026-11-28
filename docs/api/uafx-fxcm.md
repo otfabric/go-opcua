@@ -83,6 +83,12 @@ var ErrManager = errors.New("fxcm: manager")
 
 ErrManager is in the chain of the errors of the ConnectionManager that are not about the content of a set, such as an edit by a client that does not hold the Lock.
 
+```go
+var ErrSKSConnection = errors.New("fxcm: no session with the SKS")
+```
+
+ErrSKSConnection is in the chain of an error of a SecurityKeyServer when no session with the SKS could be opened: the Connections of the set fail with ExternalSksConnectionError (§10.25). Any other error of a SecurityKeyServer is ExternalSksProcessingError.
+
 ## Functions
 
 ### func Activity
@@ -531,7 +537,7 @@ Failure is the FxError and StatusCode of one failed operation of a run.
 func (f Failure) Transient() bool
 ```
 
-Transient reports whether f may clear when the set is processed again (§6.9.1: transient errors are cleared by processing again). Library interpretation (design §5.5): the session to the server (TargetServerConnectionError), a communication error or timeout, and a busy AC (Bad\_Locked, Bad\_TooManyOperations).
+Transient reports whether f may clear when the set is processed again (§6.9.1: transient errors are cleared by processing again). Library interpretation (design §5.5): the session to the server (TargetServerConnectionError) or to the SKS (ExternalSksConnectionError), a communication error or timeout, and a busy AC (Bad\_Locked, Bad\_TooManyOperations).
 
 ### type Finding
 
@@ -565,6 +571,32 @@ type IdentifiedSession interface {
 ```
 
 IdentifiedSession is a Session that knows the identity of its server. The sessions of ClientDialer are. Of another Session the Manager reads the ApplicationUri from Server.ServerArray (OPC 10000-5 §6.3.1): the identity the server reports, never authenticated, with no thumbprint. The records keep which of the two they have (design §6.5); certificate evidence that is unavailable is recorded as such, not left out.
+
+### type LocalSKS
+
+```go
+type LocalSKS struct {
+	KeyService *security.KeyService
+}
+```
+
+LocalSKS is a SecurityKeyServer of a KeyService in the process of the ConnectionManager, such as the one a server serves with server.EnableSecurityKeyService. The address of the set is not used.
+
+#### func (LocalSKS) AddSecurityGroup
+
+```go
+func (l *LocalSKS) AddSecurityGroup(_ context.Context, _ uafx.SecurityKeyServerAddress, g *ua.SecurityGroupDataType) (bool, error)
+```
+
+AddSecurityGroup implements SecurityKeyServer.
+
+#### func (LocalSKS) RemoveSecurityGroup
+
+```go
+func (l *LocalSKS) RemoveSecurityGroup(_ context.Context, _ uafx.SecurityKeyServerAddress, securityGroupID string) error
+```
+
+RemoveSecurityGroup implements SecurityKeyServer.
 
 ### type LockOwner
 
@@ -611,6 +643,12 @@ type Manager struct {
 
 	// statusOf reads the Status of an endpoint for the monitor
 	// (readStatus; a test replaces it before the monitor starts).
+
+	// sksStep serializes the SKS steps of the runs (configureSKS,
+	// removeSKS), so that a SecurityGroup a run adds is not removed by
+	// another that has not seen its set. sks are the SecurityGroups the
+	// Manager added, by their store key (sksKey), under sksMu, which is
+	// taken after every other lock.
 
 	// p keeps the Manager in Options.Store; nil without one.
 
@@ -741,6 +779,14 @@ func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfiguratio
 ```
 
 Replace replaces a set (F.3.3.2 ElementReplace): conf is validated first, then the Connections of the old set are removed (CloseConnections with Remove TRUE for its known-owned endpoints), then conf becomes Version 1 of the set, in Ready, not processed. A set being processed or edited is ua.StatusBadInvalidState; no set of the key ua.StatusBadNoMatch. When a close fails, the old set stays, in Error, and the error has the StatusCode of the close (design §5.8).
+
+#### func (Manager) SecurityGroups
+
+```go
+func (m *Manager) SecurityGroups() []SecurityGroupRecord
+```
+
+SecurityGroups returns the SecurityGroups the Manager added to an SKS and has not removed (with a Store also those of before a restart), sorted.
 
 #### func (Manager) Settle
 
@@ -922,6 +968,13 @@ type Options struct {
 	// Store (design §6.4, §6.5): in the background after New, and as the
 	// first step of every run of a set.
 	Verify VerifyOptions
+	// SecurityKeyServer configures the SecurityGroups of the sets on
+	// their SKS (§6.7.3.2, §6.7.3.3, E.5; the pull model only) and names
+	// the SKS in the SecurityKeyServices of the secured groups of their
+	// AutomationComponents. LocalSKS is an SKS in this process, RemoteSKS
+	// one reached over OPC UA. Nil: the SecurityKeyServer of a set is
+	// validated and otherwise not used.
+	SecurityKeyServer SecurityKeyServer
 }
 ```
 
@@ -1148,6 +1201,32 @@ type Recovery struct {
 
 Recovery is what a set owes and how far its records are verified (design §6.4).
 
+### type RemoteSKS
+
+```go
+type RemoteSKS struct {
+	Dialer Dialer
+}
+```
+
+RemoteSKS is a SecurityKeyServer reached with Dialer, always with SecurityMode SignAndEncrypt (§9.3), the SecurityPolicyUri and the ServerUri of the set: AddSecurityGroup and RemoveSecurityGroup of PublishSubscribe.SecurityGroups, GetSecurityGroup of PublishSubscribe (OPC 10000-14 §8.5.2, §8.5.3, §8.3.3), one session per operation. The identity of the Dialer must be allowed to configure the SKS.
+
+#### func (RemoteSKS) AddSecurityGroup
+
+```go
+func (r *RemoteSKS) AddSecurityGroup(ctx context.Context, sks uafx.SecurityKeyServerAddress, g *ua.SecurityGroupDataType) (bool, error)
+```
+
+AddSecurityGroup implements SecurityKeyServer.
+
+#### func (RemoteSKS) RemoveSecurityGroup
+
+```go
+func (r *RemoteSKS) RemoveSecurityGroup(ctx context.Context, sks uafx.SecurityKeyServerAddress, securityGroupID string) error
+```
+
+RemoveSecurityGroup implements SecurityKeyServer.
+
 ### type RetryPolicy
 
 ```go
@@ -1294,6 +1373,36 @@ The verdicts of Scan.
 ```go
 func (v ScanVerdict) String() string
 ```
+
+### type SecurityGroupRecord
+
+```go
+type SecurityGroupRecord struct {
+	// Address, SecurityPolicyURI and ServerURI are those of the
+	// SecurityKeyServer of the set it was added for (§9.3); Address and
+	// ServerURI identify the SKS.
+	Address, SecurityPolicyURI, ServerURI string
+	SecurityGroupID                       string
+}
+```
+
+SecurityGroupRecord is a SecurityGroup a Manager added to an SKS, which it removes when no set lists it any more.
+
+### type SecurityKeyServer
+
+```go
+type SecurityKeyServer interface {
+	// AddSecurityGroup adds the SecurityGroup g, or finds one with its
+	// parameters (OPC 10000-14 §8.5.2); created reports that it added
+	// it. A SecurityGroup with the Name and other parameters is an error.
+	AddSecurityGroup(ctx context.Context, sks uafx.SecurityKeyServerAddress, g *ua.SecurityGroupDataType) (created bool, err error)
+	// RemoveSecurityGroup removes the SecurityGroup (OPC 10000-14
+	// §8.5.3); one the SKS does not have is no error.
+	RemoveSecurityGroup(ctx context.Context, sks uafx.SecurityKeyServerAddress, securityGroupID string) error
+}
+```
+
+SecurityKeyServer configures SecurityGroups on the SKS of a set: the SecurityKeyServerAddress (§10.45) has the current values of the SecurityKeyServer of the set (§9.3). LocalSKS is a KeyService in the process of the ConnectionManager (§9.3: "If the SKS is co-located with the ConnectionManager, the ConnectionManager may use internal vendor-specific communication with the SKS"), RemoteSKS a server with the SKS Methods of OPC 10000-14 §8.
 
 ### type ServerAddress
 

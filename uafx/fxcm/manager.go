@@ -91,6 +91,13 @@ type Options struct {
 	// Store (design §6.4, §6.5): in the background after New, and as the
 	// first step of every run of a set.
 	Verify VerifyOptions
+	// SecurityKeyServer configures the SecurityGroups of the sets on
+	// their SKS (§6.7.3.2, §6.7.3.3, E.5; the pull model only) and names
+	// the SKS in the SecurityKeyServices of the secured groups of their
+	// AutomationComponents. LocalSKS is an SKS in this process, RemoteSKS
+	// one reached over OPC UA. Nil: the SecurityKeyServer of a set is
+	// validated and otherwise not used.
+	SecurityKeyServer SecurityKeyServer
 }
 
 // RetryPolicy is when a set in Error is processed again: after Initial,
@@ -161,6 +168,15 @@ type Manager struct {
 	// statusOf reads the Status of an endpoint for the monitor
 	// (readStatus; a test replaces it before the monitor starts).
 	statusOf func(ctx context.Context, r *record) (uafx.ConnectionEndpointStatus, bool, error)
+
+	// sksStep serializes the SKS steps of the runs (configureSKS,
+	// removeSKS), so that a SecurityGroup a run adds is not removed by
+	// another that has not seen its set. sks are the SecurityGroups the
+	// Manager added, by their store key (sksKey), under sksMu, which is
+	// taken after every other lock.
+	sksStep sync.Mutex
+	sksMu   sync.Mutex
+	sks     map[string]SecurityGroupRecord
 
 	// p keeps the Manager in Options.Store; nil without one.
 	p *persistence
@@ -328,7 +344,7 @@ func New(opts Options) (*Manager, error) {
 	m := &Manager{
 		opts: opts, log: log, pool: newPool(opts.Dialer),
 		ctx: ctx, cancel: cancel,
-		sets: map[string]*set{},
+		sets: map[string]*set{}, sks: map[string]SecurityGroupRecord{},
 	}
 	m.places.m = map[string]chan struct{}{}
 	if opts.Store != nil {
