@@ -113,8 +113,23 @@ func (h *Historian) UpdateData(nodeID *ua.NodeID, perform ua.PerformUpdateType, 
 	return &ua.HistoryUpdateResult{StatusCode: ua.StatusOK, OperationResults: ops}
 }
 
-// DeleteRawModified implements RawHistoryDeleter. Modified-only deletes are unsupported.
+// DeleteRawModified implements RawHistoryDeleter. Modified-only deletes are
+// unsupported.
+//
+// The range is that of DeleteRawModifiedDetails (Part 11 §6.9.5.1): "Both
+// startTime and endTime shall be defined. The startTime shall be less than
+// the endTime, and values up to but not including the endTime are
+// deleted. It is permissible for startTime = endTime, in which case the
+// value at the startTime is deleted." A range without a defined start or
+// end time, or that ends before it starts, deletes nothing and is
+// Bad_HistoryOperationInvalid (see [checkDeleteRawRange]). A range without
+// a sample is Bad_NoData (§6.9.5.2). The end time is excluded as by a raw
+// read (ReadRaw), so a delete removes the samples a read of the same range
+// returns.
 func (h *Historian) DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, startTime, endTime time.Time) *ua.HistoryUpdateResult {
+	if st := checkDeleteRawRange(startTime, endTime); st != ua.StatusOK {
+		return &ua.HistoryUpdateResult{StatusCode: st}
+	}
 	if isDeleteModified {
 		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}
 	}
@@ -126,31 +141,55 @@ func (h *Historian) DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, 
 		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}
 	}
 
-	reverse := !startTime.IsZero() && !endTime.IsZero() && startTime.After(endTime)
-	lo, hi := startTime, endTime
-	if reverse {
-		lo, hi = endTime, startTime
-	}
-
 	kept := nh.samples[:0]
+	deleted := 0
 	for _, s := range nh.samples {
-		ts := s.SourceTimestamp
-		inRange := true
-		if !lo.IsZero() && ts.Before(lo) {
-			inRange = false
+		if inRawDeleteRange(startTime, endTime, s.SourceTimestamp) {
+			deleted++
+			continue
 		}
-		if !hi.IsZero() && !ts.Before(hi) && !ts.Equal(hi) {
-			// inclusive end
-			if ts.After(hi) {
-				inRange = false
-			}
-		}
-		if !inRange {
-			kept = append(kept, s)
-		}
+		kept = append(kept, s)
 	}
 	nh.samples = kept
+	if deleted == 0 {
+		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadNoData}
+	}
 	return &ua.HistoryUpdateResult{StatusCode: ua.StatusOK}
+}
+
+// dateTimeEpoch is the earliest DateTime of OPC UA. A value at or before it
+// is not a defined time: the binary encoding writes it as 0, which the
+// decoder (ua.Buffer.ReadTime) returns as the zero time.Time, "the earliest
+// time that can be represented on the platform", and such a time is an
+// invalid value that "should be treated that way by applications" (Part 6
+// §5.2.2.5). The JSON and XML decoders return the zero time.Time for
+// 1601-01-01T00:00:00Z as well.
+var dateTimeEpoch = time.Date(1601, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+// checkDeleteRawRange checks the range of DeleteRawModifiedDetails, raw and
+// modified deletes alike, before anything is deleted: "Both startTime and
+// endTime shall be defined. The startTime shall be less than the endTime"
+// (Part 11 §6.9.5.1), with startTime = endTime permitted. Part 11 names no
+// StatusCode for a range that breaks this. Bad_HistoryOperationInvalid,
+// "The history details parameter is not valid" (Part 4 §7.38.2, Table 179),
+// is one of the operation level results of HistoryUpdate (Part 4 §5.11.5.4,
+// Table 58); using it for the range is the choice of this implementation.
+// Reads keep their open and reverse ranges (§6.5.3).
+func checkDeleteRawRange(start, end time.Time) ua.StatusCode {
+	if !start.After(dateTimeEpoch) || !end.After(dateTimeEpoch) || start.After(end) {
+		return ua.StatusBadHistoryOperationInvalid
+	}
+	return ua.StatusOK
+}
+
+// inRawDeleteRange reports whether a sample at ts is in the range of a raw
+// delete from start to end, a range [checkDeleteRawRange] accepts:
+// [start, end), or the value at start when they are equal.
+func inRawDeleteRange(start, end, ts time.Time) bool {
+	if start.Equal(end) {
+		return ts.Equal(start)
+	}
+	return !ts.Before(start) && ts.Before(end)
 }
 
 // DeleteAtTime implements AtTimeHistoryDeleter.

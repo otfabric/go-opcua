@@ -188,15 +188,18 @@ func (c *Client) partitionSubscriptions() (intact, broken []uint32) {
 	return intact, broken
 }
 
-// recreateSubscriptions creates new subscriptions
-// with the same parameters to replace the previous one.
-func (c *Client) recreateSubscription(ctx context.Context, id uint32) error {
+// recreateSubscription creates a new subscription with the same
+// parameters, publishing mode, monitored items and triggering links to
+// replace the previous one. err is set when the subscription could not be
+// recreated; missing is set when it was, but the server did not create all
+// of its triggering links again.
+func (c *Client) recreateSubscription(ctx context.Context, id uint32) (missing, err error) {
 	c.subMux.Lock()
 	defer c.subMux.Unlock()
 
 	sub, ok := c.subs[id]
 	if !ok {
-		return ua.StatusBadSubscriptionIDInvalid
+		return nil, ua.StatusBadSubscriptionIDInvalid
 	}
 
 	_ = sub.recreateDelete(ctx)
@@ -219,11 +222,31 @@ func (c *Client) recreateSubscription(ctx context.Context, id uint32) error {
 		// Whatever exists on the server now is incomplete (for example a
 		// subscription without its monitored items).
 		sub.needsRecreate = true
-		return err
+		return nil, err
 	}
 	sub.needsRecreate = false
+	// A link the server refuses now would be refused by every later
+	// attempt as well: the subscription delivers without it rather than
+	// being recreated over and over.
+	missing = sub.restoreTriggering(ctx)
 	c.resumeSubscriptions(ctx)
-	return nil
+	return missing, nil
+}
+
+// recreatedEvent is the SubscriptionRecoveryEvent of the subscription id
+// that recreateSubscription recreated. missing are the triggering links the
+// server did not create again: the recovery is then partial.
+func recreatedEvent(id uint32, detail string, missing error) SubscriptionRecoveryEvent {
+	ev := SubscriptionRecoveryEvent{
+		SubscriptionID: id,
+		Outcome:        SubscriptionRecoveryRecreated,
+		Detail:         detail,
+	}
+	if missing != nil {
+		ev.Outcome = SubscriptionRecoveryPartial
+		ev.Detail = detail + "; triggering links not restored: " + missing.Error()
+	}
+	return ev
 }
 
 // Republish requests retransmission of a notification message for a subscription.
@@ -1076,16 +1099,14 @@ func (c *Client) recoverBrokenSubscriptions(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if err := c.recreateSubscription(ctx, id); err != nil {
+		missing, err := c.recreateSubscription(ctx, id)
+		if err != nil {
 			c.cfg.logger.Debug("recreating ended subscription failed", "sub_id", id, "error", err)
 			c.notifySubscriptionOfError(ctx, id, err)
 			continue
 		}
-		c.notifyRecoveryFromMonitor(SubscriptionRecoveryEvent{
-			SubscriptionID: id,
-			Outcome:        SubscriptionRecoveryRecreated,
-			Detail:         "subscription ended on the server (lifetime expired or deleted); recreated as new, previous notification history lost",
-		})
+		c.notifyRecoveryFromMonitor(recreatedEvent(id,
+			"subscription ended on the server (lifetime expired or deleted); recreated as new, previous notification history lost", missing))
 	}
 }
 

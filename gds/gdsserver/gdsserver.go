@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -217,7 +216,10 @@ func Attach(srv *server.Server, cfg Config) (*GDS, error) {
 	g.makeGroups()
 
 	g.ns = server.NewNodeNameSpace(srv, gdsid.NamespaceURI).ID()
-	if err := srv.ImportNodeSetXML(nodeSet(g.ns)); err != nil {
+	// The importer maps namespace 1 of the NodeSet, the GDS namespace, to
+	// g.ns, and reads a BrowseName without a prefix ("Open") as a name in
+	// namespace 0 (Part 6 §5.1.12).
+	if err := srv.ImportNodeSetXML(schema.OpcUaGdsNodeSet2); err != nil {
 		return nil, fmt.Errorf("%w: import the GDS information model: %w", errAttach, err)
 	}
 	if err := g.buildModel(); err != nil {
@@ -252,47 +254,6 @@ func (g *GDS) setDefaults() {
 	if c.MaxApplications <= 0 {
 		c.MaxApplications = DefaultMaxApplications
 	}
-}
-
-// nodeSets caches nodeSet by namespace index.
-var nodeSets sync.Map // uint16 → []byte
-
-// nodeSet returns the GDS NodeSet with namespace index 1 of the file
-// replaced by ns, the index the namespace has on the server, and without
-// its NamespaceUris, whose namespace Attach adds itself. A browse name
-// without a namespace prefix (namespace 0 in a NodeSet, "Open") gets the
-// prefix 0: the importer would put it in the namespace of the node.
-func nodeSet(ns uint16) []byte {
-	if b, ok := nodeSets.Load(ns); ok {
-		return b.([]byte)
-	}
-	src := schema.OpcUaGdsNodeSet2
-	if i, j := bytes.Index(src, []byte("<NamespaceUris>")), bytes.Index(src, []byte("</NamespaceUris>")); i >= 0 && j > i {
-		src = append(slices.Clip(src[:i]), src[j+len("</NamespaceUris>"):]...)
-	}
-	n := strconv.Itoa(int(ns))
-	b := bytes.ReplaceAll(src, []byte(`"ns=1;`), []byte(`"ns=`+n+`;`))
-	b = bytes.ReplaceAll(b, []byte(`>ns=1;`), []byte(`>ns=`+n+`;`))
-	b = bytes.ReplaceAll(b, []byte(`Name="1:`), []byte(`Name="`+n+`:`))
-	// BrowseName="Open" → BrowseName="0:Open".
-	const attr = ` BrowseName="`
-	var out bytes.Buffer
-	out.Grow(len(b) + 4096)
-	for {
-		i := bytes.Index(b, []byte(attr))
-		if i < 0 {
-			out.Write(b)
-			break
-		}
-		i += len(attr)
-		out.Write(b[:i])
-		b = b[i:]
-		if len(b) > 0 && (b[0] < '0' || b[0] > '9') {
-			out.WriteString("0:")
-		}
-	}
-	nodeSets.Store(ns, out.Bytes())
-	return out.Bytes()
 }
 
 // load reads the state of the store and prepares the CAs.

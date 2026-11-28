@@ -111,7 +111,7 @@ func TestRecreateSubscription_FailureKeepsSubscription(t *testing.T) {
 	c.subs[5] = sub
 	c.subMux.Unlock()
 
-	err := c.recreateSubscription(ctx, 5)
+	_, err := c.recreateSubscription(ctx, 5)
 	require.Error(t, err)
 
 	assert.Equal(t, []uint32{5}, c.SubscriptionIDs(), "the subscription must stay registered")

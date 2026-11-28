@@ -70,8 +70,6 @@ behaviour you may notice, and the deviations of peers are in
   Methods and the PubSubConfiguration file) lives in memory: it is not
   persisted across a restart (Part 14 §9.1.2), outside the components UAFX
   persists.
-- Triggering links are not restored when the client re-creates a subscription
-  after a reconnect.
 - mDNS has no probing or conflict resolution.
 
 ## Verification
@@ -120,6 +118,4 @@ behaviour you may notice, and the deviations of peers are in
 - PubSub chunked NetworkMessages and UADP discovery use the layout of the OPC
   Foundation .NET stack 2.x where the specification is ambiguous; open62541
   1.5.10 sends and accepts neither.
-- Raw history deletes (DeleteRawModified) of the built-in historian remove the
-  sample at the end time, while a raw read excludes it.
 - PubSub over AMQP sends ExactlyOnce as AtLeastOnce.

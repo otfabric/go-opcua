@@ -111,8 +111,14 @@ func TestSession_ObserverReportsLifecycle(t *testing.T) {
 	})
 
 	t.Run("Timeout", func(t *testing.T) {
+		// The server's session timeout already runs between CreateSession
+		// and ActivateSession, so it must leave room for an activation over
+		// SignAndEncrypt on a slow -race runner; waitTimeout is ten times
+		// longer, so the timeout is still seen.
+		const sessionTimeout = 2 * time.Second
+		require.Greater(t, waitTimeout, 5*sessionTimeout)
 		c := newClient(t, url, append(secureClientOpts(t, ep, ua.UserTokenTypeAnonymous),
-			opcua.SessionTimeout(200*time.Millisecond), opcua.AutoReconnect(false))...)
+			opcua.SessionTimeout(sessionTimeout), opcua.AutoReconnect(false))...)
 		sid := c.Session().SessionID()
 
 		// The client goes away without CloseSession: only the timeout ends

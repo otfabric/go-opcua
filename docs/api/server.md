@@ -82,6 +82,12 @@ const DiagnosticsNamespaceURI = "urn:otfabric:go-opcua:diagnostics"
 DiagnosticsNamespaceURI is the namespace of the session diagnostics objects and of the SessionIds of the server. It is added to the namespace array when the first session is created, after the namespaces the application added before.
 
 ```go
+const IssuedTokenTypeJWT = "http://opcfoundation.org/UA/UserToken#JWT"
+```
+
+IssuedTokenTypeJWT is the IssuedTokenType of a UserTokenPolicy for JSON Web Tokens (Part 6 §6.5.2.2, Table 54).
+
+```go
 const PubSubNamespaceURI = "urn:otfabric:go-opcua:pubsub"
 ```
 
@@ -1446,6 +1452,8 @@ func (h *Historian) DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, 
 ```
 
 DeleteRawModified implements RawHistoryDeleter. Modified-only deletes are unsupported.
+
+The range is that of DeleteRawModifiedDetails (Part 11 §6.9.5.1): "Both startTime and endTime shall be defined. The startTime shall be less than the endTime, and values up to but not including the endTime are deleted. It is permissible for startTime = endTime, in which case the value at the startTime is deleted." A range without a defined start or end time, or that ends before it starts, deletes nothing and is Bad\_HistoryOperationInvalid (see \[checkDeleteRawRange]). A range without a sample is Bad\_NoData (§6.9.5.2). The end time is excluded as by a raw read (ReadRaw), so a delete removes the samples a read of the same range returns.
 
 #### func (Historian) EnableEvents
 
@@ -2923,6 +2931,16 @@ The SecureChannel to the discovery server is secured: the server picks the most 
 
 The option can be given several times to register with several discovery servers.
 
+#### func WithIssuedTokenPolicy
+
+```go
+func WithIssuedTokenPolicy(issuedTokenType, issuerEndpointURL string) Option
+```
+
+WithIssuedTokenPolicy sets what the IssuedToken UserTokenPolicy of every endpoint advertises (EnableAuthMode(ua.UserTokenTypeIssuedToken)): the IssuedTokenType, a URI naming the kind of token the server accepts (IssuedTokenTypeJWT, or a URI of the vendor of the Authorization Service), and the IssuerEndpointUrl, whose content depends on the Authorization Service and the token type: for a JWT the JSON object of Part 6 §6.5.2.2 (Part 4 §7.41). A client uses them to choose the Authorization Service it gets the token from.
+
+The validator of [WithIssuedTokenValidator](#func-withissuedtokenvalidator) decides which tokens are accepted; this option only announces them. Without it, or with empty strings, both fields are empty, as before v1.42.0.
+
 #### func WithIssuedTokenValidator
 
 ```go
@@ -3579,7 +3597,7 @@ type RawHistoryDeleter interface {
 }
 ```
 
-RawHistoryDeleter optionally supports DeleteRawModifiedDetails (raw deletes).
+RawHistoryDeleter optionally supports DeleteRawModifiedDetails (raw deletes). HistoryUpdate calls it only with a range Part 11 §6.9.5.1 allows, both times defined and startTime not after endTime; it answers any other range with Bad\_HistoryOperationInvalid without calling the deleter.
 
 ### type RefType
 
@@ -3953,6 +3971,9 @@ SecurityGroupNodeID returns the NodeId of the node of a SecurityGroup.
 ```go
 type Server struct {
 
+	// publishFaulted, when set, is told about every queued Publish request
+	// the server answers with a ServiceFault (tests).
+
 	// nsView is the namespaces for readers that do not take mu (Node):
 	// AddNamespace publishes a new slice, it never changes one in place.
 
@@ -4287,6 +4308,10 @@ func (s *Server) ImportNodeSetXML(data []byte) error
 ```
 
 ImportNodeSetXML parses OPC UA NodeSet2 XML data and imports the nodes, references, and namespaces into the server's address space.
+
+The NamespaceIndexes of the NodeIds, ExpandedNodeIds and QualifiedNames of a NodeSet identify an element of its NamespaceUris, "The first index is always 1 (0 is always the OPC UA namespace)" (Part 6 §F.2). Each URI of the document gets the index the server has for it, or a new namespace on the server when it has none, and the document's indexes are rewritten to those of the server: a NodeSet can be imported into a server whose namespace table differs from the document's. A document whose indexes already are those of the server, or that has no NamespaceUris, is imported as it is.
+
+A BrowseName without a namespace prefix is a name in the OPC UA namespace, 0, whatever the namespace of its node: "The form without a prefix ... shall only be used for QualifiedNames in the OPC UA Namespace" (Part 6 §5.1.12). A companion model writes InputArguments, for one, for the 0:InputArguments Property of its Methods. A prefix that names no namespace of the document (or, for a document without NamespaceUris, of the server) fails the import.
 
 This is the primary public API for loading custom NodeSet data. Users do not need to import the schema package directly.
 
@@ -4797,7 +4822,9 @@ ActivateSession implements the OPC UA ActivateSession service. [https://referenc
 func (s *SessionService) Cancel(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error)
 ```
 
-Cancel implements the OPC UA Cancel service. [https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.5](https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.5)
+Cancel implements the OPC UA Cancel service. [https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.5](https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.5)
+
+"All outstanding requests with the matching requestHandle shall be cancelled", and "Successfully cancelled service requests shall respond with Bad\_RequestCancelledByClient"; cancelCount is the number of requests that were cancelled (Part 4 §5.7.5). The server handles every request but Publish before it reads the next one, so the outstanding requests are the Publish requests queued on the session. Each one that is cancelled is answered with a ServiceFault; the others stay queued, in their order.
 
 #### func (SessionService) CloseSession
 

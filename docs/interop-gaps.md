@@ -7,10 +7,14 @@ peer entry comes from the interop suite ([INTEROP.md](../INTEROP.md)): the
 test that found it skips with the reason or pins the behaviour, and the
 ledger row says `unsupported` with the same reason.
 
-Versions: go-opcua v1.31.0 (checked 2026-11-12; the interop suite last passed
-on main on 2026-11-07, after v1.31.0); open62541 1.5.10, Eclipse Milo 1.1.8, async-opcua
-0.19.0, UA-.NETStandard 2.0.2, node-opcua 2.187.32 and opcua-asyncio
-(`asyncua`) 2.1.0, as packaged by opcua-interop v0.20.0.
+Versions: the entries were checked against go-opcua v1.31.0 (2026-11-12; the
+interop suite last passed on main on 2026-11-07, after v1.31.0) and open62541
+1.5.10, Eclipse Milo 1.1.8, async-opcua 0.19.0, UA-.NETStandard 2.0.2,
+node-opcua 2.187.32 and opcua-asyncio (`asyncua`) 2.1.0, as packaged by
+opcua-interop v0.20.0, and have not been checked again since, except: v1.42.0
+(checked 2026-11-27) removed the entries on triggering links, which a
+recreated subscription now gets back, and on raw history deletes, which now
+exclude the end time as a raw read does.
 
 ## What go-opcua does not implement
 
@@ -30,8 +34,6 @@ on main on 2026-11-07, after v1.31.0); open62541 1.5.10, Eclipse Milo 1.1.8, asy
 | A peer that leaves gaps in sequence numbers on a secured channel loses the channel (`BadSequenceNumberInvalid`). | Part 6 §6.7.2.4. | Nothing for compliant peers. |
 | Writing the same value again produces no data-change notification; a timestamp-only change needs trigger `StatusValueTimestamp`. | DataChangeFilter semantics (Part 4 §7.22.2). | Use `StatusValueTimestamp`. |
 | A discovery server registration does not validate the LDS certificate unless asked to. | Opt-in. | Pass `server.RegisterCertificateValidator`. |
-| Raw history deletes (DeleteRawModified) remove the sample at the end time, while a raw read excludes it. | Known limitation of the built-in historian. | Pass an end time just past the last sample to delete. |
-| Triggering links (SetTriggering) are not restored when the client re-creates a subscription after a reconnect. | Recovery re-creates subscriptions and monitored items only. | Call `Subscription.SetTriggering` again after recovery. |
 | mDNS has no probing or conflict resolution, and real multicast is verified on Linux only. | Scope of the built-in responder. | Prefer the LDS registry over mDNS on untrusted networks. |
 | PubSub: chunked NetworkMessages and UADP discovery use the layout of the OPC Foundation .NET stack 2.x where the specification is ambiguous. They interoperate with UA-.NETStandard 2.0.2; open62541 1.5.10 sends and accepts neither. | open62541 drops chunks and ignores discovery probes. | Keep MaxNetworkMessageSize large enough to avoid chunks towards open62541; configure DataSetMetaData on readers instead of relying on discovery. |
 | PubSub over MQTT: go-opcua speaks MQTT 3.1.1 unless `SetMQTTVersion` asks for 5.0; only 5.0 carries the content type and UAMessageType of a message, a 3.1.1 subscriber tells the mapping from the payload. | Part 14 §7.3.4.4 leaves the default to the implementation; open62541 1.5.10 speaks 3.1.1. | Use `MQTTVersionBestAvailable` with brokers that speak 5.0. |

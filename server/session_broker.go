@@ -44,7 +44,14 @@ type session struct {
 	// based on the identity token. Set during ActivateSession.
 	roles []*ua.NodeID
 
+	// PublishRequests is the queue of the Publish requests of the session,
+	// oldest first. The subscriptions of the session take requests from
+	// it; Publish, Cancel and a subscription that puts a request back add
+	// to it under publishMu only (Server.queuePublishRequest), so that a
+	// Cancel that takes the queue apart and builds it again is not mixed
+	// with a new request.
 	PublishRequests chan PubReq
+	publishMu       sync.Mutex
 
 	// writes orders the Writes of the session that a ValueWriter takes.
 	writes writeQueue
@@ -218,6 +225,23 @@ type sessionBroker struct {
 	// after it released its lock (see Server.sessionRemoved).
 	idNamespace func() uint16
 	removed     func(s *session, reason SessionCloseReason)
+
+	// publishQueue is how many Publish requests a session queues (see
+	// publishQueueSize); below minPublishQueue, minPublishQueue.
+	publishQueue int
+}
+
+// minPublishQueue is the least number of Publish requests a session
+// queues.
+const minPublishQueue = 100
+
+// publishQueueSize returns how many Publish requests a session of a server
+// that allows subsPerSession subscriptions per session queues: "a Server
+// shall accept more queued Publish requests than created Subscriptions"
+// (Part 4 §5.14.5.1), so at least one more than the subscriptions a
+// session can have, and at least minPublishQueue.
+func publishQueueSize(subsPerSession int) int {
+	return max(minPublishQueue, subsPerSession+1)
 }
 
 func newSessionBroker(l *slog.Logger) *sessionBroker {
@@ -270,7 +294,7 @@ func (sb *sessionBroker) newSessionWithin(limit int, channelOpen func(id uint32)
 	s := &session{
 		ID:              ua.NewGUIDNodeID(ns, uuid.New().String()),
 		AuthTokenID:     newAuthenticationToken(),
-		PublishRequests: make(chan PubReq, 100),
+		PublishRequests: make(chan PubReq, max(sb.publishQueue, minPublishQueue)),
 	}
 	s.pub.s = s
 	s.diag.created = time.Now()

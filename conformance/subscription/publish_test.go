@@ -789,8 +789,10 @@ func TestPublish_NoSubscription(t *testing.T) {
 	require.ErrorIs(t, err, ua.StatusBadNoSubscription)
 }
 
-// TestPublish_TooManyPublishRequests verifies the server refuses Publish
-// requests beyond its per-session queue instead of dropping them silently.
+// TestPublish_TooManyPublishRequests verifies that a Publish request beyond
+// the per-session queue is answered with Bad_TooManyPublishRequests instead
+// of being dropped silently: the server de-queues the oldest request for
+// each new one (Part 4 §5.14.5.1), so as many as do not fit are answered.
 func TestPublish_TooManyPublishRequests(t *testing.T) {
 	c, _, _ := rawSetup(t)
 	// An idle subscription that will not answer any Publish during the test.
@@ -805,7 +807,7 @@ func TestPublish_TooManyPublishRequests(t *testing.T) {
 		}()
 	}
 
-	// Exactly the requests that do not fit are refused; the others stay parked.
+	// As many requests as do not fit are answered; the others stay parked.
 	for i := 0; i < extra; i++ {
 		select {
 		case err := <-results:

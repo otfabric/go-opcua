@@ -685,7 +685,19 @@ if err := s.ImportNodeSetXML(data); err != nil {
 ```
 
 The importer handles:
-- Namespace URI registration
+- Namespace URI registration and mapping: the namespace indexes of a NodeSet
+  are indexes into its `NamespaceUris` (Part 6 §F.2). A URI the server
+  already has keeps its namespace, the others become new namespaces, and
+  the indexes of the document's NodeIds, BrowseNames and QualifiedName
+  values are rewritten to those of the server, so a model can be imported
+  into a server whose namespace table differs from the document's. A
+  document whose indexes already are those of the server, or that has no
+  `NamespaceUris`, is imported as it is. A BrowseName without a prefix is a
+  name in namespace 0 whatever the namespace of its node ("The form without
+  a prefix ... shall only be used for QualifiedNames in the OPC UA
+  Namespace", Part 6 §5.1.12): the `InputArguments` of a companion Method
+  is `0:InputArguments`. A prefix that names no namespace of the document
+  fails the import
 - All node types (Objects, Variables, Methods, DataTypes, ObjectTypes, VariableTypes, ReferenceTypes)
 - Reference relationships
 - Node attributes (BrowseName, DisplayName, Description, etc.)

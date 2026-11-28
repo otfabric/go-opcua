@@ -1,61 +1,25 @@
 #!/usr/bin/env bash
 #
-# Downloads the latest OPC UA schema files from the OPC Foundation GitHub repository
-# (default branch "latest") into the schema directory. Opc.Ua.NodeSet2.xml goes to
-# internal/schema/, where it is embedded. Run manually when the spec is updated:
+# Downloads the OPC UA schema files of the OPC Foundation UA-Nodeset
+# repository at one commit and records them in schema/manifest.json: per
+# input the upstream path, the commit, the SHA-256 and, for a NodeSet, its
+# Models with their RequiredModels. The list of inputs is in
+# internal/cmd/schemamanifest/manifest.go.
 #
-#   ./schema/update-schema.sh
+#   ./schema/update-schema.sh            # the pinned commit of the manifest
+#   ./schema/update-schema.sh latest     # a branch, tag or commit
 #
-# After downloading, regenerate code with: make gen
+# Without an argument it downloads the pinned commit again, which must give
+# no diff. With another ref it moves the pin; then regenerate the code with
+# `make gen` and review the generated diff. The download fails unless the
+# RequiredModels of every vendored NodeSet are satisfied (OPC 10000-6 §F.2).
+# Set GH_TOKEN to raise the GitHub API rate limit.
 
 set -o errexit
 set -o nounset
 set -o pipefail
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
-repo_dir=$(cd "${script_dir}/.." && pwd)
+cd "${script_dir}/.."
 
-echo "Downloading NodeIds.csv"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/Schema/NodeIds.csv -O "${script_dir}/NodeIds.csv"
-
-echo "Downloading StatusCode.csv"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/Schema/StatusCode.csv -O "${script_dir}/StatusCode.csv"
-
-echo "Downloading AttributeIds.csv"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/Schema/AttributeIds.csv -O "${script_dir}/AttributeIds.csv"
-
-echo "Downloading ServerCapabilities.csv"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/Schema/ServerCapabilities.csv -O "${script_dir}/ServerCapabilities.csv"
-
-echo "Downloading Opc.Ua.NodeIds.permissions.csv"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/Schema/Opc.Ua.NodeIds.permissions.csv -O "${script_dir}/Opc.Ua.NodeIds.permissions.csv"
-
-echo "Downloading Opc.Ua.Types.bsd"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/Schema/Opc.Ua.Types.bsd -O "${script_dir}/Opc.Ua.Types.bsd"
-
-echo "Downloading Opc.Ua.NodeSet2.xml"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/Schema/Opc.Ua.NodeSet2.xml -O "${repo_dir}/internal/schema/Opc.Ua.NodeSet2.xml"
-
-echo "Downloading Opc.Ua.PredefinedNodes.xml"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/DotNet/Opc.Ua.PredefinedNodes.xml -O "${script_dir}/Opc.Ua.PredefinedNodes.xml"
-
-echo "Downloading Opc.Ua.Gds.NodeIds.csv"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/GDS/Opc.Ua.Gds.NodeIds.csv -O "${script_dir}/Opc.Ua.Gds.NodeIds.csv"
-
-echo "Downloading Opc.Ua.Gds.NodeSet2.xml"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/GDS/Opc.Ua.Gds.NodeSet2.xml -O "${repo_dir}/internal/schema/Opc.Ua.Gds.NodeSet2.xml"
-
-echo "Downloading Opc.Ua.Di.NodeIds.csv"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/DI/Opc.Ua.Di.NodeIds.csv -O "${script_dir}/Opc.Ua.Di.NodeIds.csv"
-
-echo "Downloading Opc.Ua.Di.NodeSet2.xml"
-wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/DI/Opc.Ua.Di.NodeSet2.xml -O "${repo_dir}/uafx/internal/model/Opc.Ua.Di.NodeSet2.xml"
-
-for part in data ac cm; do
-	echo "Downloading opc.ua.fx.${part}.nodeset2.csv, .xml and .bsd"
-	wget -nv "https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/UAFX/opc.ua.fx.${part}.nodeset2.csv" -O "${script_dir}/opc.ua.fx.${part}.nodeset2.csv"
-	wget -nv "https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/UAFX/opc.ua.fx.${part}.nodeset2.xml" -O "${repo_dir}/uafx/internal/model/opc.ua.fx.${part}.nodeset2.xml"
-	# The Binary Schema is not an input of the generator (cmd/uafx reads the
-	# NodeSet); uafx/schema_test.go compares the generated encoding with it.
-	wget -nv "https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/UAFX/opc.ua.fx.${part}.nodeset2.bsd" -O "${script_dir}/opc.ua.fx.${part}.nodeset2.bsd"
-done
+exec go run ./internal/cmd/schemamanifest update -ref "${1:-}"
