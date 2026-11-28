@@ -148,6 +148,9 @@ type Server struct {
 	// push is the push certificate management (push.go), nil without
 	// WithPushManagement.
 	push *pushManager
+	// roleSet is the managed RoleSet (roleset.go), nil without
+	// WithRoleManagement.
+	roleSet *RoleSet
 }
 
 type serverConfig struct {
@@ -188,6 +191,7 @@ type serverConfig struct {
 	accessController           AccessController
 	nodeManagement             bool // EnableNodeManagement
 	roleMapper                 RoleMapper
+	roleMgmt                   *RoleManagement // WithRoleManagement
 	usernameValidator          UsernameValidator
 	x509UserValidator          X509UserValidator
 	issuedTokenValidator       IssuedTokenValidator
@@ -435,6 +439,7 @@ func New(opts ...Option) (*Server, error) {
 	if err := s.buildPushModel(); err != nil {
 		return nil, err
 	}
+	s.bindRoleSet()
 	s.bindAuditing()
 	s.bindHistoryCapabilities()
 	s.bindAggregateFunctions()

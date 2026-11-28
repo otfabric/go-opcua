@@ -115,6 +115,20 @@ behaviour you may notice, and the deviations of peers are in
   AccessRestrictions Attribute of a node without its own does not answer
   with the defaults of its namespace, which are read from the
   NamespaceMetadata Object.
+- Managed RoleSet (`server.WithRoleManagement`, OPC 10000-18): the
+  configuration of the roles lives in memory and is lost when the process
+  ends (persistence is phase 4 of docs/roadmap.md). The roles of namespace 0
+  cannot be removed; Anonymous, AuthenticatedUser and TrustedApplication
+  cannot be changed. CustomConfiguration is always FALSE: no vendor-specific
+  mapping. The RoleMapper is not called again when a role changes: an active
+  session keeps the RoleMapper roles of its last ActivateSession. Thumbprint
+  rules use SHA-1 (Part 6 §3.1.1, the hash where no SecurityPolicy
+  applies). Role and GroupId rules need JWT issued tokens and read the
+  `roles`, `groups` and `iss` claims only. A session whose endpointUrl
+  names no configured Endpoint gets no role that has Endpoints. The added
+  role nodes have no NodeVersion, so AddRole and RemoveRole report no
+  GeneralModelChangeEvent (Part 3 §9.32.2). RoleSet and `rolemgmt` are tested against go-opcua only: no peer of the
+  pinned opcua-interop release manages roles.
 
 ## Verification
 

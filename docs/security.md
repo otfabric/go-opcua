@@ -708,11 +708,42 @@ s, err := server.New(
 )
 ```
 
-`server.Session` is the session of the request, nil without one: `ID()`, `Identity()` (the user identity token as the client sent it), `Roles()` (from the `RoleMapper`) and `ClientCertificate()`. It does not expose the AuthenticationToken or the nonces.
+`server.Session` is the session of the request, nil without one: `ID()`, `Identity()` (the user identity token as the client sent it), `Roles()` (from the `RoleMapper` and, with `WithRoleManagement`, the managed RoleSet) and `ClientCertificate()`. It does not expose the AuthenticationToken or the nonces.
 
 The `DefaultAccessController` allows all operations. Override it to enforce your security model.
 
 Reading the UserRolePermissions Attribute of a node (with Read or a monitored item) returns the entries of its RolePermissions for the roles of the session only (Part 3 §5.2.10); a request without a session, or a session the `RoleMapper` gave no role, has the Anonymous role, as for the `RBACAccessController`. RolePermissions lists every role.
+
+### Managed roles (OPC 10000-18)
+
+`server.WithRoleManagement` lets a security administrator configure the
+roles at run time with the RoleSet and Role Methods of OPC 10000-18
+(AddRole, RemoveRole, AddIdentity, RemoveIdentity, AddApplication,
+RemoveApplication, AddEndpoint, RemoveEndpoint) and the Writes of
+ApplicationsExclude and EndpointsExclude. What it means for security:
+
+- Every change needs a SignAndEncrypt channel and the SecurityAdmin role,
+  or what `RoleManagement.Authorizer` allows; seed the first administrator
+  with `Server.RoleSet().AddIdentity` (or the `RoleMapper`), as the
+  RoleSet starts without one.
+- A session gets the roles of the `RoleMapper` plus the roles whose rules
+  it complies with (§4.4.1); a change applies to the active sessions at
+  once. The defaults of §4.3 apply: every session has the Anonymous role,
+  an authenticated one AuthenticatedUser too, and a session on a signed
+  channel with a Client Certificate the server validated has
+  TrustedApplication. Grant permissions to Anonymous with that in mind.
+- An Anonymous rule cannot be given to SecurityAdmin, ConfigureAdmin or
+  SecurityKeyServerAdmin (`Bad_RequestNotAllowed`, §4.4.1).
+- Application rules and Applications use the ApplicationUri of the Client
+  Certificate, and only of one the server validated
+  (`WithClientCertificateTrustList`, `WithClientCertificateValidator` or
+  push management) on a signed channel: without a validator the server
+  accepts any certificate, so none counts as trusted.
+- Role and GroupId rules read the `roles` and `groups` claims of a JWT
+  (Part 6 §6.5.2.3) the `IssuedTokenValidator` accepted; they are refused
+  unless the server's issued token policy is `IssuedTokenTypeJWT`.
+- RemoveRole deletes the role's RolePermissions everywhere (§4.2.3).
+- The configuration is kept in memory only; it is not persisted.
 
 ### Writable Attributes
 

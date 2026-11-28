@@ -36,6 +36,20 @@ const (
 
 ```go
 const (
+	// DefaultMaxRoles is the number of roles AddRole may add when
+	// RoleManagement.MaxRoles is zero.
+	DefaultMaxRoles = 64
+	// DefaultMaxRoleEntries is the number of Identities, Applications and
+	// Endpoints, each, of a role when RoleManagement.MaxEntries is zero.
+	DefaultMaxRoleEntries = 256
+	// maxRoleText is the longest RoleName, criteria, ApplicationUri and
+	// EndpointUrl taken, in bytes.
+
+)
+```
+
+```go
+const (
 	RejectedOpenSecureChannel = "OpenSecureChannel"
 	RejectedCreateSession     = "CreateSession"
 	RejectedActivateSession   = "ActivateSession"
@@ -98,6 +112,12 @@ const PubSubNamespaceURI = "urn:otfabric:go-opcua:pubsub"
 ```
 
 PubSubNamespaceURI is the namespace of the nodes of the PubSub components (connections, groups, writers, readers, published data sets).
+
+```go
+const RolesNamespaceURI = "urn:otfabric:go-opcua:roles"
+```
+
+RolesNamespaceURI is the namespace of the role Objects that AddRole adds. The server adds it to the NamespaceArray at the first AddRole of a role outside namespace 0.
 
 ## Variables
 
@@ -3879,6 +3899,14 @@ func WithReverseConnect(clientURL string, opts ...ReverseConnectOption) Option
 
 WithReverseConnect makes the server open reverse connections to the client listening at clientURL ("opc.tcp://host:port") once it is started. See [Server.AddReverseConnect](#func-server-addreverseconnect) for the details; the handles of the targets configured this way are available from [Server.ReverseConnects](#func-server-reverseconnects).
 
+#### func WithRoleManagement
+
+```go
+func WithRoleManagement(cfg RoleManagement) Option
+```
+
+WithRoleManagement serves the RoleSet of OPC 10000-18 and grants the sessions the roles whose rules they comply with, in addition to the roles of the RoleMapper (see [RoleSet](#type-roleset)). Without it the roles come from the RoleMapper alone and the RoleSet Methods are not served, as in v1.42 and earlier.
+
 #### func WithRoleMapper
 
 ```go
@@ -4610,6 +4638,57 @@ func (s ReverseConnectState) String() string
 
 String returns the name of the state.
 
+### type Role
+
+```go
+type Role struct {
+	// NodeID is the NodeId of the role Object, BrowseName its BrowseName.
+	NodeID     *ua.NodeID
+	BrowseName *ua.QualifiedName
+	// Identities are the rules that map a UserIdentityToken to the role.
+	Identities []*ua.IdentityMappingRuleType
+	// Applications are ApplicationUris; ApplicationsExclude makes them an
+	// exclude list.
+	Applications        []string
+	ApplicationsExclude bool
+	// Endpoints are Endpoints; EndpointsExclude makes them an exclude list.
+	Endpoints        []*ua.EndpointType
+	EndpointsExclude bool
+	// Fixed reports a role whose configuration cannot be changed
+	// (Anonymous, AuthenticatedUser and TrustedApplication, §4.3).
+	Fixed bool
+	// Removable reports a role RemoveRole may remove: one AddRole added.
+	Removable bool
+}
+```
+
+Role is the configuration of a role of the RoleSet (OPC 10000-18 §4.4.1).
+
+### type RoleManagement
+
+```go
+type RoleManagement struct {
+	// MaxRoles is the most roles AddRole adds besides those of namespace 0;
+	// past it AddRole returns Bad_NotSupported, "the Server does not allow
+	// more Roles to be added" (OPC 10000-18 §4.2.2). Zero is
+	// DefaultMaxRoles.
+	MaxRoles int
+	// MaxEntries is the most Identities, Applications and Endpoints, each,
+	// of one role; past it the Add Methods return Bad_ResourceUnavailable.
+	// Zero is DefaultMaxRoleEntries.
+	MaxEntries int
+	// Authorizer, when set, decides who may change the roles in place of
+	// the SecurityAdmin role (OPC 10000-18 §4.2.2: "user credentials with
+	// administrator rights like SecurityAdmin Role"). It gets the caller
+	// and the BrowseName of the Method, or "ApplicationsExclude" or
+	// "EndpointsExclude" for a Write of those Properties, and returns
+	// StatusOK to allow it. The encrypted channel is checked before it.
+	Authorizer func(ctx context.Context, caller *MethodCaller, method string) ua.StatusCode
+}
+```
+
+RoleManagement configures the managed RoleSet ([WithRoleManagement](#func-withrolemanagement)).
+
 ### type RoleMapper
 
 ```go
@@ -4617,6 +4696,118 @@ type RoleMapper func(token ua.IdentityToken) []*ua.NodeID
 ```
 
 RoleMapper resolves the set of well-known role NodeIDs for a given identity token. Implementations should return the appropriate roles based on the token type and credentials (e.g. AnonymousIdentityToken → \[Anonymous], UserNameIdentityToken → \[AuthenticatedUser, ...]).
+
+### type RoleSet
+
+```go
+type RoleSet struct {
+
+	// opMu serializes the changes, which add and delete nodes; mu guards
+	// roles, which the Properties read. opMu is taken before mu, and
+	// before the rolesMu of a session no lock of the RoleSet is held.
+
+	// ns is the namespace of the roles AddRole adds, nil before the first.
+
+}
+```
+
+RoleSet is the managed RoleSet of a server ([WithRoleManagement](#func-withrolemanagement)): the application's access to the configuration the RoleSet Methods change. Its methods return a ua.StatusCode as error, the result the Method would have: Bad\_NodeIdUnknown for a role that does not exist, Bad\_InvalidArgument, Bad\_AlreadyExists, Bad\_NotFound, Bad\_RequestNotAllowed, Bad\_NotSupported or Bad\_ResourceUnavailable. They need no session and no SecurityAdmin role: the application is the server.
+
+#### func (RoleSet) AddApplication
+
+```go
+func (rs *RoleSet) AddApplication(role *ua.NodeID, applicationURI string) error
+```
+
+AddApplication adds the ApplicationUri to the Applications of the role (OPC 10000-18 §4.4.7).
+
+#### func (RoleSet) AddEndpoint
+
+```go
+func (rs *RoleSet) AddEndpoint(role *ua.NodeID, ep *ua.EndpointType) error
+```
+
+AddEndpoint adds the Endpoint to the Endpoints of the role (OPC 10000-18 §4.4.9).
+
+#### func (RoleSet) AddIdentity
+
+```go
+func (rs *RoleSet) AddIdentity(role *ua.NodeID, rule *ua.IdentityMappingRuleType) error
+```
+
+AddIdentity adds the identity mapping rule to the role (OPC 10000-18 §4.4.5).
+
+#### func (RoleSet) AddRole
+
+```go
+func (rs *RoleSet) AddRole(name, namespaceURI string) (*ua.NodeID, error)
+```
+
+AddRole adds the role name, qualified by namespaceURI, to the RoleSet and returns the NodeId of its Object (OPC 10000-18 §4.2.2). An empty namespaceURI is RolesNamespaceURI.
+
+#### func (RoleSet) RemoveApplication
+
+```go
+func (rs *RoleSet) RemoveApplication(role *ua.NodeID, applicationURI string) error
+```
+
+RemoveApplication removes the ApplicationUri from the Applications of the role (OPC 10000-18 §4.4.8).
+
+#### func (RoleSet) RemoveEndpoint
+
+```go
+func (rs *RoleSet) RemoveEndpoint(role *ua.NodeID, ep *ua.EndpointType) error
+```
+
+RemoveEndpoint removes the Endpoint from the Endpoints of the role (OPC 10000-18 §4.4.10).
+
+#### func (RoleSet) RemoveIdentity
+
+```go
+func (rs *RoleSet) RemoveIdentity(role *ua.NodeID, rule *ua.IdentityMappingRuleType) error
+```
+
+RemoveIdentity removes the identity mapping rule from the role (OPC 10000-18 §4.4.6).
+
+#### func (RoleSet) RemoveRole
+
+```go
+func (rs *RoleSet) RemoveRole(role *ua.NodeID) error
+```
+
+RemoveRole removes the role from the RoleSet (OPC 10000-18 §4.2.3) with its nodes and its RolePermissions.
+
+#### func (RoleSet) Role
+
+```go
+func (rs *RoleSet) Role(id *ua.NodeID) (Role, bool)
+```
+
+Role returns the role with the NodeId id; false if there is none.
+
+#### func (RoleSet) Roles
+
+```go
+func (rs *RoleSet) Roles() []Role
+```
+
+Roles returns the roles of the RoleSet, in the order of the RoleSet.
+
+#### func (RoleSet) SetApplicationsExclude
+
+```go
+func (rs *RoleSet) SetApplicationsExclude(role *ua.NodeID, exclude bool) error
+```
+
+SetApplicationsExclude sets ApplicationsExclude of the role: whether the Applications are an exclude list (OPC 10000-18 §4.4.1).
+
+#### func (RoleSet) SetEndpointsExclude
+
+```go
+func (rs *RoleSet) SetEndpointsExclude(role *ua.NodeID, exclude bool) error
+```
+
+SetEndpointsExclude sets EndpointsExclude of the role: whether the Endpoints are an exclude list (OPC 10000-18 §4.4.1).
 
 ### type SKSOption
 
@@ -4753,6 +4944,9 @@ type Server struct {
 
 	// push is the push certificate management (push.go), nil without
 	// WithPushManagement.
+
+	// roleSet is the managed RoleSet (roleset.go), nil without
+	// WithRoleManagement.
 
 }
 ```
@@ -5219,6 +5413,14 @@ func (s *Server) ReverseConnects() []*ReverseConnect
 ```
 
 ReverseConnects returns the reverse connect targets of the server, in the order they were added.
+
+#### func (Server) RoleSet
+
+```go
+func (s *Server) RoleSet() *RoleSet
+```
+
+RoleSet returns the managed RoleSet, nil without [WithRoleManagement](#func-withrolemanagement).
 
 #### func (Server) ServeFile
 

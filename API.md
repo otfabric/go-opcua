@@ -87,8 +87,10 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [SessionObserver](#sessionobserver)
   - [Push certificate management (server)](#push-certificate-management-server)
   - [Files (server)](#files-server)
+  - [Role management (server)](#role-management-server)
 - [Package `uamethod`](#package-uamethod)
 - [Package `filetransfer`](#package-filetransfer)
+- [Package `rolemgmt`](#package-rolemgmt)
 - [Package `pubsub`](#package-pubsub)
   - [Runtime](#runtime)
   - [Sub-packages](#sub-packages)
@@ -1837,6 +1839,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `WithModelDefaultPermissions(enabled bool)` | Apply the RolePermissions and AccessRestrictions of the Model of an imported NodeSet to its nodes without their own (Part 6 §F.2, §F.3; default true); `false` restores v1.42 and earlier |
 | `WithServerDiagnostics(enabled bool)` | Collect server diagnostics (`Server.ServerDiagnostics`, default true); see the [server guide](docs/server-guide.md#server-diagnostics) |
 | `WithRoleMapper(rm RoleMapper)` | Maps a session's identity token to its role NodeIDs (`RoleMapper func(token ua.IdentityToken) []*ua.NodeID`); used by the default access controller |
+| `WithRoleManagement(cfg RoleManagement)` | Serve the RoleSet of OPC 10000-18 (AddRole, RemoveRole and the Role Methods) and grant the sessions the roles whose rules they comply with, in addition to those of the RoleMapper; see [Role management (server)](#role-management-server). Without it the roles come from the RoleMapper alone, as in v1.42 and earlier |
 | `ApplicationURI(uri string)` | ApplicationUri of the server; only needed without a certificate (`Certificate` sets it from the URI SAN) |
 | `WithReverseConnect(clientURL string, opts ...ReverseConnectOption)` | Open reverse connections to the client listening at `clientURL`; see [Reverse connect (server)](#reverse-connect-server) |
 | `WebSocketEndPoint(host string, port int)` | Add an `opc.wss://host:port` endpoint (Part 6 §7.5, wss-uasc-uabinary); the server listens on the first one, port 0 picks a free port |
@@ -2105,7 +2108,7 @@ the nonces.
 ```go
 func (s *Session) ID() *ua.NodeID                 // SessionId
 func (s *Session) Identity() ua.IdentityToken     // as the client sent it, without a password; nil before ActivateSession
-func (s *Session) Roles() []*ua.NodeID            // from the RoleMapper; a copy
+func (s *Session) Roles() []*ua.NodeID            // from the RoleMapper and the managed RoleSet; a copy
 func (s *Session) ClientCertificate() []byte      // of CreateSession; a copy; nil with SecurityPolicy None
 ```
 
@@ -3026,13 +3029,59 @@ func (d *FileDirectory) Lookup(path string) (*ua.NodeID, *FileObject, bool)
 
 See [docs/server-guide.md](docs/server-guide.md#files-part-20).
 
+### Role management (server)
+
+The managed RoleSet of OPC 10000-18 (§4.2 to §4.5). The methods of
+`RoleSet` return the StatusCode the Method would as error; they need no
+session.
+
+```go
+const RolesNamespaceURI = "urn:otfabric:go-opcua:roles" // the namespace of the roles AddRole adds
+const DefaultMaxRoles = 64                             // RoleManagement.MaxRoles of zero
+const DefaultMaxRoleEntries = 256                      // RoleManagement.MaxEntries of zero
+type RoleManagement struct {
+    MaxRoles   int // roles AddRole may add; past it Bad_NotSupported
+    MaxEntries int // Identities, Applications and Endpoints, each, of a role; past it Bad_ResourceUnavailable
+    Authorizer func(ctx context.Context, caller *MethodCaller, method string) ua.StatusCode // nil: the SecurityAdmin role
+}
+func WithRoleManagement(cfg RoleManagement) Option
+func (s *Server) RoleSet() *RoleSet // nil without WithRoleManagement
+type Role struct {
+    NodeID              *ua.NodeID
+    BrowseName          *ua.QualifiedName
+    Identities          []*ua.IdentityMappingRuleType
+    Applications        []string
+    ApplicationsExclude bool
+    Endpoints           []*ua.EndpointType
+    EndpointsExclude    bool
+    Fixed               bool // Anonymous, AuthenticatedUser, TrustedApplication (§4.3)
+    Removable           bool // added by AddRole
+}
+func (rs *RoleSet) Roles() []Role
+func (rs *RoleSet) Role(id *ua.NodeID) (Role, bool)
+func (rs *RoleSet) AddRole(name, namespaceURI string) (*ua.NodeID, error) // §4.2.2
+func (rs *RoleSet) RemoveRole(role *ua.NodeID) error                       // §4.2.3
+func (rs *RoleSet) AddIdentity(role *ua.NodeID, rule *ua.IdentityMappingRuleType) error    // §4.4.5
+func (rs *RoleSet) RemoveIdentity(role *ua.NodeID, rule *ua.IdentityMappingRuleType) error // §4.4.6
+func (rs *RoleSet) AddApplication(role *ua.NodeID, applicationURI string) error            // §4.4.7
+func (rs *RoleSet) RemoveApplication(role *ua.NodeID, applicationURI string) error         // §4.4.8
+func (rs *RoleSet) AddEndpoint(role *ua.NodeID, ep *ua.EndpointType) error                 // §4.4.9
+func (rs *RoleSet) RemoveEndpoint(role *ua.NodeID, ep *ua.EndpointType) error              // §4.4.10
+func (rs *RoleSet) SetApplicationsExclude(role *ua.NodeID, exclude bool) error
+func (rs *RoleSet) SetEndpointsExclude(role *ua.NodeID, exclude bool) error
+```
+
+See [docs/server-guide.md](docs/server-guide.md#role-management-roleset-opc-10000-18).
+
 ---
 
 ## Package `uamethod`
 
 The contracts of Methods of namespace 0, generated by `cmd/methods` from the
 InputArguments and OutputArguments of the NodeSet: FileType and
-FileDirectoryType (OPC 10000-20 §4.2, §4.3).
+FileDirectoryType (OPC 10000-20 §4.2, §4.3), RoleSetType and RoleType
+(OPC 10000-18 §4.2, §4.4; a structure argument such as the Rule of
+AddIdentity is its Go type, `*ua.IdentityMappingRuleType`).
 
 ```go
 type Method struct {
@@ -3094,6 +3143,45 @@ func (d *Directory) MoveOrCopy(ctx context.Context, obj, target *ua.NodeID, crea
 ```
 
 See [docs/client-guide.md](docs/client-guide.md#files-part-20).
+
+---
+
+## Package `rolemgmt`
+
+The client of the RoleSet and the roles of OPC 10000-18 (§4.2 to §4.4).
+
+```go
+func New(c *opcua.Client) *RoleSet                     // Server.ServerCapabilities.RoleSet
+func NewRoleSet(c *opcua.Client, obj *ua.NodeID) *RoleSet
+func (s *RoleSet) NodeID() *ua.NodeID
+func (s *RoleSet) Roles(ctx context.Context) ([]*Role, error) // components of RoleType
+func (s *RoleSet) Role(nodeID *ua.NodeID) *Role
+func (s *RoleSet) AddRole(ctx context.Context, name, namespaceURI string) (*Role, error)
+func (s *RoleSet) RemoveRole(ctx context.Context, role *ua.NodeID) error
+type Role struct {
+    NodeID     *ua.NodeID
+    BrowseName *ua.QualifiedName // set by Roles
+}
+type Config struct {
+    Identities          []*ua.IdentityMappingRuleType
+    Applications        []string
+    ApplicationsExclude bool
+    Endpoints           []*ua.EndpointType
+    EndpointsExclude    bool
+    CustomConfiguration bool
+}
+func (r *Role) Config(ctx context.Context) (*Config, error)
+func (r *Role) AddIdentity(ctx context.Context, rule *ua.IdentityMappingRuleType) error
+func (r *Role) RemoveIdentity(ctx context.Context, rule *ua.IdentityMappingRuleType) error
+func (r *Role) AddApplication(ctx context.Context, applicationURI string) error
+func (r *Role) RemoveApplication(ctx context.Context, applicationURI string) error
+func (r *Role) AddEndpoint(ctx context.Context, ep *ua.EndpointType) error
+func (r *Role) RemoveEndpoint(ctx context.Context, ep *ua.EndpointType) error
+func (r *Role) SetApplicationsExclude(ctx context.Context, exclude bool) error // Write
+func (r *Role) SetEndpointsExclude(ctx context.Context, exclude bool) error    // Write
+```
+
+See [docs/client-guide.md](docs/client-guide.md#role-management-opc-10000-18).
 
 ---
 

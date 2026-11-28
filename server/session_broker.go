@@ -40,9 +40,17 @@ type session struct {
 	// identityToken is the user identity provided during ActivateSession.
 	identityToken ua.IdentityToken
 
-	// roles is the set of well-known role NodeIDs assigned to this session
-	// based on the identity token. Set during ActivateSession.
-	roles []*ua.NodeID
+	// roles is the set of role NodeIDs assigned to this session based on
+	// the identity token. Set during ActivateSession, and again when the
+	// managed RoleSet changes (roleset.go). rolesMu guards roles,
+	// mappedRoles and roleFacts; read them with sessionRoles or Roles.
+	rolesMu sync.RWMutex
+	roles   []*ua.NodeID
+	// mappedRoles are the roles of the RoleMapper at the last activation,
+	// and roleFacts what the managed RoleSet evaluates its rules against;
+	// both nil without WithRoleManagement.
+	mappedRoles []*ua.NodeID
+	roleFacts   *roleFacts
 
 	// PublishRequests is the queue of the Publish requests of the session,
 	// oldest first. The subscriptions of the session take requests from
