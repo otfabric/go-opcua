@@ -65,6 +65,7 @@ func (c *Connections) closeCall(ctx context.Context, ac *automationComponent, ar
 		}
 	}
 	c.refreshAll()
+	c.persistServerPubSub(ctx)
 	return []*ua.Variant{ua.MustVariant(results)}, status
 }
 
