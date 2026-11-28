@@ -2141,7 +2141,7 @@ func (c *Client) Read(ctx context.Context, req *ua.ReadRequest) (*ua.ReadRespons
 		// therefore check for extension objects with nil values and set
 		// the status code to StatusBadDataTypeIDUnknown.
 		for i, dv := range res.Results {
-			if dv == nil || dv.Value == nil {
+			if dv.Value == nil {
 				continue
 			}
 			val := dv.Value.Value()

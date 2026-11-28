@@ -577,6 +577,26 @@ func TestDynamicStructure_EncodeErrors(t *testing.T) {
 	require.Len(t, b, 8)
 }
 
+// An array of more elements than an Int32 length can say is refused before
+// anything is encoded (OPC 10000-6 §5.2.5).
+func TestDynamicStructure_EncodeArrayTooLarge(t *testing.T) {
+	// One element more than an Int32 length can say: a length that only
+	// exists where int has more than 32 bits. The Booleans take one byte each
+	// and are never written to, so the pages are not touched.
+	size := uint64(math.MaxInt32) + 1
+	if size > uint64(math.MaxInt) {
+		t.Skip("no slice is longer than MaxInt32 elements on this platform")
+	}
+	const dtBools = 210
+	s := dynSet(t)
+	require.NoError(t, s.Add(dynStructure(dtBools, StructureTypeStructure, dynField("B", ns0(id.Boolean), 1))))
+	v, err := s.New(dynID(dtBools))
+	require.NoError(t, err)
+	require.NoError(t, v.Set("B", make([]bool, int(size))))
+	_, err = v.Encode()
+	require.ErrorIs(t, err, uaerrors.ErrArrayTooLarge)
+}
+
 func TestDynamicStructure_TypeID(t *testing.T) {
 	s := dynSet(t)
 	v, err := s.New(dynID(dtInner))
