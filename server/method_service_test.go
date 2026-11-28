@@ -232,3 +232,12 @@ func TestBuiltinTypeOfNodeIDs(t *testing.T) {
 		assert.False(t, ok, "%v", dt)
 	}
 }
+
+// TestVariantMatchesArgumentWithoutDeclaration: an Argument without a
+// DataType, or none at all, constrains nothing.
+func TestVariantMatchesArgumentWithoutDeclaration(t *testing.T) {
+	v := ua.MustVariant("x")
+	assert.True(t, variantMatchesArgument(nil, v, nil))
+	assert.True(t, variantMatchesArgument(nil, v, &ua.Argument{Name: "a", ValueRank: -1}))
+	assert.True(t, variantMatchesArgument(nil, nil, &ua.Argument{Name: "a", ValueRank: -1}))
+}
