@@ -16,7 +16,8 @@ import (
 // The managed RoleSet of OPC 10000-18 (Role-Based Security, v1.05.06).
 //
 // With [WithRoleManagement] the server keeps the configuration of its roles
-// in memory and serves it through the RoleSet Object of namespace 0
+// in memory (with [WithRoleSetStore] in a store too) and serves it through
+// the RoleSet Object of namespace 0
 // (Server.ServerCapabilities.RoleSet, §4.3): the Properties Identities,
 // Applications, ApplicationsExclude, Endpoints, EndpointsExclude and
 // CustomConfiguration of each role (§4.4.1), the Methods AddRole and
@@ -94,8 +95,11 @@ import (
 //   - With auditing on, a change of a role reports a
 //     RoleMappingRuleChangedAuditEventType event (§4.5), and AddRole,
 //     RemoveRole and refused calls an AuditUpdateMethodEventType event.
-//   - The configuration lives in memory: it starts from the defaults of
-//     §4.3 with each New and is lost when the process ends.
+//   - Without [WithRoleSetStore] the configuration lives in memory: it
+//     starts from the defaults of §4.3 with each New and is lost when the
+//     process ends. With it the server restores the configuration it wrote
+//     there (the NodeIds of the roles AddRole added included, Part 3
+//     §5.2.2) and writes every change before it reports it.
 
 // RolesNamespaceURI is the namespace of the role Objects that AddRole adds.
 // The server adds it to the NamespaceArray at the first AddRole of a role
@@ -190,6 +194,8 @@ type RoleSet struct {
 	roles []*managedRole
 	// ns is the namespace of the roles AddRole adds, nil before the first.
 	ns *NodeNameSpace
+	// restored: the roles of WithRoleSetStore were restored; under opMu.
+	restored bool
 }
 
 // managedRole is a role of the RoleSet. The slices are replaced, never
@@ -514,9 +520,9 @@ func (rs *RoleSet) changed(props []*ua.NodeID) {
 	rs.reevaluate()
 }
 
-// mutable returns the role id that the rules of may change: a role that
-// exists (Bad_NodeIdUnknown) and is not fixed (Bad_RequestNotAllowed,
-// §4.3). rs.mu must be held.
+// mutableLocked returns the role id that the rules of may change: a role
+// that exists (Bad_NodeIdUnknown) and is not fixed (Bad_RequestNotAllowed,
+// §4.3). rs.opMu or rs.mu must be held.
 func (rs *RoleSet) mutableLocked(id *ua.NodeID) (*managedRole, error) {
 	r := rs.findLocked(id)
 	if r == nil {
@@ -528,26 +534,38 @@ func (rs *RoleSet) mutableLocked(id *ua.NodeID) (*managedRole, error) {
 	return r, nil
 }
 
-// update changes the role id with f under the locks of the RoleSet and
-// reports the change.
+// update changes the role id with f and reports the change. f changes a
+// copy of the role under opMu; the copy is written to the store of
+// WithRoleSetStore and then becomes the role under mu, so that a change the
+// store refused changes nothing.
 func (rs *RoleSet) update(id *ua.NodeID, f func(r *managedRole) error) error {
 	rs.opMu.Lock()
-	rs.mu.Lock()
-	r, err := rs.mutableLocked(id)
+	restored, err := rs.restoreLocked()
+	var r *managedRole
 	if err == nil {
-		err = f(r)
+		r, err = rs.mutableLocked(id)
 	}
 	var props []*ua.NodeID
-	if r != nil {
-		props = slices.Clone(r.props)
+	if err == nil {
+		c := *r
+		err = f(&c)
+		if err == nil {
+			next := slices.Clone(rs.roles)
+			next[slices.Index(next, r)] = &c
+			err = rs.persistLocked(next)
+		}
+		if err == nil {
+			rs.mu.Lock()
+			r.setConfig(&c)
+			rs.mu.Unlock()
+			props = slices.Clone(r.props)
+		}
 	}
-	rs.mu.Unlock()
 	rs.opMu.Unlock()
-	if err != nil {
-		return err
+	if restored != nil || err == nil {
+		rs.changed(append(restored, props...))
 	}
-	rs.changed(props)
-	return nil
+	return err
 }
 
 // AddIdentity adds the identity mapping rule to the role (OPC 10000-18
@@ -673,10 +691,22 @@ func (rs *RoleSet) AddRole(name, namespaceURI string) (*ua.NodeID, error) {
 	if name == "" || len(name) > maxRoleText || !printable(name) {
 		return nil, ua.StatusBadInvalidArgument
 	}
-	s := rs.s
 	rs.opMu.Lock()
-	defer rs.opMu.Unlock()
+	restored, err := rs.restoreLocked()
+	var nid *ua.NodeID
+	if err == nil {
+		nid, err = rs.addRoleLocked(name, namespaceURI)
+	}
+	rs.opMu.Unlock()
+	if restored != nil {
+		rs.changed(restored)
+	}
+	return nid, err
+}
 
+// addRoleLocked is AddRole under opMu.
+func (rs *RoleSet) addRoleLocked(name, namespaceURI string) (*ua.NodeID, error) {
+	s := rs.s
 	if namespaceURI == uaNamespaceURI {
 		// "the name of the Role from OPC 10000-3 shall be used together
 		// with the OPC UA namespace URI": the well-known roles, which the
@@ -719,17 +749,36 @@ func (rs *RoleSet) AddRole(name, namespaceURI string) (*ua.NodeID, error) {
 	}
 
 	r := &managedRole{
-		id:          ua.NewStringNodeID(ns.ID(), strconv.Itoa(int(nsIdx))+":"+name),
+		id:          rs.newRoleID(ns.ID(), strconv.Itoa(int(nsIdx))+":"+name),
 		browseName:  bn,
 		removable:   true,
 		appsExclude: true, // "the initial values ... shall be TRUE" (§4.2.2)
 		epExclude:   true,
+	}
+	if err := rs.persistLocked(append(slices.Clone(rs.roles), r)); err != nil {
+		return nil, err
 	}
 	rs.addRoleNodes(r)
 	rs.mu.Lock()
 	rs.roles = append(rs.roles, r)
 	rs.mu.Unlock()
 	return r.id, nil
+}
+
+// newRoleID returns the String NodeId ident in the namespace ns, with a
+// suffix "#<n>" when a role has it already. A role the store of
+// WithRoleSetStore restored keeps its NodeId, "a Server shall persist the
+// identifierType and identifier NodeId elements of a Node as well as the
+// Namespace Uri which the namespaceIndex NodeId element references" (OPC
+// 10000-3 §5.2.2), while the namespace index in ident may have changed
+// since; without a store the NodeIds of the roles never collide. rs.opMu
+// must be held.
+func (rs *RoleSet) newRoleID(ns uint16, ident string) *ua.NodeID {
+	nid := ua.NewStringNodeID(ns, ident)
+	for i := 2; rs.findLocked(nid) != nil; i++ {
+		nid = ua.NewStringNodeID(ns, ident+"#"+strconv.Itoa(i))
+	}
+	return nid
 }
 
 // namespace returns the namespace of the roles AddRole adds, adding it;
@@ -933,21 +982,34 @@ func (rs *RoleSet) addRoleNodes(r *managedRole) {
 // RemoveRole removes the role from the RoleSet (OPC 10000-18 §4.2.3) with
 // its nodes and its RolePermissions.
 func (rs *RoleSet) RemoveRole(role *ua.NodeID) error {
-	s := rs.s
 	rs.opMu.Lock()
-	rs.mu.Lock()
+	restored, err := rs.restoreLocked()
+	if err == nil {
+		err = rs.removeRoleLocked(role)
+	}
+	rs.opMu.Unlock()
+	if restored != nil || err == nil {
+		rs.changed(restored)
+	}
+	return err
+}
+
+// removeRoleLocked is RemoveRole under opMu.
+func (rs *RoleSet) removeRoleLocked(role *ua.NodeID) error {
+	s := rs.s
 	r := rs.findLocked(role)
 	switch {
 	case r == nil:
-		rs.mu.Unlock()
-		rs.opMu.Unlock()
 		return ua.StatusBadNodeIDUnknown
 	case !r.removable:
-		rs.mu.Unlock()
-		rs.opMu.Unlock()
 		return ua.StatusBadRequestNotAllowed
 	}
-	rs.roles = slices.DeleteFunc(slices.Clone(rs.roles), func(x *managedRole) bool { return x == r })
+	next := slices.DeleteFunc(slices.Clone(rs.roles), func(x *managedRole) bool { return x == r })
+	if err := rs.persistLocked(next); err != nil {
+		return err
+	}
+	rs.mu.Lock()
+	rs.roles = next
 	rs.mu.Unlock()
 
 	s.mu.Lock()
@@ -966,8 +1028,6 @@ func (rs *RoleSet) RemoveRole(role *ua.NodeID) error {
 		_ = rs.ns.DeleteNode(r.nodes[i])
 	}
 	s.deleteRolePermissions(r.id)
-	rs.opMu.Unlock()
-	rs.reevaluate()
 	return nil
 }
 

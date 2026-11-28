@@ -4134,6 +4134,18 @@ func WithRoleMapper(rm RoleMapper) Option
 
 WithRoleMapper configures a custom role mapper for session identity → role resolution.
 
+#### func WithRoleSetStore
+
+```go
+func WithRoleSetStore(st RoleSetStore) Option
+```
+
+WithRoleSetStore persists the managed RoleSet of [WithRoleManagement](#func-withrolemanagement) in st. Once st holds roles they are the configuration of the RoleSet: the server restores them once, at Start before it accepts a connection, or at the first change made through [Server.RoleSet](#func-server-roleset) before Start, whichever comes first; the changes an application makes at each start are made on the restored roles. A store that cannot be loaded, or roles that are not valid, fail the restore: Start returns the error and the server does not start (fail closed). Register the namespaces the BrowseNames of the added roles use before Start.
+
+Every change of the RoleSet is written in one call of st after it succeeded in memory and before the Method, Write or function that made it returns; a write that fails leaves the RoleSet as it was and fails the change with Bad\_InternalError (a library interpretation: OPC 10000-18 gives no result code for it).
+
+It needs WithRoleManagement.
+
 #### func WithServerDiagnostics
 
 ```go
@@ -4947,6 +4959,8 @@ type RoleSet struct {
 
 	// ns is the namespace of the roles AddRole adds, nil before the first.
 
+	// restored: the roles of WithRoleSetStore were restored; under opMu.
+
 }
 ```
 
@@ -5047,6 +5061,32 @@ func (rs *RoleSet) SetEndpointsExclude(role *ua.NodeID, exclude bool) error
 ```
 
 SetEndpointsExclude sets EndpointsExclude of the role: whether the Endpoints are an exclude list (OPC 10000-18 §4.4.1).
+
+### type RoleSetStore
+
+```go
+type RoleSetStore interface {
+	// LoadRoleSet returns the stored roles with their NodeIds and
+	// BrowseNames in the namespaces of namespaces, the NamespaceArray of the
+	// server, or nil when the store holds no roles. An error, a namespace
+	// the server does not have included, fails the restore: the server does
+	// not start with a RoleSet other than the latest one.
+	LoadRoleSet(ctx context.Context, namespaces []string) ([]Role, error)
+	// StoreRoleSet makes roles, whose NodeIds and BrowseNames are in the
+	// namespaces of namespaces, the stored roles, all or nothing, in their
+	// order. It returns nil when roles are durable. On an error the server
+	// does not apply the change and fails it with Bad_InternalError. After
+	// an error the store must hold the roles it held before, or refuse later
+	// writes until it does, so that a restarted server never starts with a
+	// change it did not apply. roles are those of the RoleSet that are not
+	// Fixed; the store does not keep them.
+	StoreRoleSet(ctx context.Context, roles []Role, namespaces []string) error
+}
+```
+
+RoleSetStore persists the managed RoleSet of a server ([WithRoleManagement](#func-withrolemanagement), OPC 10000-18): the roles AddRole added (§4.2.2) and the Identities, Applications, ApplicationsExclude, Endpoints and EndpointsExclude of every role whose configuration can change (§4.4.1), the well-known roles of namespace 0 included. Package server/rolestore implements it on a directory.
+
+The server calls StoreRoleSet after each change that succeeded, whatever makes it (the Methods of §4.2.2, §4.2.3 and §4.4.5 to §4.4.10, a Write of ApplicationsExclude or EndpointsExclude, or the [RoleSet](#type-roleset) methods), and LoadRoleSet once, before the first session can be activated ([WithRoleSetStore](#func-withrolesetstore)).
 
 ### type SKSOption
 

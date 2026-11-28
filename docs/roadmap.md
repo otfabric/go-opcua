@@ -113,7 +113,7 @@ namespace.
 | Part 5 Methods: GetMonitoredItems, ResendData, SetSubscriptionDurable, RequestServerStateChange | done in v1.43.0 (Part 5 §9.1–§9.4), with typed client calls; durable subscriptions in memory only (LIMITATIONS.md); no ledger row (not tested against an independent stack) |
 | ModelChange and SemanticChange events | done in v1.43.0 |
 | NamespaceMetadata, DefaultRolePermissions | done in v1.43.0 |
-| RoleSet Methods (AddRole, AddIdentity and the others) | done in v1.43.0, opt in (`server.WithRoleManagement`; client package `rolemgmt`); in memory, persistence is phase 4; no ledger row (no peer of opcua-interop manages roles) |
+| RoleSet Methods (AddRole, AddIdentity and the others) | done in v1.43.0, opt in (`server.WithRoleManagement`; client package `rolemgmt`); persisted with `server.WithRoleSetStore` (`server/rolestore`, phase 4, v1.43.0); no ledger row (no peer of opcua-interop manages roles) |
 | AuditWriteUpdate, AuditHistoryUpdate, AuditNodeManagement events | done in v1.43.0, with auditing on (`server.WithChangeAuditing(false)` turns them off); no ledger row |
 | History annotations (UpdateStructureData) | done in v1.43.0: UpdateStructureDataDetails, ReadAnnotationDataDetails, the Annotations Property (`EnableAnnotations`), `AnnotationHistoryProvider`, client helpers; no ledger row |
 | Client session keepalive while idle | done in v1.43.0 |
@@ -166,7 +166,11 @@ One persistence package for the server, PubSub and UAFX, from
   configuration file;
 - persistence of the managed RoleSet (`server.WithRoleManagement`): the
   roles AddRole added and the Identities, Applications and Endpoints of
-  every role, kept in memory since v1.43.0;
+  every role, kept in memory since v1.43.0: done in v1.43.0.
+  `server.WithRoleSetStore` with `server/rolestore` writes each change in
+  one `fxstore.Domain.Apply` after it succeeded and restores the roles,
+  their NodeIds and namespaces by URI, when the server starts; a write that
+  fails changes nothing (`Bad_InternalError`);
 - restart, failed commit and concurrent change tests through each entry
   point.
 
