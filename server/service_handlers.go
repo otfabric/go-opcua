@@ -175,11 +175,14 @@ func (s *Server) serve(ctx context.Context, sc *uasc.SecureChannel, reqID uint32
 	s.changeServiceDone(sess, req, resp, err)
 
 	if err != nil {
+		// The ResponseHeader carries "The requestHandle given by the Client
+		// to the request" (Part 4 §7.33), a ServiceFault too: the client
+		// matches the fault to its request by it.
+		status := ua.StatusBadUnexpectedError
 		if statusCode, ok := err.(ua.StatusCode); ok {
-			resp = &ua.ServiceFault{ResponseHeader: responseHeader(0, statusCode)}
-		} else {
-			resp = &ua.ServiceFault{ResponseHeader: responseHeader(0, ua.StatusBadUnexpectedError)}
+			status = statusCode
 		}
+		resp = &ua.ServiceFault{ResponseHeader: responseHeader(requestHandle(req), status)}
 	}
 	if resp != nil {
 		addDiagnostics(req, resp)

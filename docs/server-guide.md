@@ -309,6 +309,49 @@ This creates a server with:
 
 The full list is in [API.md](../API.md#server-configuration-options).
 
+### Capacities
+
+The core capacities of a server, as the ConformanceUnit Documentation - Core
+Capacities of OPC 10000-7 asks an application to document them. An
+application that changes a default documents its own value.
+
+| Capacity | Default | Option | Published as |
+|---|---|---|---|
+| SecureChannels | not limited by the server: one per accepted connection, bounded by the file descriptors and memory of the process; 8 in use per reverse connect target | `ReverseConnectMaxConnections` | |
+| Requests of one SecureChannel in flight | 256; with that many the server reads no further request of the channel until one is answered (a queued Publish request does not count) | | |
+| Request message | 2 MiB (`uacp.DefaultServerACK.MaxMessageSize`), receive buffer 65535 bytes, 512 chunks | `uacp.DefaultServerACK` | MaxStringLength, MaxByteStringLength |
+| Variant array | 65535 elements over all dimensions (`ua.MaxVariantArrayLength`) | `ua.MaxVariantArrayLength` | MaxArrayLength |
+| Sessions | 100 | `WithMaxSessions` | MaxSessions |
+| Browse continuation points | 10 per Session | `WithMaxBrowseContinuationPoints` | MaxBrowseContinuationPoints |
+| Query continuation points | 5 per Session | `WithMaxQueryContinuationPoints` | MaxQueryContinuationPoints |
+| History continuation points | not limited by the server | | MaxHistoryContinuationPoints 0 |
+| Subscriptions | 1024 in all, 64 per Session | `WithMaxSubscriptions`, `WithMaxSubscriptionsPerSession` | MaxSubscriptions, MaxSubscriptionsPerSession |
+| Publish requests | max(100, MaxSubscriptionsPerSession + 1) queued per Session; the oldest is answered `Bad_TooManyPublishRequests` | follows `WithMaxSubscriptionsPerSession` | |
+| MonitoredItems | 100000 in all, 20000 per Session, 10000 per Subscription | `WithMaxMonitoredItems`, `WithMaxMonitoredItemsPerSession`, `WithMaxMonitoredItemsPerSubscription` | MaxMonitoredItems, MaxMonitoredItemsPerSubscription |
+| Retransmission queue | 10 NotificationMessages per Subscription | | |
+| Queue of a sampled (data) MonitoredItem | 100; up to 10000 in a durable Subscription | `WithDurableSubscriptions` | MaxMonitoredItemsQueueSize (the larger) |
+| Queue of an event MonitoredItem | 1000 for QueueSize 0, at most 10000 | | |
+| Operations per call | 32 per service | `WithOperationLimits` | OperationLimits |
+
+The ServerCapabilities Properties are those of OPC 10000-5 §6.3.2;
+[security.md](security.md#session-and-subscription-limits-server) says how
+each limit is applied and answered.
+
+### Time synchronization
+
+The server takes every timestamp it writes (ServerTimestamp,
+SourceTimestamp of the values it stores, ServerStatus.CurrentTime, the
+ResponseHeader timestamp, the Time of the events) from the clock of the
+operating system, through the Go runtime (`time.Now`), and never sets that
+clock; only the alarm timers can be given another clock
+(`WithAlarmClock`, for tests). Its time synchronization mechanism is the one of the operating
+system (the ConformanceUnit Time Sync – OS based support of OPC 10000-7):
+synchronize the host with NTP (chrony, systemd-timesyncd, ntpd, the Windows
+Time service) or PTP (linuxptp), as the deployment requires. The library
+implements no NTP, PTP, IEEE 802.1AS or OPC UA based time synchronization
+of its own, and has no setting for an acceptable clock skew (Time Sync -
+Configure Clock Skew).
+
 ---
 
 ## HTTPS and WebSocket endpoints

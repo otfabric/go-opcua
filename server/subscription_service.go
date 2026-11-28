@@ -366,7 +366,7 @@ func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChanne
 		return nil, ua.StatusBadNoSubscription
 	}
 
-	s.srv.queuePublishRequest(session, PubReq{Req: req, ID: reqID, Channel: sc})
+	s.srv.queuePublishRequest(session, PubReq{Req: req, ID: reqID, Channel: sc, received: time.Now()})
 
 	// per opcua spec, we don't respond now.  When data is available on the subscription,
 	// the Subscription will respond in the background.
@@ -417,13 +417,11 @@ func nextSequenceNumber(last uint32) uint32 {
 // requests, or keeps it on sess for the next one. ch is the channel of a
 // request that does not name its own.
 func (s *Subscription) announce(sess *session, ch *uasc.SecureChannel, change pendingStatusChange) {
-	select {
-	case pubreq := <-sess.PublishRequests:
+	if pubreq, ok := s.srv.srv.takePublishRequest(sess); ok {
 		resp := statusChangeResponse(pubreq.Req, change, s.srv.ackPublishAcknowledgements(sess, pubreq.Req.SubscriptionAcknowledgements))
 		if err := s.srv.srv.sendPublishResponse(pubreq.replyChannel(ch), pubreq.ID, resp); err == nil {
 			return
 		}
-	default:
 	}
 	sess.addStatusChange(change)
 }
@@ -432,10 +430,8 @@ func (s *Subscription) announce(sess *session, ch *uasc.SecureChannel, change pe
 // with one of its queued Publish requests; without one it stays queued for
 // the next. ch is the channel of a request that does not name its own.
 func (s *Subscription) sendStatusChange(sess *session, ch *uasc.SecureChannel) {
-	var pubreq PubReq
-	select {
-	case pubreq = <-sess.PublishRequests:
-	default:
+	pubreq, ok := s.srv.srv.takePublishRequest(sess)
+	if !ok {
 		return
 	}
 	change, ok := sess.takeStatusChange()
@@ -762,6 +758,11 @@ type PubReq struct {
 	// the session lives on a new channel, while the channel the subscription
 	// was created on is gone.
 	Channel *uasc.SecureChannel
+
+	// received is when the request arrived, from which its TimeoutHint
+	// counts (publishTimedOut); the zero time for a request queued
+	// without it, which never times out.
+	received time.Time
 }
 
 // replyChannel returns the secure channel on which the response to this
@@ -1171,8 +1172,8 @@ func (s *Subscription) run() {
 				if (!hasQueued && !s.pendingEvents()) || !enabled {
 					keepaliveCounter++
 					if keepaliveCounter > maxKeepAlive {
-						select {
-						case pubreq := <-sess.PublishRequests:
+						// Without a Publish request the keep-alive stays due.
+						if pubreq, ok := s.srv.srv.takePublishRequest(sess); ok {
 							keepaliveCounter = 0
 							lifetimeCounter = 0
 							err := s.keepalive(pubreq)
@@ -1184,8 +1185,6 @@ func (s *Subscription) run() {
 								s.srv.srv.cfg.logger.Warn("problem sending keepalive", "sub_id", s.ID, "error", err)
 								continue
 							}
-						default:
-							// no Publish request: the keep-alive stays due
 						}
 					}
 					continue // nothing to publish this interval
@@ -1211,6 +1210,9 @@ func (s *Subscription) run() {
 					// Its client has gone (HTTPS): a notification
 					// message sent there would be lost.
 					continue
+				}
+				if s.srv.srv.publishTimedOut(pubreq) {
+					continue // answered with Bad_Timeout: the next one is used
 				}
 				break L2
 			case <-s.NotifyChannel:

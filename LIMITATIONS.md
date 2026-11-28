@@ -196,16 +196,30 @@ behaviour you may notice, and the deviations of peers are in
 - The Methods of the Server Object (GetMonitoredItems, ResendData,
   SetSubscriptionDurable, RequestServerStateChange) are tested against
   go-opcua only.
+- AccessLevelEx (`server`, OPC 10000-3 §8.58) never sets NoSubDataTypes,
+  NonVolatile or Constant (bits 11 to 13). It serves only the NonatomicRead,
+  NonatomicWrite and WriteFullArrayOnly bits that an application sets.
+- ServiceLevel (`server`, OPC 10000-4 §6.6.2.4.2) follows the ServerState
+  only. A Running server is always Healthy (255), because the server does not
+  measure a degraded state of its own.
+- RedundancySupport is None (`server`): there is no server redundancy (OPC
+  10000-4 §6.6.2).
+- The profileUris of GetEndpoints (`server`) filter only by the
+  TransportProfileUri of an Endpoint.
+- A Publish request whose timeoutHint elapsed in the queue (`server`) is
+  answered with Bad_Timeout without processing its Acknowledgements.
+  A later Publish request acknowledges them again.
 - Profiles of OPC 10000-7: the server claims none. Its default
   ServerProfileArray is the list of Profiles whose mandatory ConformanceUnits
   are all evidenced in [docs/profiles.md](docs/profiles.md), and neither
-  target is: the Micro Embedded Device 2025 Server Profile lacks AccessLevelEx
-  (Atomicity, Full Array Only), MaxMonitoredItemsQueueSize, MaxArrayLength,
-  MaxStringLength, MaxByteStringLength, ServerArray, ServiceLevel and
-  RedundancySupport values, the ProfileUris filter of GetEndpoints, Sessions
-  served in parallel (one dispatcher serves every session), the RequestHandle
-  of a ServiceFault on an error path, a default ApplicationInstanceCertificate
-  and documented capacities and time synchronization; the Standard UA Client
+  target is. The Micro Embedded Device 2025 Server Profile has 27 of its 30
+  mandatory ConformanceUnits evidenced. It lacks three things:
+  - Sessions served in parallel: one dispatcher serves every session.
+  - A default ApplicationInstanceCertificate.
+  - The SemanticsChanged bit for a change made by a SetValueFunc or another
+    data source.
+
+  The Standard UA Client
   2025 Profile lacks more than one outstanding Publish request, Republish on a
   sequence gap in a live session, the OperationLimits honoured, re-discovery,
   obsolete security policies behind administrative intervention and
@@ -227,6 +241,14 @@ behaviour you may notice, and the deviations of peers are in
 - Certification: none. OPC Foundation certification has not been attempted.
 
 ## Known deviations
+
+- MaxStringLength and MaxByteStringLength of the ServerCapabilities (`server`)
+  are the largest request message, `uacp.DefaultServerACK.MaxMessageSize`
+  (2 MiB). The server imposes no other limit on a String or ByteString; a
+  longer one cannot arrive because the server refuses the message. OPC
+  10000-5 §6.3.2 says that a server that imposes no maximum "shall not"
+  provide these Properties, but the ConformanceUnit Base Info Server
+  Capabilities 2 requires them, so the server publishes this upper bound.
 
 - UAFX persisted check (OPC 10000-81 §6.2.4.3.9.2): for a non-persistent
   ConnectionEndpoint the DataSetReader or DataSetWriter must not be

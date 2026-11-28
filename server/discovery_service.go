@@ -69,10 +69,11 @@ func (s *DiscoveryService) GetEndpoints(ctx context.Context, sc *uasc.SecureChan
 	}
 
 	// The endpoints of the requested URL, or all of them when none is
-	// (Part 4 §5.4.4): the same list CreateSession returns for that URL.
+	// (Part 4 §5.5.4): the same list CreateSession returns for that URL,
+	// then those of the requested Transport Profiles.
 	response := &ua.GetEndpointsResponse{
 		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
-		Endpoints:      endpointsForURL(s.srv.endpoints, req.EndpointURL),
+		Endpoints:      endpointsForProfiles(endpointsForURL(s.srv.endpoints, req.EndpointURL), req.ProfileURIs),
 	}
 
 	return response, nil

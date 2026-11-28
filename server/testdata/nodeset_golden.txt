@@ -1,5 +1,5 @@
-ns0 ns=0 http://opcfoundation.org/UA/ nodes=5477 refs=26292 sha256=02fb58c242efc7928217c94ca9b018c7dc18f7460af4c1445a94e7af4dbcce1d
-ns0+GDS+DI+FX ns=0 http://opcfoundation.org/UA/ nodes=5477 refs=29178 sha256=e21d3d6df0a1839e462e7c0171f0f488da72af1eb4d0bcc39735b0b2cd500f9c
+ns0 ns=0 http://opcfoundation.org/UA/ nodes=5477 refs=26302 sha256=dd31c25fb3bb5ae383c003a6947e93f6e0c0f54628e88c266e56db288cea554a
+ns0+GDS+DI+FX ns=0 http://opcfoundation.org/UA/ nodes=5477 refs=29188 sha256=a2cdac4f9bd5db119b1f168380a4e709d3c2eac8a904699e3e9dcd006ad0669f
 ns0+GDS+DI+FX ns=1 http://opcfoundation.org/UA/GDS/ nodes=405 refs=1216 sha256=8298b9eefe6716b437faaed79805fa76e4c5252b1eb0e2895a4249b44bca064a
 ns0+GDS+DI+FX ns=2 http://opcfoundation.org/UA/DI/ nodes=448 refs=1651 sha256=3145c8f8c478d33f86dbf5f38c9724ee0a023a8fe01683abb63c907e5c6b745d
 ns0+GDS+DI+FX ns=3 http://opcfoundation.org/UA/FX/Data/ nodes=187 refs=596 sha256=eee10de719cb41f16207c316a9e39c37910acd9bca7dc6a296decf536bd09b45
