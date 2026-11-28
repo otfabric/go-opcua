@@ -183,7 +183,17 @@ One persistence package for the server, PubSub and UAFX, from
   their NodeIds and namespaces by URI, when the server starts; a write that
   fails changes nothing (`Bad_InternalError`);
 - restart, failed commit and concurrent change tests through each entry
-  point.
+  point: done in v1.43.0. Push certificate management:
+  `TestGDSPush_FileStoreRestart`, `…FailedCommit`, `…Concurrent`
+  (`conformance/certmgmt`), every Method over the wire on a FileStore.
+  PubSub: `TestPubSubStoreRestart`, `…FailedCommit`, `…Concurrent`
+  (`server`), the Methods, CloseAndUpdate, UpdatePubSubConfiguration,
+  ChangePubSubConfiguration and PersistPubSubConfiguration, and
+  `TestPubSub_ConfigurationStoreRestart` (`conformance/pubsub`). RoleSet:
+  `TestRoleSet_StoreRestart`, `…FailedCommit`, `…Concurrent`
+  (`conformance/security`) and `TestRoleSetStore*` (`server`).
+
+Done in v1.43.0: all four items.
 
 ## Phase 5: profiles and evidence
 
