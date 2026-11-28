@@ -1029,8 +1029,9 @@ with an unknown outcome and its run ends in Error.
   flows (E.2.1 is informative). An endpoint without CommunicationLinks uses
   what its AutomationComponent has (a preconfigured endpoint). A
   configuration with SecurityGroups or PubSubKeyPushTargets is
-  ConnectionConfigurationSetInvalid with `Bad_NotSupported`: the
-  ConnectionManager does not configure an SKS.
+  ConnectionConfigurationSetInvalid with `Bad_NotSupported`: they go to
+  an SKS, which the SecurityKeyServer of the set names (E.2.1;
+  [The SecurityKeyServer of a set](#the-securitykeyserver-of-a-set)).
 - The Mode of a PubSubConnectionEndpoint comes from its flows
   (ToOutboundFlow and ToInboundFlow), else from its CommunicationLinks.
 - The RelatedEndpoint (§10.42) names the other endpoint of the Connection:
@@ -1086,6 +1087,88 @@ with an unknown outcome and its run ends in Error.
   endpoint stay on the AutomationComponent, and establishing the set again
   collides with them.
 - The monitor polls the Status with Read; it does not subscribe.
+
+### The SecurityKeyServer of a set
+
+With `Options.SecurityKeyServer` the Manager configures the SKS a set
+names in its SecurityKeyServer (§6.7.3.2, §6.8.2, §9.3): before an
+establish run configures an AutomationComponent it adds each
+SecurityGroup of the set to that SKS (AddSecurityGroup, OPC 10000-14
+§8.5.2), and it names the SKS in the SecurityKeyServices of the secured
+WriterGroups, ReaderGroups and DataSetReaders of the set's PubSub
+configurations whose SecurityGroupId is one of the set's (the pull model
+of E.5). The AutomationComponents pull their keys from it themselves.
+Without the option the SecurityKeyServer of a set is validated and not
+used, as before.
+
+```go
+m, err := fxcm.New(fxcm.Options{
+	Dialer:         dialer,
+	ApplicationURI: "urn:example:cm",
+	// A remote SKS: sessions over SignAndEncrypt with the policy and
+	// the ServerUri of the set (§9.3), as a user the SKS lets
+	// configure SecurityGroups.
+	SecurityKeyServer: &fxcm.RemoteSKS{Dialer: &fxcm.ClientDialer{Options: cmUser}},
+	// Or the KeyService of this process (§9.3: co-located):
+	// SecurityKeyServer: &fxcm.LocalSKS{KeyService: ks},
+})
+```
+
+On the AutomationComponent, `ConnectionOptions.SecurityKeys` of
+`fxserver.EnableConnections` starts an `sks.Puller` on the PubSub runtime
+of the server: for every SecurityGroupId of a secured group or reader whose
+SecurityKeyServices name an SKS with ApplicationType SERVER (OPC 10000-14
+§6.2.5.4 Table 40) it starts an `sks.KeySource` on the first SKS that
+answers and sets it in the runtime; a first fetch that fails is tried
+again with backoff (E.5: "vendor-specific retry logic" is the
+AutomationComponent's); until then the group sends and takes no secured
+messages (OPC 10000-14 §5.4.5.3). When the group goes, its KeySource goes.
+`sks.EndpointDialer` opens the session of Table 40: GetEndpoints on the
+DiscoveryUrls, the SignAndEncrypt endpoint of the SecurityPolicyUri, the
+ServerUri checked against the ApplicationUri (`Bad_ServerUriInvalid`).
+
+```go
+d := &sks.EndpointDialer{Options: acUser, Certificate: cert, AuthType: ua.UserTokenTypeUserName}
+conns, err := fxserver.EnableConnections(srv, ns, fxserver.ConnectionOptions{
+	SecurityKeys: &sks.PullerOptions{Dial: d.Dial},
+})
+```
+
+| Step | What the Manager does | Clause |
+|---|---|---|
+| Establish | AddSecurityGroup of each SecurityGroup on the SKS, once per run, before any AutomationComponent is called; a group the SKS has with the same parameters is found (`Good_DataIgnored`), one with other parameters is `Bad_NodeIdExists` | §6.7.3.2, E.5; OPC 10000-14 §8.5.2 |
+| Configure | The SKS in the empty SecurityKeyServices of the secured groups and readers of a SecurityGroup of the set: ServerUri as the ApplicationUri, Address as the DiscoveryUrl, ApplicationType SERVER, SignAndEncrypt, the SecurityPolicyUri, no EndpointUrl | E.5; OPC 10000-14 §6.2.5.4 Table 40 |
+| Remove | After a RemoveConnections run that closed every endpoint of the set: RemoveSecurityGroup of each SecurityGroup the Manager added that no other set in use (with endpoints or a run) lists | §6.7.3.3; OPC 10000-14 §8.3.3, §8.5.3 |
+| Disable | Nothing: the endpoints stay, and so do their keys | §6.7.5.3.2 |
+| Failure | Every Connection of the set fails, nothing is configured: no session with the SKS is ExternalSksConnectionError (transient, retried), a refusal of the SKS ExternalSksProcessingError, a SecurityGroup the Manager cannot add ConnectionConfigurationSetInvalid | §10.19 NOTE, §10.25 |
+
+The Manager removes only the SecurityGroups it added (AddSecurityGroup
+answered Good): it keeps them by Address, ServerUri and SecurityGroupId
+(`SecurityGroups`), and with a Store durably as `sks/` records, so a
+restarted Manager removes them with the Connections. A group the SKS had
+before is not its own and stays. A failed removal fails the run with the
+ExternalSks error of the cause; the record stays and the next
+RemoveConnections run of a set tries again.
+
+**Library interpretations**:
+
+- Only the pull model. UsePushModel TRUE and PubSubKeyPushTargets are
+  ConnectionConfigurationSetInvalid with `Bad_NotSupported`
+  (AddPushTarget and ConnectSecurityGroups of E.5 are not called).
+- A SecurityGroup of the set needs a Name, a SecurityGroupId that is empty
+  or the Name (OPC 10000-14 §6.2.12.2) and a KeyLifetime above 0
+  (`Bad_ConfigurationError`); one with RolePermissions, GroupProperties or
+  a SecurityGroupFolder is `Bad_NotSupported`: AddSecurityGroup (§8.5.2)
+  has no argument for the first two, and the folder needs the Methods of
+  §8.5.4.
+- A RollbackOnError rollback and an establish that fails later keep the
+  SecurityGroups: the next establish finds them, a RemoveConnections run
+  removes them.
+- A SecurityKeyServices the set's configuration already has is left as it
+  is, and so is a group of a SecurityGroupId that is not the set's.
+- `RemoteSKS` finds the NodeId of a group with GetSecurityGroup
+  (§8.3.3); `Bad_NotFound`, which the go-opcua SKS answers, counts as
+  `Bad_NoMatch`.
 
 ### Persistence of the ConnectionManager
 
@@ -1726,13 +1809,14 @@ go run ./examples/uafx/cm -port 4856
 | Fuzz: the ConnectionConfigurationSet file (`FuzzDecodeFile`) and the records of the store (`FuzzDecodeRecord`) | `uafx/fxcm` |
 | ConnectionManager persistence: sets, Versions and commits across a restart; every outcome of a set change (not committed, unknown and lost, unknown and landed) and the fence; a store of another owner and a corrupt record; an intent or a run record not written (nothing sent), a completion lost (Unresolved, the evidence kept and reported after a restart, nothing resent); a run already in flight fenced by an ambiguous write of another operation; Unverified records after a restart and Settle; the verification after a restart (proven, unreachable with backoff, cancelled by Close, absent, foreign, a changed parameter) and the fence narrowed by it; owed rollbacks, intents and set changes (an Update with an Add) completed by Process and Reconcile; adoption (enabled, disabled, as configured, the fallback to close-first, RollbackOnError) and crashes in the verification, the adoption, the owed rollback and the owed switch; NotPersisted filled for persistent and non-persistent endpoints against strict AutomationComponents | `uafx/fxcm` |
 | ConnectionManager crash: the Manager killed as a subprocess at seven points of Add, establish, rollback and Replace, then started on the same FileStore: the set as committed, the owed work reported, no record trusted and no call made (`TestCrash`) | `uafx/fxcm` |
-| The Manager end to end against `fxserver` AutomationComponents with UDP PubSub: establish, enable, disable, remove and re-establish, data flowing; BrowsePaths and placeholders, asset and FunctionalEntity verification, MaxConnectionsPerCall and CommandBundleRequired; preconfigured endpoints; the rollback; a PublishedDataSet name collision with other content and the comparison of every item and field member; a DataSetReader that names its publisher's PublisherId adapted; a SecurityKeyServer refused; the PublisherId adaptation, with CommandBundleRequired after the publisher, its nested results and a failing call; Close waiting for a Remove; every use of every service failed in turn; every call's response lost; two Managers with the same ApplicationUri; the monitor re-establishing; the retry policy; the ClientDialer | `uafx/fxcm` |
+| The Manager end to end against `fxserver` AutomationComponents with UDP PubSub: establish, enable, disable, remove and re-establish, data flowing; BrowsePaths and placeholders, asset and FunctionalEntity verification, MaxConnectionsPerCall and CommandBundleRequired; preconfigured endpoints; the rollback; a PublishedDataSet name collision with other content and the comparison of every item and field member; a DataSetReader that names its publisher's PublisherId adapted; the PublisherId adaptation, with CommandBundleRequired after the publisher, its nested results and a failing call; Close waiting for a Remove; every use of every service failed in turn; every call's response lost; two Managers with the same ApplicationUri; the monitor re-establishing; the retry policy; the ClientDialer | `uafx/fxcm` |
 | The ConnectionManager server: the nodes and References of a set, the SelectionList writes and their RestrictToList, the PortableNodeIdentifier view, the Lock (ownership, renewal, expiry on the clock of the test, the end of a session, BreakLock), commit with CS-19 reflection and its conflicts, Process and its events, the audit events (also of calls refused early), the file and its argument errors, ChangesApplied of a partial update, handles dropped at the end of their session, the Lock deadline between two checks, escaped NodeIds, the authorizer, the nodes following the Manager; on a SignAndEncrypt Basic256Sha256 endpoint with user names, an authorized user and a viewer, and a right revoked between Open and CloseAndUpdate (`TestConnectionManagerSecure`) | `uafx/fxserver` |
 | Headline (design §7.1): AC1, AC2 and a ConnectionManager server, each its own server, driven only through the Methods, the SelectionList Variables and the file, over SignAndEncrypt sessions with a ConnectionAdmin user: add by file, establish, disable, enable, edit the PublishingInterval and see it on the AC after a new establish, remove (`TestConnectionManagerLifecycle`) | `uafx/fxcm` |
 | Multicast (four servers): AC1 publishes to a UDP multicast group, AC2 and AC3 subscribe, one DataSetWriter serves both, Remove removes all three sides (`TestConnectionManagerMulticast`). It needs an interface that carries multicast (`GO_OPCUA_MULTICAST_IFACE`, else the first that works) and skips without one; `GO_OPCUA_MULTICAST_REQUIRE=1`, set in the CI `server` job, makes that a failure. Run on macOS on en0 and lo0 | `uafx/fxcm` |
 | Persistence: an endpoint restored at its NodeIds with its CreationTime, control and communication after a restart; disable and remove durable; C3-D4 and the persisted check (PC-1, PC-2 with StrictNotPersisted); every store outcome at the commit point and at close (not committed, unknown, fenced, settled); the hook (changes, refusals, NotPersisted, removed components, held ids); quarantine of a corrupt body, a corrupt identity, a conflict (RetryRestore) and an unknown key, and Discard; the gate of a secured group with a static key and after a rotation; a start on a foreign or failing store | `uafx/fxserver` |
 | Crash: the server killed as a subprocess at seven points of establish, close and disable, then restarted on the same FileStore: the endpoint is restored as committed and no durable disable or removal is undone (`TestCrash`) | `uafx/fxserver` |
 | The store contract (`storetest.Run`) on MemoryStore and FileStore, the Domain (fence, Require, Settle, batch identity of a confirming Apply) and the fault injector; fuzz: the state file (`FuzzDecodeState`) and the domain metadata (`FuzzDecodeMeta`) | `uafx/fxstore` |
+| The SecurityKeyServer of a set: two AutomationComponents and a remote SKS over SignAndEncrypt, the SecurityGroup added, the SKS named in the SecurityKeyServices, keys pulled and SignAndEncrypt data flowing, the group kept by a disable and removed with the Connections; a LocalSKS, a group two sets list, a group the SKS had before; a restart of an AutomationComponent and of the Manager on their stores; an SKS that is down or refuses, the push model, PushTargets, invalid SecurityGroups, a record not written, a removal that fails; the results of the SKS Methods; corrupt `sks/` records | `uafx/fxcm`, `uafx/fxserver`, `pubsub/sks` |
 | The key gate: rotation, wraparound, an SKS that reissues ids or material, static and unavailable sources, a new KeySource | `pubsub` |
 | Fuzz: a hostile server (`FuzzInspectHostileServer`), the UAFX structures (`FuzzDecodeStructures`, and every generated structure with `FuzzDecodeStructure`), the arguments of EstablishConnections (`FuzzDecodeEstablishConnections`), the namespace mapping of NodeSet documents (`FuzzRemap`, and `FuzzScanners` against the regular expressions its scanners replace), the records of persistent endpoints and components (`FuzzDecodeEndpoint`, `FuzzDecodeComponent`) | `uafx`, `internal/nodeset`, `uafx/fxserver` |
 | End to end: every RSA and ECC security policy in both secure modes, anonymous and username identity, multi-chunk responses, concurrent clients, OperationLimits of one node | [`conformance/uafx`](../conformance/uafx) |
@@ -1780,7 +1864,18 @@ The test address space is `internal/testutil/fxtest`.
   What it cannot prove it reports and never closes; it does not take over
   an endpoint it did not record (no adoption of a lost record, Classify
   makes it Unresolved), and a set change is completed by Reconcile only.
-  It does not configure a SecurityKeyServer, ask a GDS (no
+  It configures the SecurityKeyServer of a set with the pull model only,
+  without PubSubKeyPushTargets, RolePermissions, GroupProperties or a
+  SecurityGroupFolder
+  ([The SecurityKeyServer of a set](#the-securitykeyserver-of-a-set)); a
+  KeyService that is not persisted loses the groups at a restart of its
+  process, which the Manager adds again only at the next establish. A
+  secured endpoint whose SecurityKeyServices the Manager filled is not
+  kept in place after a restart of the Manager (the adoption does not
+  prove SecurityKeyServices): the next establish closes and creates it
+  again. A group of a set whose
+  change Reconcile completed is removed only at the next
+  RemoveConnections run of a set. It does not ask a GDS (no
   GlobalDiscoveryServers), resolve AliasNames (AliasNameProcessingError),
   generate a PubSub configuration from the flows
   ([Running a ConnectionManager](#running-a-connectionmanager)), or

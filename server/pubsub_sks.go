@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -347,22 +348,38 @@ func (h *SecurityKeyService) addSecurityGroup(ctx context.Context, folder *ua.No
 	if !ok {
 		return nil, ua.StatusBadInvalidArgument
 	}
-	err := h.ks.AddSecurityGroup(pubsubsec.SecurityGroupConfig{
+	cfg := pubsubsec.SecurityGroupConfig{
 		SecurityGroupID:     name,
 		SecurityPolicyURI:   uri,
 		KeyLifetime:         d,
 		MaxFutureKeyCount:   maxFuture,
 		MaxPastKeyCount:     maxPast,
 		SecurityGroupFolder: path,
-	})
-	if err != nil {
-		return nil, pubsubsec.StatusCode(err)
+	}
+	status := ua.StatusOK
+	if err := h.ks.AddSecurityGroup(cfg); err != nil {
+		st := pubsubsec.StatusCode(err)
+		have, ok := h.ks.SecurityGroup(name)
+		if st != ua.StatusBadNodeIDExists || !ok || !sameSecurityGroup(have, cfg) {
+			return nil, st
+		}
+		// Part 14 §8.5.2: a SecurityGroup with these parameters exists;
+		// it is returned without adding a new one.
+		status = ua.StatusGoodDataIgnored
 	}
 	nid, ok := h.SecurityGroupNodeID(name)
 	if !ok { // removed concurrently, or the server was detached
 		return nil, ua.StatusBadInternalError
 	}
-	return []*ua.Variant{ua.MustVariant(name), ua.MustVariant(nid)}, ua.StatusOK
+	return []*ua.Variant{ua.MustVariant(name), ua.MustVariant(nid)}, status
+}
+
+// sameSecurityGroup reports whether a and b have the parameters of
+// AddSecurityGroup (Part 14 §8.5.2) and the same SecurityGroupFolder.
+func sameSecurityGroup(a, b pubsubsec.SecurityGroupConfig) bool {
+	return a.SecurityPolicyURI == b.SecurityPolicyURI && a.KeyLifetime == b.KeyLifetime &&
+		a.MaxFutureKeyCount == b.MaxFutureKeyCount && a.MaxPastKeyCount == b.MaxPastKeyCount &&
+		slices.Equal(a.SecurityGroupFolder, b.SecurityGroupFolder)
 }
 
 func (h *SecurityKeyService) removeSecurityGroup(ctx context.Context, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {

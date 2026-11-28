@@ -34,8 +34,11 @@ behaviour you may notice, and the deviations of peers are in
   `fxserver.EnableConnectionManager`) keeps its sets and the records of its
   endpoints in memory, and with a Store also durably; it has no ConnectionManagerLog, lists no
   GlobalDiscoveryServers, reflects no Qos or ReceiveQos of an edited flow
-  onto the PubSub configuration; it configures no SecurityKeyServer,
-  asks no GDS, resolves no AliasNames, generates no PubSub configuration
+  onto the PubSub configuration; it configures the SecurityKeyServer of a
+  set with the pull model only (no PubSubKeyPushTargets, no RolePermissions,
+  GroupProperties or SecurityGroupFolder of a SecurityGroup), does not keep
+  secured endpoints in place after its restart (they are closed and
+  established again), asks no GDS, resolves no AliasNames, generates no PubSub configuration
   from the flows, and cannot adapt subscribers to the PublisherId of a
   matched PubSubConnection on AutomationComponents with
   CommandBundleRequired that subscribe to each other in a cycle (the

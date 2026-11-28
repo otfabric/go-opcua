@@ -136,7 +136,9 @@ func copyPubSub(cfg *ua.PubSubConfiguration2DataType) (*ua.PubSubConfiguration2D
 // NodeIds of the Translation namespace are resolved through the
 // TranslationTable, a path from the AutomationComponent. SecurityGroups and
 // PubSubKeyPushTargets go to an SKS (E.2.1): a configuration with them is
-// not supported (decision D3).
+// not supported (decision D3); those of the SecurityKeyServer of the set
+// are (sks.go), whose SKS fills the SecurityKeyServices of the secured
+// groups.
 func (x *run) prepareComm(ctx context.Context, a *acRun) (*commModel, error) {
 	m, ok := a.ac.conf.CommunicationModelConfig.(*uafx.PubSubCommunicationModelConfiguration)
 	if !ok || m == nil || m.PubSubConfiguration == nil {
@@ -173,6 +175,7 @@ func (x *run) prepareComm(ctx context.Context, a *acRun) (*commModel, error) {
 	if err := walkPubSubNodeIDs(cfg, mapID); err != nil {
 		return nil, err
 	}
+	x.m.fillSecurityKeyServices(x.cfg, cfg)
 	return &commModel{cfg: cfg, refs: m.ConfigurationReferences}, nil
 }
 

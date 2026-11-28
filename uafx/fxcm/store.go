@@ -290,6 +290,7 @@ type loaded struct {
 	runs  map[string]*runRecord
 	txs   map[string]*txRecord
 	calls map[string]*callRecord
+	sks   map[string]*sksRecord
 	// failed are the records that did not decode or are not valid, with
 	// the set they are of when that is known (keyString, "" otherwise).
 	failed map[string]error
@@ -303,7 +304,7 @@ type loaded struct {
 func decodeState(st map[string][]byte) *loaded {
 	l := &loaded{
 		sets: map[string]*setRecord{}, eps: map[string]*epStored{}, runs: map[string]*runRecord{}, txs: map[string]*txRecord{},
-		calls: map[string]*callRecord{}, failed: map[string]error{}, of: map[string]string{},
+		calls: map[string]*callRecord{}, sks: map[string]*sksRecord{}, failed: map[string]error{}, of: map[string]string{},
 	}
 	fail := func(k string, err error, set string) {
 		l.failed[k] = err
@@ -374,6 +375,13 @@ func decodeState(st map[string][]byte) *loaded {
 			}
 			v, set = r, SetKey{Folder: r.Folder, Name: r.SetName}
 			high.Generation, high.RunID = max(high.Generation, r.Generation), max(high.RunID, r.Run)
+		case strings.HasPrefix(k, "sks/"):
+			r := &sksRecord{}
+			if err := decodeRecord(st[k], r); err != nil {
+				fail(k, err, "")
+				continue
+			}
+			v = r
 		default:
 			fail(k, errSemantic("a key outside the record layout"), "")
 			continue
@@ -413,6 +421,8 @@ func decodeState(st map[string][]byte) *loaded {
 			l.txs[k] = r
 		case *callRecord:
 			l.calls[k] = r
+		case *sksRecord:
+			l.sks[k] = r
 		}
 	}
 	// The records that belong to another: each needs it.
@@ -462,6 +472,8 @@ func (p *persistence) load(st map[string][]byte) {
 			p.readOnly = fmt.Sprintf("the counters record: %v", err)
 		case strings.HasPrefix(k, "set/"):
 			// Holds its key (checkKey).
+		case strings.HasPrefix(k, "sks/"):
+			// Reported: the SecurityGroup is not the Manager's to remove.
 		case l.of[k] != "":
 			p.blockedSets[l.of[k]] = fmt.Sprintf("the record %s: %v", k, err)
 		default:
@@ -486,6 +498,7 @@ func (p *persistence) load(st map[string][]byte) {
 		}
 		p.failed[k] = err
 	}
+	m.sks = groupsOf(l)
 	for _, r := range l.eps {
 		s := m.sets[keyString(SetKey{Folder: r.Folder, Name: r.SetName})]
 		if s == nil {
@@ -1075,7 +1088,19 @@ func (p *persistence) follow() bool {
 	p.owedMu.Lock()
 	p.owed, p.orphans, p.fenced, p.unverified = owed, orphans, fenced, unverified
 	p.owedMu.Unlock()
+	m.sksMu.Lock()
+	m.sks = groupsOf(l)
+	m.sksMu.Unlock()
 	return true
+}
+
+// groupsOf returns the SecurityGroups of the records of l, by key.
+func groupsOf(l *loaded) map[string]SecurityGroupRecord {
+	out := make(map[string]SecurityGroupRecord, len(l.sks))
+	for k, r := range l.sks {
+		out[k] = r.group()
+	}
+	return out
 }
 
 // followRecords rebuilds the endpoint records of s from the committed

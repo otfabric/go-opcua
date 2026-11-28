@@ -260,10 +260,11 @@ type Failure struct {
 // Transient reports whether f may clear when the set is processed again
 // (§6.9.1: transient errors are cleared by processing again). Library
 // interpretation (design §5.5): the session to the server
-// (TargetServerConnectionError), a communication error or timeout, and a
-// busy AC (Bad_Locked, Bad_TooManyOperations).
+// (TargetServerConnectionError) or to the SKS (ExternalSksConnectionError),
+// a communication error or timeout, and a busy AC (Bad_Locked,
+// Bad_TooManyOperations).
 func (f Failure) Transient() bool {
-	if f.FxError == uafx.FxErrorTargetServerConnectionError {
+	if f.FxError == uafx.FxErrorTargetServerConnectionError || f.FxError == uafx.FxErrorExternalSksConnectionError {
 		return true
 	}
 	switch f.Status {

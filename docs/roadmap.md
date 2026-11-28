@@ -189,6 +189,15 @@ wired to `pubsub/sks`, ConnectionManager and AutomationComponent logs,
 publisher QoS, ConfigurationData and VariableStorage persisted. See the
 limits in [uafx.md](uafx.md#limits).
 
+Progress (v1.43.0): the SecurityKeyServer of the ConnectionManager is wired
+to `pubsub/sks` with the pull model (Part 81 §6.7.3.2, §6.7.3.3, E.5):
+`fxcm.Options.SecurityKeyServer` (`RemoteSKS`, `LocalSKS`) adds and removes
+the SecurityGroups of a set, kept as `sks/` records of the Store, and names
+the SKS in the SecurityKeyServices; `fxserver.ConnectionOptions.SecurityKeys`
+(`sks.Puller`, `sks.EndpointDialer`) pulls the keys on the
+AutomationComponents. Not done: the push model and PubSubKeyPushTargets;
+no ledger row (no peer of opcua-interop implements UAFX). Next: the logs.
+
 ## Later, on demand
 
 OpenAPI mapping (Part 6 Annex G), Parts 82 and 83, TSN, AMQP over

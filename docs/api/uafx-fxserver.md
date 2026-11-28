@@ -302,6 +302,15 @@ type ConnectionOptions struct {
 	// (no NotPersisted TRUE on the component or its parents) always runs.
 	// It applies with a Store only.
 	StrictNotPersisted bool
+	// SecurityKeys makes the server pull the keys of its secured PubSub
+	// groups from the SKS their SecurityKeyServices name (Part 81 E.5, the
+	// pull model; OPC 10000-14 §5.4.5.3, §6.2.5.4), such as those a
+	// ConnectionManager with a SecurityKeyServer configures: an
+	// sks.Puller on the PubSub runtime, every Interval unless
+	// SecurityKeys.Interval is set, stopped by Close. A SecurityGroup the
+	// runtime has keys for from another source is left to it. nil: the
+	// application supplies the keys (pubsub.WithKeySource).
+	SecurityKeys *sks.PullerOptions
 	// maxControlled replaces maxControlled in tests; 0 is maxControlled.
 
 	// failCapabilities, set by tests, makes setSupportsPersistence fail
@@ -346,6 +355,9 @@ type Connections struct {
 	// tried again; guarded by mu.
 
 	// pers keeps the persistent endpoints; nil without a Store.
+
+	// keys pulls the keys of the secured groups; nil without
+	// ConnectionOptions.SecurityKeys.
 
 	// crash, when set by a test, runs at the points of the persistence
 	// protocols.
