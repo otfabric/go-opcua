@@ -3695,6 +3695,14 @@ Registration changes what clients are told about the network, so by default it i
 
 Combine it with [WithMulticastDiscovery](#func-withmulticastdiscovery) for the multicast extension (LDS-ME): registered servers are then announced with mDNS.
 
+#### func WithLocaleIDs
+
+```go
+func WithLocaleIDs(locales ...string) Option
+```
+
+WithLocaleIDs sets the LocaleIdArray of the ServerCapabilities (OPC 10000-5 §6.3.2), the LocaleIds "that are known to be supported by the Server", for an application that serves texts in more locales. Without the option, or with no LocaleIds, the array is \["en"], the locale of the texts the server writes.
+
 #### func WithMaxBrowseContinuationPoints
 
 ```go
@@ -3927,6 +3935,14 @@ func WithServerDiagnostics(enabled bool) Option
 ```
 
 WithServerDiagnostics sets whether the server collects diagnostics from the start: the initial value of Server.ServerDiagnostics.EnabledFlag (Part 5 §6.3.3). The default is true. A client with the SecurityAdmin or ConfigureAdmin role can change it at runtime by writing EnabledFlag.
+
+#### func WithServerProfiles
+
+```go
+func WithServerProfiles(uris ...string) Option
+```
+
+WithServerProfiles sets the ServerProfileArray of the ServerCapabilities (OPC 10000-5 §6.3.2): the URIs of the Profiles of OPC 10000-7 the server supports, "limited to the Profiles the Server supports in its current configuration". The library does not determine its Profiles: without the option, or with no URIs, the array is empty.
 
 #### func WithServerStateChange
 

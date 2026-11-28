@@ -31,6 +31,17 @@ field is no limit) and fails a larger request with `BadTooManyOperations`.
 The monitored item, continuation point and event queue limits are listed in
 [security.md](security.md#per-call-and-per-session-resource-limits).
 
+Every Mandatory Property of the ServerCapabilities (OPC 10000-5 §6.3.2) has a
+value. `WithServerProfiles(uris...)` sets the ServerProfileArray, the URIs of
+the OPC 10000-7 Profiles the server supports in its configuration; the library
+does not determine its Profiles, so without the option the array is empty.
+`WithLocaleIDs(locales...)` sets the LocaleIdArray, `["en"]` by default, the
+locale of the texts the server writes. MinSupportedSampleRate is 0 (a sampling
+interval of 0 is exception-based sampling), MaxHistoryContinuationPoints is 0
+(the server refuses no HistoryRead for a count of continuation points; a
+`HistoryProvider` may release those it cannot keep, OPC 10000-4 §7.9), and
+SoftwareCertificates is empty. The continuation point limits are UInt16.
+
 Unsupported services return consistent OPC UA status codes. Any request type
 not registered with the server returns `StatusBadServiceUnsupported`.
 

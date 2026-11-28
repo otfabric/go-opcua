@@ -1020,7 +1020,7 @@ Size the limits to the clients you expect: an engineering tool and a few HMIs ne
 | `WithMaxBrowseContinuationPoints(n)` | 10 per session | Browse: `Bad_NoContinuationPoints` for the node |
 | `WithMaxQueryContinuationPoints(n)` | 5 per session | QueryFirst: `Bad_NoContinuationPoints` |
 
-The values in force are published in ServerCapabilities (`OperationLimits`, `MaxMonitoredItems`, `MaxMonitoredItemsPerSubscription`, `MaxBrowseContinuationPoints`, `MaxQueryContinuationPoints`).
+The values in force are published in ServerCapabilities (`OperationLimits`, `MaxMonitoredItems`, `MaxMonitoredItemsPerSubscription`, `MaxBrowseContinuationPoints`, `MaxQueryContinuationPoints`, the last two as UInt16 up to 65535).
 
 - Browse and Query continuation points belong to the session that created them: another session gets `Bad_ContinuationPointInvalid`. They are released when the session is closed or times out, and an unused one expires after 10 minutes.
 - The event queue of an event monitored item holds its revised QueueSize (default 1000 for QueueSize 0, at most 10000). On overflow an `EventQueueOverflowEventType` event marks the loss (Part 4 §5.12.1.5): with DiscardOldest the oldest event is dropped and the overflow event heads the queue, otherwise the new event is dropped.
