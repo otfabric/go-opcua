@@ -603,3 +603,5 @@ PubSub (Part 14) is implemented in the `pubsub` packages: UDP (`opc.udp://`, uni
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE).
+Files of the OPC Foundation kept in the repository, with their sources and
+terms, are listed in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
