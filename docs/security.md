@@ -439,10 +439,38 @@ GetRejectedList.
 - **Limits.** CloseAndUpdate checks every certificate and CRL, accepts only
   CRLs signed by a CA of the lists, at most 1024 entries and
   `MaxTrustListSize` bytes.
-- **Persistence** is the application's (`PushManagement.Store`): the server
-  writes no files, so keys pushed with UpdateCertificate stay in memory unless
-  a store saves them (a `CertificateGroupStore` also gets the HTTPS and
-  UserToken groups).
+- **Persistence** is opt in (`PushManagement.Store`): without a store the
+  server writes no files, and keys pushed with UpdateCertificate stay in
+  memory. `pushstore.OpenDir` (package `server/pushstore`) keeps the trust
+  lists, certificates and keys of every group in a directory of its own and
+  `server.New` restores them:
+  - **Atomic.** Each ApplyChanges and ResetToServerDefaults is one write
+    (`CertificateBatchStore`); an ApplyChanges whose write fails is
+    `Bad_InternalError`, applies nothing and discards its transaction ("If
+    any errors are found then all changes are discarded", Part 12 §7.10.2).
+    A write with an unknown outcome (a failed rename or directory fsync)
+    fences the store until `Settle`, which the next write runs first: it
+    writes the state before the failed write back if that write landed, so
+    a restart never brings back changes the server did not apply, nor a part
+    of one. A crash before `Settle` restarts with the state before or after
+    the write, never a mix.
+  - **Files.** The directory is created 0700 and its files (a lock file and
+    one data file, `state`, with a CRC-32C) 0600; a directory the group or
+    others may write is refused. One process owns it (an exclusive lock).
+  - **Keys** are stored as unencrypted PKCS #8 DER (`uapolicy.MarshalPrivateKey`:
+    RSA, ECDSA on the NIST and Brainpool curves, Ed25519, Ed448), protected
+    by the file permissions. For encryption at rest, wrap the `fxstore.Store`
+    passed to `pushstore.Open`. A key that cannot be exported (a hardware
+    module) cannot be stored: ApplyChanges fails with it.
+  - **Fail closed.** A data file that does not decode, a stored trust list or
+    certificate that is not valid, a key that does not match its certificate,
+    or a store of another owner (its ApplicationUri) fails `server.New`: the
+    server does not start with a trust list other than the one it was given.
+    ResetToServerDefaults empties the store.
+  - The interfaces of earlier versions (`CertificateStore`,
+    `CertificateGroupStore`, `CertificateDeleteStore`) still work; they get
+    one call per trust list and certificate, so a failure part-way leaves the
+    earlier ones stored.
 - **Three groups, three trust lists.** The DefaultApplicationGroup trust list
   validates client application certificates, the DefaultUserTokenGroup one
   X.509 user identity tokens (before a `WithX509UserValidator` is asked), and
@@ -1121,7 +1149,7 @@ The Query service set is off by default (`Bad_ServiceUnsupported`): a QueryFirst
 - [ ] Set a WriteMask only on the attributes clients must change
 - [ ] Size `WithMaxSessions`, `WithMaxSubscriptions` and `WithMaxSubscriptionsPerSession` to the clients you expect
 - [ ] Keep `WithOperationLimits` and the monitored item limits as small as the clients allow; enable `WithQuery` only where clients need it
-- [ ] With `WithPushManagement`, grant SecurityAdmin to authenticated users only and persist changes with a `CertificateStore` if they must survive a restart
+- [ ] With `WithPushManagement`, grant SecurityAdmin to authenticated users only and persist changes with `pushstore.OpenDir` (or another `CertificateStore`) if they must survive a restart; keep its directory on local storage, owned by the server's user
 - [ ] On a Local Discovery Server, keep secured registration (no `LDSAllowInsecureRegistration`) and configure `WithClientCertificateTrustList`
 - [ ] Enable `WithMulticastDiscovery` only on interfaces where the server should be discoverable, and never trust a discovered URL without validating the server certificate
 - [ ] Monitor certificate expiration dates

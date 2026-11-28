@@ -3023,7 +3023,7 @@ type PushManagement struct {
     MaxRejectedCertificates  int                   // 0: 64
     ApplyImmediately         bool                  // no transactions: changes apply when their method returns
     Authorizer               PushAuthorizer        // nil: SecurityAdmin role (always SignAndEncrypt)
-    Store                    CertificateStore      // nil: nothing is persisted; a CertificateGroupStore gets every group
+    Store                    CertificateStore      // nil: nothing is persisted; pushstore.OpenDir: a directory, one write per ApplyChanges
     PFXPassword              func(ctx context.Context, certificateGroup, certificateType *ua.NodeID) (string, error)
     TrustListUpdateFrequency time.Duration         // UpdateFrequency; drives TrustListOutOfDate
     Alarms                   *CertificateAlarms    // CertificateExpired and TrustListOutOfDate alarms
@@ -3061,6 +3061,32 @@ type CertificateDeleteStore interface {
     CertificateStore
     DeleteGroupCertificate(ctx context.Context, certificateGroup, certificateType *ua.NodeID) error // DeleteCertificate, ResetToServerDefaults
 }
+type CertificateBatchStore interface { // used instead of the methods above
+    CertificateStore
+    StoreChanges(ctx context.Context, c CertificateChanges) error // one ApplyChanges or ResetToServerDefaults, all or nothing
+}
+type CertificateLoadStore interface { // restored by New on top of the configuration
+    CertificateStore
+    LoadCertificates(ctx context.Context) (CertificateChanges, error)
+}
+type CertificateChanges struct {
+    Reset        bool // ResetToServerDefaults: the store may forget what it holds
+    TrustLists   []CertificateGroupTrustList
+    Certificates []CertificateGroupChange
+}
+type CertificateGroupTrustList struct {
+    Group          string // BrowseName: "DefaultApplicationGroup", "DefaultHttpsGroup", "DefaultUserTokenGroup" or a CertificateGroup.Name
+    TrustList      *ua.TrustListDataType
+    LastUpdateTime time.Time
+}
+type CertificateGroupChange struct {
+    Group           string
+    CertificateType *ua.NodeID
+    Certificate     []byte // nil: deleted
+    Issuers         [][]byte
+    PrivateKey      crypto.Signer
+}
+func (c CertificateGroupChange) Deleted() bool
 func WithPushManagement(pm PushManagement) Option
 func (s *Server) TrustList() *ua.TrustListDataType    // the trust list in effect (nil without push management)
 func (s *Server) GroupTrustList(certificateGroup *ua.NodeID) *ua.TrustListDataType
@@ -3069,6 +3095,28 @@ func (s *Server) RejectedCertificates() [][]byte      // the most recently rejec
 func (s *Server) CertificateGroupID(name string) *ua.NodeID
 func (s *Server) GroupCertificate(certificateGroup, certificateType *ua.NodeID) ([]byte, [][]byte, crypto.Signer)
 func (s *Server) VerifyGroupCertificate(certificateGroup *ua.NodeID, chain []byte) error // against the group's trust list
+```
+
+Package `server/pushstore` is a `PushManagement.Store` on `uafx/fxstore`
+(one Domain, namespace `push`):
+
+```go
+type Options struct {
+    Owner  string         // ApplicationUri: a store of another owner is refused
+    Limits fxstore.Limits // zero: the defaults (4 MiB per record)
+}
+func OpenDir(ctx context.Context, dir string, o Options) (*Store, error) // an fxstore.FileStore in dir (0700, files 0600)
+func Open(ctx context.Context, s fxstore.Store, o Options) (*Store, error)
+func (s *Store) StoreChanges(ctx context.Context, c server.CertificateChanges) error // one atomic write
+func (s *Store) LoadCertificates(ctx context.Context) (server.CertificateChanges, error)
+func (s *Store) Settle(ctx context.Context) (bool, error) // after an unknown outcome; writes the state before it back
+func (s *Store) Status() fxstore.DomainStatus
+func (s *Store) Close() error
+// and the methods of CertificateStore, CertificateGroupStore and CertificateDeleteStore
+func GroupName(n *ua.NodeID) (string, error)
+const Namespace = "push"; const Schema = 1
+const DefaultApplicationGroup, DefaultHTTPSGroup, DefaultUserTokenGroup = "DefaultApplicationGroup", "DefaultHttpsGroup", "DefaultUserTokenGroup"
+var ErrClosed error
 ```
 
 See [docs/server-guide.md](docs/server-guide.md#certificate-management-push-model).
