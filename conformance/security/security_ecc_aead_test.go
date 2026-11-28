@@ -15,6 +15,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -101,7 +102,7 @@ func TestAEAD_PolicyModeMatrix(t *testing.T) {
 					Monitor(f.Writable).
 					Start(ctx)
 				require.NoError(t, err)
-				t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+				cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 				nextDataChanges(t, ch) // initial value
 				changed := 4242 + eccMatrixValue.Add(1)
 				writeInt32(t, c, f.Writable, changed)
@@ -296,7 +297,7 @@ func testAEADRenewalUnderTraffic(t *testing.T) {
 				Monitor(f.Writable).
 				Start(ctx)
 			require.NoError(t, err)
-			t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+			cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 			count := func() int {
 				mu.Lock()
@@ -713,7 +714,7 @@ func TestAEAD_CertificatesAndPolicies(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.NoError(t, srv.Start(ctx))
-		t.Cleanup(func() { _ = srv.Close() })
+		cleanup.Register(t, func() { _ = srv.Close() })
 		only := fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 
 		secure := func(policy string, mode ua.MessageSecurityMode) []opcua.Option {

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua/internal/mqtt"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // raw is a hand-driven protocol client.
@@ -27,7 +28,7 @@ func rawDial(t *testing.T, b *Broker) *raw {
 	t.Helper()
 	conn, err := net.Dial("tcp", b.Addr())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = conn.Close() })
+	cleanup.Register(t, func() { _ = conn.Close() })
 	return &raw{t: t, conn: conn, br: bufio.NewReader(conn)}
 }
 
@@ -102,7 +103,7 @@ func start(t *testing.T, opts Options) *Broker {
 	t.Helper()
 	b := New(opts)
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	return b
 }
 

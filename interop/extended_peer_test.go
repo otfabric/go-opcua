@@ -27,6 +27,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
@@ -87,7 +88,7 @@ func dialSecureClientWith(t *testing.T, endpoint, policy, mode string, extra ...
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("Connect secure (%q %s/%s): %v", endpoint, policy, mode, err)
 	}
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
 		_ = c.Close(ctx2)
@@ -306,7 +307,7 @@ func startRenewalGoServer(t *testing.T) (string, *atomic.Int64) {
 	ns.Objects().AddRef(counterNode, server.RefTypeIDHasComponent, true)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		cancel()
 		_ = s.Close()
 	})
@@ -918,13 +919,13 @@ func startCounterSubscription(t *testing.T, endpoint string) (context.Context, *
 	c := dialClient(t, endpoint)
 	_, nsIdx := findNS(t, c)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	t.Cleanup(cancel)
+	cleanup.Register(t, cancel)
 
 	sub, notifyCh, err := c.NewSubscription().Interval(250 * time.Millisecond).Start(ctx)
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	mon, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth,
 		opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewStringNodeID(nsIdx, "Dynamic.Counter"), ua.AttributeIDValue, 7))
@@ -1158,7 +1159,7 @@ func assertPeerEventWhereClause(t *testing.T, endpoint string) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	probes := severityWhereProbes()
 	reqs := make([]*ua.MonitoredItemCreateRequest, len(probes))
@@ -1430,7 +1431,7 @@ func assertPeerEventQueueOverflow(t *testing.T, endpoint string) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	const queueSize = 2
 	filter := ua.NewEventFilter().Select("EventType", "Severity").Build()

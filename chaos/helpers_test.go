@@ -27,6 +27,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/attrs"
@@ -187,7 +188,7 @@ func newEnv(t *testing.T, seed int64, serverOpts ...server.Option) *env {
 	e := &env{t: t, seed: seed, serverOpts: serverOpts}
 	e.proxy = testutil.NewChaosProxy(t, "", seed)
 	e.startServer()
-	t.Cleanup(func() { e.stopServer() })
+	cleanup.Register(t, func() { e.stopServer() })
 	return e
 }
 
@@ -201,7 +202,7 @@ func newDirectEnv(t *testing.T, seed int64) *env {
 	t.Helper()
 	e := &env{t: t, seed: seed, directPort: testport.TCP(t)}
 	e.startServer()
-	t.Cleanup(func() { e.stopServer() })
+	cleanup.Register(t, func() { e.stopServer() })
 	return e
 }
 
@@ -441,7 +442,7 @@ func (e *env) dial(rec *stateRecorder, extra ...opcua.Option) (*opcua.Client, er
 		closeClient(c, rec)
 		return nil, err
 	}
-	e.t.Cleanup(func() { closeClient(c, rec) })
+	cleanup.Register(e.t, func() { closeClient(c, rec) })
 	return c, nil
 }
 
@@ -689,7 +690,7 @@ func newWatchdog(t *testing.T) *watchdog {
 		done:  make(chan struct{}),
 	}
 	go w.run()
-	t.Cleanup(w.close)
+	cleanup.Register(t, w.close)
 	return w
 }
 

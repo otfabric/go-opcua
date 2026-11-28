@@ -16,6 +16,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -86,7 +87,7 @@ func TestOpen62541Server_ClientRepublish(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Subscribe: %v", err)
 		}
-		t.Cleanup(func() { _ = sub.Cancel(ctx) })
+		cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 		_, err = c.Republish(ctx, sub.SubscriptionID, 99999)
 		if err != nil {
 			msg := err.Error()
@@ -113,7 +114,7 @@ func TestOpen62541Server_ClientTransferSubscriptions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Subscribe: %v", err)
 		}
-		t.Cleanup(func() { _ = sub.Cancel(ctx) })
+		cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 		resp, err := c.TransferSubscriptions(ctx, []uint32{sub.SubscriptionID}, false)
 		if err != nil {
@@ -154,7 +155,7 @@ func qualifyMiloSubscriptionService(t *testing.T, kind string) (status string, d
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+	cleanup.Register(t, func() { _ = sub.Cancel(ctx) })
 
 	switch kind {
 	case "republish":

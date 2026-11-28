@@ -16,6 +16,7 @@ import (
 	"github.com/otfabric/go-opcua/gds/gdsid"
 	"github.com/otfabric/go-opcua/gds/gdsserver"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -136,7 +137,7 @@ func TestGDSPull_AuditEvents(t *testing.T) {
 	sub, ch, err := c.NewSubscription().Interval(20*time.Millisecond).
 		MonitorEvents(f.Build(), ua.NewNumericNodeID(ns, gdsid.Directory)).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	var got [][]*ua.Variant
 	next := func() []*ua.Variant {
 		t.Helper()

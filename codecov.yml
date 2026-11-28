@@ -1,5 +1,16 @@
 # Codecov configuration for go-opcua.
 # Project coverage is produced by `make coverage` (COVER_PKGS + conformance).
+codecov:
+  notify:
+    # Two uploads per commit: the shared ci job's (Lint & Coverage, without
+    # server, uafx/fxcm and uafx/fxserver, which run in the server job) and
+    # coverage-merged's (every package). Reporting after the first one gives
+    # a falsely low patch figure for changes in those packages.
+    after_n_builds: 2
+
+comment:
+  after_n_builds: 2
+
 coverage:
   status:
     project:

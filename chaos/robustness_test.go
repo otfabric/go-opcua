@@ -14,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
@@ -37,7 +38,7 @@ func (e *env) connectDirect(opts ...opcua.Option) *opcua.Client {
 	if err := c.Connect(ctx); err != nil {
 		e.t.Fatalf("connect direct: %v", err)
 	}
-	e.t.Cleanup(func() { closeClient(c, nil) })
+	cleanup.Register(e.t, func() { closeClient(c, nil) })
 	return c
 }
 

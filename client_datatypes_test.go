@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
@@ -178,7 +179,7 @@ func dynServer(t *testing.T, fillers int, handlers map[uint16]server.Handler) (*
 		srv.RegisterHandler(typeID, h)
 	}
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	return srv, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()), uint16(idx) // a namespace index
 }
 
@@ -187,7 +188,7 @@ func dynClient(t *testing.T, url string, opts ...Option) *Client {
 	c, err := NewClient(url, append([]Option{InsecureNoSecurity(), AutoReconnect(false), RequestTimeout(30 * time.Second)}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(context.Background()))
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	return c
 }
 
@@ -507,7 +508,7 @@ func TestDynamicTypeDecoding_Subscription(t *testing.T) {
 	ch := make(chan *PublishNotificationData, 8)
 	sub, err := c.Subscribe(ctx, &SubscriptionParameters{Interval: 50 * time.Millisecond}, ch)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	_, err = sub.Monitor(ctx, ua.TimestampsToReturnBoth, NewMonitoredItemCreateRequestWithDefaults(f.id(dynVarOuter), ua.AttributeIDValue, 1))
 	require.NoError(t, err)
 	for {

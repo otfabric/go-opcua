@@ -51,6 +51,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -123,7 +124,7 @@ func startAdapterServerWith(t *testing.T, imageEnvVar, defaultImage string, dock
 			stop()
 			t.Fatalf("waiting for adapter server (container: %s): %v", containerName, err)
 		}
-		t.Cleanup(stop)
+		cleanup.Register(t, stop)
 		return &serverHandle{endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath), stopFn: stop}, containerName
 	}
 	t.Fatalf("no host port Docker could publish the adapter server on in %d attempts", publishAttempts)
@@ -149,7 +150,7 @@ func startGoLDS(t *testing.T, opts ...server.Option) (*server.Server, string) {
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	cleanup.Register(t, func() { _ = s.Close() })
 	return s, fmt.Sprintf("opc.tcp://localhost:%d", s.Port())
 }
 
@@ -244,7 +245,7 @@ func TestOpen62541LDS_GoServerRegisters(t *testing.T) {
 			t.Fatalf("server.Start: %v", err)
 		}
 		closed := false
-		t.Cleanup(func() {
+		cleanup.Register(t, func() {
 			if !closed {
 				_ = srv.Close()
 			}
@@ -621,7 +622,7 @@ func dockerNetwork(t *testing.T) string {
 	if out, err := exec.Command("docker", "network", "create", name).CombinedOutput(); err != nil {
 		t.Fatalf("docker network create: %v\n%s", err, out)
 	}
-	t.Cleanup(func() { exec.Command("docker", "network", "rm", name).Run() }) //nolint:errcheck
+	cleanup.Register(t, func() { exec.Command("docker", "network", "rm", name).Run() }) //nolint:errcheck
 	return name
 }
 
@@ -639,7 +640,7 @@ func buildDiscoveryPeer(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("temp dir: %v", err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	cleanup.Register(t, func() { _ = os.RemoveAll(dir) })
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		t.Fatalf("abs: %v", err)
@@ -693,7 +694,7 @@ func startGoPeerContainer(t *testing.T, network, image, binDir string, peerArgs 
 		}
 		t.Fatalf("start go-opcua peer container: %v\n%s", err, out)
 	}
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		if t.Failed() {
 			logs, _ := exec.Command("docker", "logs", "--tail", "100", name).CombinedOutput()
 			t.Logf("go-opcua peer container log:\n%s", logs)

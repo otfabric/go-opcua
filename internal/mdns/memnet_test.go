@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // TestMemNetwork_FaultAndInject covers the fault hooks of the in-memory link:
@@ -15,7 +17,7 @@ import (
 func TestMemNetwork_FaultAndInject(t *testing.T) {
 	link := NewMemNetwork()
 	a, b := link.Conn(), link.Conn()
-	t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
+	cleanup.Register(t, func() { _ = a.Close(); _ = b.Close() })
 	read := func(c PacketConn) (string, netip.AddrPort) {
 		buf := make([]byte, MaxPacketSize)
 		n, src, err := c.ReadFrom(buf)

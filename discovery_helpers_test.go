@@ -9,6 +9,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -62,7 +63,7 @@ func dialOnly(t *testing.T, url string) *opcua.Client {
 	c, err := opcua.NewClient(url, opcua.InsecureNoSecurity(), opcua.AutoReconnect(false), opcua.DialTimeout(30*time.Second), opcua.RequestTimeout(30*time.Second))
 	require.NoError(t, err)
 	require.NoError(t, c.Dial(context.Background()))
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 	return c
 }
 

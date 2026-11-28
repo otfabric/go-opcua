@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -56,7 +57,7 @@ func testReverseListener(t *testing.T, cfg *ReverseListenerConfig) (*ReverseList
 	t.Helper()
 	l, err := ListenReverse(context.Background(), "127.0.0.1:0", cfg)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = l.Close() })
+	cleanup.Register(t, func() { _ = l.Close() })
 	return l, l.Addr().String()
 }
 
@@ -65,7 +66,7 @@ func dialRaw(t *testing.T, addr string) net.Conn {
 	t.Helper()
 	c, err := net.DialTimeout("tcp", addr, testWait)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	cleanup.Register(t, func() { _ = c.Close() })
 	return c
 }
 
@@ -288,11 +289,11 @@ func reversePair(t *testing.T) (*Conn, net.Conn) {
 	d := &ReverseDialer{Dialer: &net.Dialer{}, ACK: &Acknowledge{ReceiveBufSize: 8192, SendBufSize: 8192, MaxMessageSize: 1 << 20, MaxChunkCount: 64}}
 	srv, err := d.Dial(context.Background(), "opc.tcp://"+ln.Addr().String(), &ReverseHello{ServerURI: "urn:server", EndpointURL: "opc.tcp://server:4840"})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 
 	peer, err := ln.Accept()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = peer.Close() })
+	cleanup.Register(t, func() { _ = peer.Close() })
 	_ = peer.SetReadDeadline(time.Now().Add(testWait))
 	_, err = readReverseHello(peer)
 	require.NoError(t, err)

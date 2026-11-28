@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // StallMonitor measures for how long the test binary did not get to run: a
@@ -42,7 +44,7 @@ func WatchStalls(t *testing.T) *StallMonitor {
 			}
 		}
 	}()
-	t.Cleanup(func() { close(m.stop); <-m.done })
+	cleanup.Register(t, func() { close(m.stop); <-m.done })
 	return m
 }
 

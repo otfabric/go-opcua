@@ -14,6 +14,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -36,7 +37,7 @@ func startTokenSniffer(t *testing.T) *tokenSniffer {
 	ln, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
 	s := &tokenSniffer{ln: ln}
-	t.Cleanup(func() { _ = ln.Close() })
+	cleanup.Register(t, func() { _ = ln.Close() })
 
 	go func() {
 		for {
@@ -154,7 +155,7 @@ func testChannelRenewalServerRotatesSecurityToken(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	sniffer.setBackend(fmt.Sprintf("localhost:%d", srv.Port()))
 	f := testutil.AddFixture(t, srv)
 
@@ -170,14 +171,14 @@ func testChannelRenewalServerRotatesSecurityToken(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(ctx))
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 
 	sub, notifyCh, err := c.NewSubscription().
 		Interval(50 * time.Millisecond).
 		Monitor(f.Writable).
 		Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 
 	// Keep reads, writes and publishes flowing until three renewals happened.
 	deadline := time.Now().Add(30 * time.Second)

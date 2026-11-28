@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
@@ -69,7 +70,7 @@ func TestConnectionManager(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(a.close)
+	cleanup.Register(t, a.close)
 	if err := a.load(path); err != nil {
 		t.Fatal(err)
 	}

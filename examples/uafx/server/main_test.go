@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
@@ -23,7 +24,7 @@ func TestServer(t *testing.T) {
 	if err := srv.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(a.close)
+	cleanup.Register(t, a.close)
 	c := testutil.NewTestClient(t, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()))
 
 	arr, err := c.NamespaceArray(ctx)

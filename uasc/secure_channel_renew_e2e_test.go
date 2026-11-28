@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/leakcheck"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -139,7 +140,7 @@ func TestRenewal_ConcurrentRequests(t *testing.T) {
 				}()
 				return true
 			}})
-			t.Cleanup(answering.Wait)
+			cleanup.Register(t, answering.Wait)
 
 			const workers, reads, renewals = 4, 15, 4
 			var wg sync.WaitGroup

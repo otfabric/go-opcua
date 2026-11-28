@@ -13,6 +13,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -58,14 +59,14 @@ func TestDynamicTypes_GoToGo(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, srv.ImportNodeSetXML([]byte(dynamicNodeSet)))
 	require.NoError(t, srv.Start(ctx))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	url := fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 
 	connect := func(opts ...opcua.Option) *opcua.Client {
 		c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity(), opcua.AutoReconnect(false)}, opts...)...)
 		require.NoError(t, err)
 		require.NoError(t, c.Connect(ctx))
-		t.Cleanup(func() { _ = c.Close(context.Background()) })
+		cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 		return c
 	}
 	plain := connect()

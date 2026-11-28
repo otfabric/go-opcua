@@ -33,6 +33,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
@@ -221,7 +222,7 @@ func startOpen62541ECCServerWith(t *testing.T, serverArgs ...string) *serverHand
 			t.Fatalf("waiting for ECC adapter server (container: %s): %v", containerName, err)
 		}
 
-		t.Cleanup(stop)
+		cleanup.Register(t, stop)
 		return &serverHandle{
 			endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath),
 			stopFn:   stop,
@@ -286,7 +287,7 @@ func dialECCClient(t *testing.T, endpoint string, p eccProfile, mode string, ext
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("Connect (%s/%s): %v", p.policy, mode, err)
 	}
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
 		c.Close(ctx2) //nolint:errcheck
@@ -361,7 +362,7 @@ func TestOpen62541Server_ECC_Username(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
 		defer cancel()
 		err := c.Connect(ctx)
-		t.Cleanup(func() {
+		cleanup.Register(t, func() {
 			ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel2()
 			c.Close(ctx2) //nolint:errcheck
@@ -570,7 +571,7 @@ func startECCGoServer(t *testing.T) (string, *atomic.Int64) {
 	objs.AddRef(counterNode, server.RefTypeIDHasComponent, true)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		cancel()
 		_ = s.Close()
 	})

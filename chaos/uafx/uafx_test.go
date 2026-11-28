@@ -20,6 +20,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
@@ -82,7 +83,7 @@ func client(t *testing.T, url string, opts ...opcua.Option) *opcua.Client {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	require.NoError(t, c.Connect(ctx))
-	t.Cleanup(func() { chaoskit.CloseClient(c, nil) })
+	cleanup.Register(t, func() { chaoskit.CloseClient(c, nil) })
 	return c
 }
 

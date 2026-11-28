@@ -10,6 +10,7 @@ import (
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,7 +54,7 @@ func TestPublicRepublish_DoesNotDeliverToNotifyChan(t *testing.T) {
 		Interval: 200 * time.Millisecond,
 	}, notifyCh)
 	require.NoError(t, err, "Subscribe")
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx2, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = sub.Cancel(ctx2)
@@ -109,7 +110,7 @@ func TestPublicTransferSubscriptions_ReturnsResponse(t *testing.T) {
 		Interval: 500 * time.Millisecond,
 	}, notifyCh)
 	require.NoError(t, err, "Subscribe")
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		ctx2, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = sub.Cancel(ctx2)

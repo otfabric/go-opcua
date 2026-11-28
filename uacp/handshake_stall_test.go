@@ -9,6 +9,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 )
 
 // silentListener accepts TCP connections and never sends a byte.
@@ -30,7 +32,7 @@ func silentListener(t *testing.T) string {
 			conns = append(conns, c)
 		}
 	}()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		_ = ln.Close()
 		<-done
 		for _, c := range conns {
