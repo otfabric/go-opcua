@@ -36,7 +36,7 @@ Two gates. `make coverage` measures `COVER_PKGS`, conformance tests included, an
 
 ## Fixtures of parallel tests
 
-Register the cleanup of a server, client or Manager with `cleanup.Register(t, f)` (`internal/testutil/cleanup`), not `t.Cleanup(f)`. The testing package keeps a parallel test, and the cleanup functions it registered, until its parent test ends, which for a top-level test is the end of the binary: a cleanup that closes a server keeps the closed server reachable until then. `Register` lets go of `f` once it has run. With `t.Cleanup`, the live heap of `uafx/fxcm` reached 5.8 GB and that of `uafx/fxserver` 5.1 GB; with `Register` it peaks at 330 MB and 470 MB.
+Register the cleanup of a server, client or Manager with `cleanup.Register(t, f)` (`internal/testutil/cleanup`), not `t.Cleanup(f)`. The testing package keeps a parallel test, and the cleanup functions it registered, until its parent test ends, which for a top-level test is the end of the binary: a cleanup that closes a server keeps the closed server reachable until then. `Register` lets go of `f` once it has run. With `t.Cleanup`, the live heap of `uafx/fxcm` reached 5.8 GB and that of `uafx/fxserver` 5.1 GB; with `Register` it peaks at 330 MB and 470 MB, that of `server` at 194 MB (602 MB) and that of `gds/gdsserver` at 163 MB (856 MB).
 
 ## Fuzz regressions
 

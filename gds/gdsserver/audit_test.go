@@ -13,6 +13,7 @@ import (
 	"github.com/otfabric/go-opcua/gds"
 	"github.com/otfabric/go-opcua/gds/gdsid"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -39,7 +40,7 @@ func auditEvents(t *testing.T, c *opcua.Client) func() auditEvent {
 	sub, ch, err := c.NewSubscription().Interval(20*time.Millisecond).
 		MonitorEvents(f.Build(), ua.NewNumericNodeID(0, id.Server)).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	var buf []auditEvent
 	return func() auditEvent {
 		t.Helper()

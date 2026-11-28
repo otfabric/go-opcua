@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/remote"
 	"github.com/otfabric/go-opcua/pubsub/transport"
@@ -207,7 +208,7 @@ func TestBuildPubSubModel(t *testing.T) {
 		pubsub.WriterGroup("wg", 0x8000, time.Second)))
 	srv, err := server.New(server.WithPubSub(cfg))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	require.NoError(t, srv.BuildPubSubModel())
 	conn, ok := srv.PubSub().Lookup(pubsub.KindConnection, pubsub.Root, "conn")
 	require.True(t, ok)
@@ -218,7 +219,7 @@ func TestBuildPubSubModel(t *testing.T) {
 
 	plain, err := server.New()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = plain.Close() })
+	cleanup.Register(t, func() { _ = plain.Close() })
 	require.Error(t, plain.BuildPubSubModel())
 }
 

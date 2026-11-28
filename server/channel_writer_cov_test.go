@@ -15,6 +15,7 @@ import (
 	"time"
 
 	opcuaerrors "github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uasc"
@@ -190,7 +191,7 @@ func newCWPair(t *testing.T, timeout time.Duration, maxPending int) *cwPair {
 		}
 	}()
 	go p.w.run()
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		close(p.stop)
 		p.w.close()
 		<-p.w.exited
@@ -544,7 +545,7 @@ func TestChannelWriterCov_NoActiveToken(t *testing.T) {
 	}()
 	cconn, err := uacp.Dial(ctx, "opc.tcp://"+l.Addr().String())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = cconn.Close() })
+	cleanup.Register(t, func() { _ = cconn.Close() })
 	sconn := <-accepted
 	require.NotNil(t, sconn)
 
@@ -552,7 +553,7 @@ func TestChannelWriterCov_NoActiveToken(t *testing.T) {
 	scfg.Logger = silentLogger()
 	ssc, err := uasc.NewServerSecureChannel("opc.tcp://"+l.Addr().String(), sconn, scfg, make(chan error, 1), 1, 1, 1)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = ssc.Close() })
+	cleanup.Register(t, func() { _ = ssc.Close() })
 
 	w := newChannelWriter(ssc, sconn, silentLogger(), time.Second, 2)
 	go w.run()

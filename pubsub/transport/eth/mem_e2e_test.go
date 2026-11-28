@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/pubsub/transport/eth"
@@ -108,7 +109,7 @@ func memRuntime(t *testing.T, cfg *ua.PubSubConfigurationDataType, opts ...pubsu
 	rt, err := pubsub.New(cfg, opts...)
 	require.NoError(t, err)
 	require.NoError(t, rt.Start(context.Background()))
-	t.Cleanup(func() { _ = rt.Close() })
+	cleanup.Register(t, func() { _ = rt.Close() })
 	return rt
 }
 

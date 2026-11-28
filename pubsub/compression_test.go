@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	imqtt "github.com/otfabric/go-opcua/internal/mqtt"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/ua"
@@ -53,7 +54,7 @@ func gzipPair(t *testing.T, pubVersion, compression string, subVersions ...strin
 		mu.Unlock()
 	}})
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 
 	ds := NewMemoryDataSource()
 	require.NoError(t, ds.Set(nodeA, int32(7)))
@@ -67,7 +68,7 @@ func gzipPair(t *testing.T, pubVersion, compression string, subVersions ...strin
 		AttachWriterGroups(pubConn, JSONWriterGroup("wg", 1, 10*time.Millisecond, "gz/group", w))), WithDataSource(ds))
 	require.NoError(t, err)
 	require.NoError(t, pub.Start(context.Background()))
-	t.Cleanup(func() { _ = pub.Close() })
+	cleanup.Register(t, func() { _ = pub.Close() })
 
 	var recs []*recorder
 	for i, v := range subVersions {
@@ -78,7 +79,7 @@ func gzipPair(t *testing.T, pubVersion, compression string, subVersions ...strin
 			WithDataSetHandler(rec.handler))
 		require.NoError(t, err)
 		require.NoError(t, sub.Start(context.Background()))
-		t.Cleanup(func() { _ = sub.Close() })
+		cleanup.Register(t, func() { _ = sub.Close() })
 		recs = append(recs, rec)
 	}
 	return func(topic string) (wireMessage, bool) {

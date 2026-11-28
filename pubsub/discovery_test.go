@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/pubsub/uadp"
@@ -46,7 +47,7 @@ func newRuntime(t *testing.T, cfg *ua.PubSubConfigurationDataType, opts ...Optio
 	p, err := New(cfg, opts...)
 	require.NoError(t, err)
 	require.NoError(t, p.Start(context.Background()))
-	t.Cleanup(func() { _ = p.Close() })
+	cleanup.Register(t, func() { _ = p.Close() })
 	return p
 }
 

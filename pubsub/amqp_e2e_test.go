@@ -14,6 +14,7 @@ import (
 
 	iamqp "github.com/otfabric/go-opcua/internal/amqp"
 	"github.com/otfabric/go-opcua/internal/testutil/amqpbroker"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -49,7 +50,7 @@ func startAMQPBroker(t *testing.T, opts amqpbroker.Options) *amqpbroker.Broker {
 	t.Helper()
 	b := amqpbroker.New(opts)
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	return b
 }
 
@@ -79,11 +80,11 @@ func amqpPair(t *testing.T, url string, mapping MessageMapping, data, meta strin
 	sub, err := New(subCfg, append([]Option{WithDataSetHandler(rec.handler)}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, sub.Start(context.Background()))
-	t.Cleanup(func() { _ = sub.Close() })
+	cleanup.Register(t, func() { _ = sub.Close() })
 	pub, err := New(pubCfg, append([]Option{WithDataSource(ds)}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, pub.Start(context.Background()))
-	t.Cleanup(func() { _ = pub.Close() })
+	cleanup.Register(t, func() { _ = pub.Close() })
 	return sub, rec
 }
 

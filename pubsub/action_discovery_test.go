@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/pubsub/jsonmsg"
 	"github.com/otfabric/go-opcua/pubsub/message"
@@ -137,7 +138,7 @@ func TestActionAnnouncementsDatagram(t *testing.T) {
 		}
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = unsub() })
+	cleanup.Register(t, func() { _ = unsub() })
 
 	resp := startReal(t, cfg, WithActionHandler("Calc", 1, addHandler))
 	waitRunning(t, resp, "Responder")
@@ -194,7 +195,7 @@ func TestActionAnnouncementsDatagram(t *testing.T) {
 func TestDiscoverActionBroker(t *testing.T) {
 	b := mqttbroker.New(mqttbroker.Options{})
 	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
+	cleanup.Register(t, b.Close)
 	for name, m := range map[string]MessageMapping{"uadp": MappingUADP, "json": MappingJSON} {
 		t.Run(name, func(t *testing.T) {
 			prefix := "disc-" + name

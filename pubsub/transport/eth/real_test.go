@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 )
 
@@ -104,7 +105,7 @@ func realOpen(t *testing.T, url, iface string, mod func(*transport.Config)) *Con
 	c, err := Open(context.Background(), cfg)
 	skipWithoutPrivilege(t, err)
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, c.Close()) })
+	cleanup.Register(t, func() { require.NoError(t, c.Close()) })
 	return c
 }
 

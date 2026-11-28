@@ -9,6 +9,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -43,10 +44,10 @@ func watchSessionAudit(t *testing.T, c *opcua.Client) <-chan sessionAudit {
 	sub, ch, err := c.NewSubscription().Interval(20*time.Millisecond).
 		MonitorEvents(b.Build(), ua.NewNumericNodeID(0, id.Server)).Start(context.Background())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	out := make(chan sessionAudit, 256)
 	done, exited := make(chan struct{}), make(chan struct{})
-	t.Cleanup(func() { close(done); <-exited })
+	cleanup.Register(t, func() { close(done); <-exited })
 	go func() {
 		defer close(exited)
 		for {
@@ -123,13 +124,13 @@ func TestSessionAudit_Lifecycle(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	url := srv.Endpoints()[0].EndpointURL
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	watcher := observedClient(t, ctx, url)
-	t.Cleanup(func() { _ = watcher.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = watcher.Close(context.Background()) })
 	audit := watchSessionAudit(t, watcher)
 
 	newClient := func(opts ...opcua.Option) *opcua.Client {

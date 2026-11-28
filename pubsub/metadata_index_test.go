@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/ua"
@@ -49,7 +50,7 @@ func TestJSONFieldNamesAreLookedUp(t *testing.T) {
 
 	var compared atomic.Int64
 	nameCompared = func() { compared.Add(1) }
-	t.Cleanup(func() { nameCompared = nil })
+	cleanup.Register(t, func() { nameCompared = nil })
 
 	// The fields of the message are the last ones of the metadata, in
 	// reverse order, and one the metadata does not have.
@@ -143,7 +144,7 @@ func TestNetworkMetaDataFieldCountIsBounded(t *testing.T) {
 		ReaderGroup("rg", DataSetReader("r", uint16(7), 1, 1, nil)))))
 	require.NoError(t, err)
 	require.NoError(t, p.Start(context.Background()))
-	t.Cleanup(func() { _ = p.Close() })
+	cleanup.Register(t, func() { _ = p.Close() })
 	cid := mustID(t, p, KindConnection, Root, "sub")
 	rid := mustID(t, p, KindDataSetReader, mustID(t, p, KindReaderGroup, cid, "rg"), "r")
 

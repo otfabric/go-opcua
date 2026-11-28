@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,7 @@ func TestPublish_ResendsMessageOfDeadRequest(t *testing.T) {
 	ns := NewNodeNameSpace(srv, "resend")
 	n := ns.AddNewVariableStringNode("v", int32(0))
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -38,14 +39,14 @@ func TestPublish_ResendsMessageOfDeadRequest(t *testing.T) {
 		opcua.AutoReconnect(false), opcua.RequestTimeout(30*time.Second))
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(ctx))
-	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	cleanup.Register(t, func() { _ = c.Close(context.Background()) })
 
 	// Keep-alives are far off: only a resent message reaches the client in
 	// time.
 	sub, notes, err := c.NewSubscription().Interval(20 * time.Millisecond).MaxKeepAliveCount(10000).
 		LifetimeCount(30000).Monitor(n.ID()).Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	cleanup.Register(t, func() { _ = sub.Cancel(context.Background()) })
 	await := func(want int32) {
 		t.Helper()
 		deadline := time.After(10 * time.Second)

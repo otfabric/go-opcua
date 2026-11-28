@@ -12,6 +12,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/gds"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -43,7 +44,7 @@ func fakeServer(t *testing.T, sc map[uint32]handler, tl map[uint32]handler) *opc
 	reg(id.ServerConfiguration, sc)
 	reg(id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustList, tl)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() { _ = srv.Close() })
+	cleanup.Register(t, func() { _ = srv.Close() })
 	c, err := dial(t, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()), ua.MessageSecurityModeSignAndEncrypt, identity{p.ClientCert, p.ClientKey}, "", "")
 	require.NoError(t, err)
 	return c

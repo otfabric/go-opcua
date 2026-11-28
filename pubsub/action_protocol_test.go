@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/uadp"
 	"github.com/otfabric/go-opcua/ua"
@@ -202,7 +203,7 @@ func TestActionResponderLimits(t *testing.T) {
 		}
 		resp := startReal(t, responderConfig(url, 20*time.Millisecond, ua.MessageSecurityModeNone),
 			WithActionHandler("Calc", 1, h), WithActionOptions(ActionOptions{MaxConcurrent: 1}))
-		t.Cleanup(func() { close(release) })
+		cleanup.Register(t, func() { close(release) })
 		waitRunning(t, resp, "Responder")
 		waitResponder(t, resp)
 		bus.inject(url, "", rawRequest(t, 1, 1, 1, ua.ActionStateExecuting, "c", 1, 2))

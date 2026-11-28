@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/internal/mdns"
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
 	"github.com/stretchr/testify/require"
@@ -507,7 +508,7 @@ func multicastServer(t *testing.T, link *mdns.MemNetwork, opts ...Option) *Serve
 	}, opts...)
 	s := discoveryServer(t, all...)
 	require.NoError(t, s.disc.start(context.Background()))
-	t.Cleanup(s.disc.stop)
+	cleanup.Register(t, s.disc.stop)
 	return s
 }
 
@@ -517,7 +518,7 @@ func browseLink(t *testing.T, link *mdns.MemNetwork) func() map[string]mdns.Inst
 	t.Helper()
 	node, err := mdns.New(mdns.Config{Conns: []mdns.PacketConn{link.Conn()}})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = node.Close() })
+	cleanup.Register(t, func() { _ = node.Close() })
 	var mu sync.Mutex
 	known := map[string]mdns.Instance{}
 	require.NoError(t, node.Browse(opcuaServiceType, func(e mdns.Event) {
@@ -661,7 +662,7 @@ func TestMulticast_DiscoversServersOnNetwork(t *testing.T) {
 
 	peer, err := mdns.New(mdns.Config{Conns: []mdns.PacketConn{link.Conn()}})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = peer.Close() })
+	cleanup.Register(t, func() { _ = peer.Close() })
 	announce := func(name, host string, port uint16, text ...string) {
 		require.NoError(t, peer.Register(mdns.Service{Instance: name, Type: opcuaServiceType, Host: host, Port: port, Text: text}))
 	}

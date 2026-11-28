@@ -7,6 +7,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/otfabric/go-opcua/internal/testutil/cleanup"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,7 +15,7 @@ func TestRegistry(t *testing.T) {
 	var got Config
 	// The registry is global: remove the scheme again so the test can run
 	// more than once in a process (-count).
-	t.Cleanup(func() {
+	cleanup.Register(t, func() {
 		mu.Lock()
 		delete(openers, "test.fake")
 		mu.Unlock()
