@@ -1327,6 +1327,28 @@ func (s *DiscoveryService) RegisterServer2(ctx context.Context, sc *uasc.SecureC
 
 RegisterServer2 implements the OPC UA RegisterServer2 service. [https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.6](https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.6)
 
+### type DurableSubscriptions
+
+```go
+type DurableSubscriptions struct {
+	// Disabled leaves SetSubscriptionDurable without an implementation; a
+	// call is Bad_MethodInvalid, as before v1.43.0.
+	Disabled bool
+	// MaxLifetimeInHours is the longest lifetime of a durable subscription,
+	// the revisedLifetimeInHours of a request for 0 hours or more. Zero
+	// selects the default, 24 hours.
+	MaxLifetimeInHours uint32
+	// MaxQueueSize is the largest QueueSize of a MonitoredItem of a durable
+	// subscription, for data and event items. Zero selects the default,
+	// 10000.
+	MaxQueueSize uint32
+}
+```
+
+DurableSubscriptions are the limits of the durable subscriptions of SetSubscriptionDurable (OPC 10000-5 §9.3, OPC 10000-4 §6.8), which is "used to set a Subscription into this durable mode and to allow much longer lifetimes and queue sizes than for normal Subscriptions".
+
+A durable subscription of this server lives in memory: it survives its session (a session that is closed without DeleteSubscriptions or times out, a lost connection) for its lifetime, as any subscription does (Part 4 §5.14.1.1), and a client takes it over with TransferSubscriptions. It does not survive a restart of the server: the server does not store subscriptions, their MonitoredItems or queues (Part 4 §6.8 asks a server with durable subscriptions to "Store Subscriptions settings and sent notification messages with sequence numbers" and "Store MonitoredItem settings and queues"). See LIMITATIONS.md.
+
 ### type EventAccessController
 
 ```go
@@ -2522,6 +2544,9 @@ type MonitoredItem struct {
 	// Disabled = no enqueue; Sampling = enqueue only; Reporting = enqueue + Publish.
 	Mode ua.MonitoringMode
 
+	// lastSent is the last notification of the item a Publish response
+	// took, which ResendData repeats (server_methods.go).
+
 	// isEvent marks an item on the EventNotifier attribute.
 
 	// The event queue of an event item, its revised QueueSize and its
@@ -3707,6 +3732,14 @@ The SecureChannel to the discovery server is secured: the server picks the most 
 
 The option can be given several times to register with several discovery servers.
 
+#### func WithDurableSubscriptions
+
+```go
+func WithDurableSubscriptions(d DurableSubscriptions) Option
+```
+
+WithDurableSubscriptions sets the limits of durable subscriptions, or with Disabled turns SetSubscriptionDurable off. Without it, the server has durable subscriptions with the default limits.
+
 #### func WithIssuedTokenPolicy
 
 ```go
@@ -3973,6 +4006,14 @@ func WithServerDiagnostics(enabled bool) Option
 ```
 
 WithServerDiagnostics sets whether the server collects diagnostics from the start: the initial value of Server.ServerDiagnostics.EnabledFlag (Part 5 §6.3.3). The default is true. A client with the SecurityAdmin or ConfigureAdmin role can change it at runtime by writing EnabledFlag.
+
+#### func WithServerStateChange
+
+```go
+func WithServerStateChange(f ServerStateChangeFunc) Option
+```
+
+WithServerStateChange sets the function that carries out RequestServerStateChange. The library does not stop, suspend or restart the server by itself: without the function every request is Bad\_InvalidState.
 
 #### func WithSessionObserver
 
@@ -4774,6 +4815,11 @@ type Server struct {
 	// publishFaulted, when set, is told about every queued Publish request
 	// the server answers with a ServiceFault (tests).
 
+	// shutdownAt is when a shutdown SetServerState announced takes place,
+	// from which Status counts SecondsTillShutdown down; zero for none.
+	// estimatedReturnTime is the EstimatedReturnTime Property of the
+	// Server Object. Guarded by mu.
+
 	// nsView is the namespaces for readers that do not take mu (Node):
 	// AddNamespace publishes a new slice, it never changes one in place.
 
@@ -5101,6 +5147,14 @@ The methods only run over a SignAndEncrypt secure channel (Bad\_SecurityModeInsu
 func (s *Server) Endpoints() []*ua.EndpointDescription
 ```
 
+#### func (Server) EstimatedReturnTime
+
+```go
+func (s *Server) EstimatedReturnTime() time.Time
+```
+
+EstimatedReturnTime returns the value of the EstimatedReturnTime Property of the Server Object (OPC 10000-5 §6.3.1), the zero time when it is null.
+
 #### func (Server) GroupCertificate
 
 ```go
@@ -5399,6 +5453,20 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool)
 
 SetServerDiagnosticsEnabled enables or disables the collection of diagnostics, as a write of Server.ServerDiagnostics.EnabledFlag does (Part 5 §6.3.3): enabling resets the diagnostics, disabling keeps them as they are. While disabled ServerDiagnosticsSummary keeps the values it had, the diagnostics arrays are empty and the sessions have no diagnostics objects.
 
+#### func (Server) SetServerState
+
+```go
+func (s *Server) SetServerState(c ServerStateChange)
+```
+
+SetServerState publishes a change of the state of the server in the ServerStatus and the EstimatedReturnTime Property of the Server Object, as an accepted RequestServerStateChange does (OPC 10000-5 §9.4):
+
+  - the State becomes c.State; with c.Restart it becomes SHUTDOWN\_4 when c.SecondsTillShutdown is not 0 and is left as it is otherwise, as the server restarts at once;
+  - EstimatedReturnTime becomes c.EstimatedReturnTime, the null DateTime when c.State is RUNNING\_0: "the Property EstimatedReturnTime shall be set to null if the new state is RUNNING\_0" (§9.4, §6.3.1);
+  - in SHUTDOWN\_4, SecondsTillShutdown counts down from c.SecondsTillShutdown ("Approximate number of seconds until the Server will be shut down", §12.10) and ShutdownReason is c.Reason; in another state, where neither applies, they are 0 and the empty LocalizedText.
+
+It changes nothing else: the application stops or restarts the server. [Server.Start](#func-server-start) sets RUNNING\_0 and [Server.Close](#func-server-close) SHUTDOWN\_4.
+
 #### func (Server) Start
 
 ```go
@@ -5497,6 +5565,39 @@ type ServerMetrics interface {
 ServerMetrics receives callbacks for server-side OPC-UA service calls. All methods are called synchronously; implementations must be non-blocking (e.g. increment an atomic counter, send on a buffered channel).
 
 Attach an implementation via [WithMetrics](#func-withmetrics).
+
+### type ServerStateChange
+
+```go
+type ServerStateChange struct {
+	// State is the requested state.
+	State ua.ServerState
+	// EstimatedReturnTime is when the server is expected to be RUNNING_0
+	// again; the zero time (the null DateTime) when it is not known. It
+	// is ignored when State is RUNNING_0.
+	EstimatedReturnTime time.Time
+	// SecondsTillShutdown is the time until the shutdown, "ignored unless
+	// the state is set to SHUTDOWN_4 or restart is set to True".
+	SecondsTillShutdown uint32
+	// Reason is the reason of the change, the ShutdownReason of a shutdown;
+	// nil for none.
+	Reason *ua.LocalizedText
+	// Restart asks for a restart before the change: "If the restart is
+	// True the server changes it state to SHUTDOWN_4 before the restart if
+	// secondsTillShutdown is not 0."
+	Restart bool
+}
+```
+
+ServerStateChange is a change of the state of the server: the input arguments of RequestServerStateChange (OPC 10000-5 §9.4).
+
+### type ServerStateChangeFunc
+
+```go
+type ServerStateChangeFunc func(ctx context.Context, change ServerStateChange) ua.StatusCode
+```
+
+ServerStateChangeFunc carries out a RequestServerStateChange an administrator called (OPC 10000-5 §9.4). It returns ua.StatusOK to accept the change, which the server then publishes ([Server.SetServerState](#func-server-setserverstate)), or the StatusCode of the call, ua.StatusBadInvalidState when "The requested state was not accepted by the server". [MethodCallerFromContext](#func-methodcallerfromcontext) gives the caller. The function runs in the Call service: what takes time (a shutdown after SecondsTillShutdown, a restart) it starts and returns.
 
 ### type Session
 
@@ -5795,6 +5896,10 @@ type Subscription struct {
 	// (MonitoredItem.events) and looseEvents; see event_queue.go.
 
 	// the items with queued events
+
+	// durable is set by SetSubscriptionDurable (subscription_durable.go):
+	// the subscription has the lifetime and queue sizes of a durable
+	// subscription.
 
 }
 ```

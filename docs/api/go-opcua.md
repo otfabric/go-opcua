@@ -733,6 +733,14 @@ func (c *Client) GetGroupMemberships(ctx context.Context, conditionID *ua.NodeID
 
 GetGroupMemberships returns the AlarmGroups an alarm is a member of (Part 9 §5.8).
 
+#### func (Client) GetMonitoredItems
+
+```go
+func (c *Client) GetMonitoredItems(ctx context.Context, subscriptionID uint32) (*uamethod.ServerTypeGetMonitoredItemsOutput, error)
+```
+
+GetMonitoredItems calls GetMonitoredItems (OPC 10000-5 §9.1): the serverHandles (MonitoredItemIds) and clientHandles of the MonitoredItems of the subscription subscriptionID, which the session of the client must own (else ua.StatusBadUserAccessDenied). [Subscription.GetMonitoredItems](#func-subscription-getmonitoreditems) calls it for a subscription of the client.
+
 #### func (Client) HistoryDeleteAtTime
 
 ```go
@@ -1149,6 +1157,22 @@ The response is returned to the caller without mutating subscription delivery st
 
 Part 4, Section 5.13.6.
 
+#### func (Client) RequestServerStateChange
+
+```go
+func (c *Client) RequestServerStateChange(ctx context.Context, in *uamethod.ServerTypeRequestServerStateChangeInput) error
+```
+
+RequestServerStateChange calls RequestServerStateChange (OPC 10000-5 §9.4), which needs a user with administrative rights (ua.StatusBadUserAccessDenied otherwise); ua.StatusBadInvalidState is a state the server did not accept. in.State is a ua.ServerState as an Int32: int32(ua.ServerStateShutdown).
+
+#### func (Client) ResendData
+
+```go
+func (c *Client) ResendData(ctx context.Context, subscriptionID uint32) error
+```
+
+ResendData calls ResendData (OPC 10000-5 §9.2): the next Publish responses of the subscription carry the current value of each of its data MonitoredItems in Reporting mode, "to make sure the Client has the latest values for all MonitoredItems" after it lost NotificationMessages it cannot get with Republish (OPC 10000-4 §6.7).
+
 #### func (Client) Reset
 
 ```go
@@ -1312,6 +1336,14 @@ func (c *Client) SetServerDiagnosticsEnabled(ctx context.Context, on bool) error
 ```
 
 SetServerDiagnosticsEnabled writes Server.ServerDiagnostics.EnabledFlag. Enabling resets the diagnostics of the server (Part 5 §6.3.3). Servers usually allow it to administrators only.
+
+#### func (Client) SetSubscriptionDurable
+
+```go
+func (c *Client) SetSubscriptionDurable(ctx context.Context, subscriptionID, lifetimeInHours uint32) (uint32, error)
+```
+
+SetSubscriptionDurable calls SetSubscriptionDurable (OPC 10000-5 §9.3, OPC 10000-4 §6.8) and returns the revisedLifetimeInHours. It is called before the subscription has MonitoredItems (else ua.StatusBadInvalidState); lifetimeInHours 0 asks for the longest lifetime of the server.
 
 #### func (Client) Silence
 
@@ -2865,6 +2897,14 @@ func (s *Subscription) ConditionRefresh2(ctx context.Context, monitoredItemID ui
 
 ConditionRefresh2 calls ConditionRefresh2 for an event item of the subscription, given by the id Monitor returned.
 
+#### func (Subscription) GetMonitoredItems
+
+```go
+func (s *Subscription) GetMonitoredItems(ctx context.Context) (*uamethod.ServerTypeGetMonitoredItemsOutput, error)
+```
+
+GetMonitoredItems calls GetMonitoredItems for the subscription. The ServerHandles are the ids [Subscription.Monitor](#func-subscription-monitor) returned for the items the client created, which differ from the server's after a recreation of the subscription; an item the client does not know keeps the server's id.
+
 #### func (Subscription) ModifyMonitoredItems
 
 ```go
@@ -2886,6 +2926,22 @@ func (s *Subscription) Monitor(ctx context.Context, ts ua.TimestampsToReturn, it
 Monitor creates monitored items on the server for data change or event notifications. If the server closes the connection (e.g. because it does not support event or alarm subscriptions), the returned error wraps io.EOF with a message suggesting that the server may not support event or alarm subscriptions; callers can use errors.Is(err, io.EOF).
 
 The MonitoredItemID of each result stays valid for the life of the subscription: [Subscription.Unmonitor](#func-subscription-unmonitor), [Subscription.ModifyMonitoredItems](#func-subscription-modifymonitoreditems), [Subscription.SetMonitoringMode](#func-subscription-setmonitoringmode) and [Subscription.SetTriggering](#func-subscription-settriggering) accept it even after the subscription was recreated on the server following a reconnect, when the server knows the item by a new id. For that reason the id can differ from the one on the wire.
+
+#### func (Subscription) ResendData
+
+```go
+func (s *Subscription) ResendData(ctx context.Context) error
+```
+
+ResendData calls ResendData for the subscription.
+
+#### func (Subscription) SetDurable
+
+```go
+func (s *Subscription) SetDurable(ctx context.Context, lifetimeInHours uint32) (uint32, error)
+```
+
+SetDurable calls SetSubscriptionDurable for the subscription, before [Subscription.Monitor](#func-subscription-monitor) creates its first item, and returns the revisedLifetimeInHours. The server sets the LifetimeCount from it; RevisedLifetimeCount keeps the value of the creation, and a later [Subscription.ModifySubscription](#func-subscription-modifysubscription) sets the LifetimeCount of its parameters: "If the Client would like to keep the previous life time setting, the Client needs to calculate the LifetimeCount" (OPC 10000-4 §6.8). A subscription the client recreates after a reconnect, when it could not transfer it, is not durable.
 
 #### func (Subscription) SetMonitoringMode
 

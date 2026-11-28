@@ -942,6 +942,57 @@ for msg := range notifyCh {
 
 The same EOF wrapping applies: if the server closes the connection during `Subscribe` or `Monitor`, the error wraps `io.EOF` with a hint; use `errors.Is(err, io.EOF)` to detect it.
 
+### Server Object Methods for subscriptions
+
+The Methods of the Server Object of OPC 10000-5 §9 that take a subscription,
+called with the contracts of `uamethod` on `Server_GetMonitoredItems` and the
+others. The server allows them only in the session that owns the subscription
+(`ua.StatusBadUserAccessDenied` otherwise); a Bad result is a
+`*uamethod.CallError` that `errors.Is` matches with its StatusCode.
+
+```go
+sub, _ := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: time.Second}, notifyCh)
+
+// Durable (§9.3, Part 4 §6.8): before the first Monitor; 0 asks for the
+// longest lifetime of the server.
+hours, err := sub.SetDurable(ctx, 12)
+
+res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth, miReq)
+
+// The serverHandles (the ids Monitor returned) and clientHandles (§9.1).
+items, err := sub.GetMonitoredItems(ctx)
+fmt.Println(items.ServerHandles, items.ClientHandles)
+
+// After NotificationMessages that Republish cannot recover: the next
+// Publish response has the current value of each data item (§9.2, Part 4 §6.7).
+err = sub.ResendData(ctx)
+```
+
+`Client.GetMonitoredItems`, `Client.ResendData` and
+`Client.SetSubscriptionDurable` take the server's id of a subscription, for
+example one taken over with `TransferSubscriptions`. `SetDurable` does not
+change `RevisedLifetimeCount`, and a later `ModifySubscription` sets the
+LifetimeCount of its parameters: "If the Client would like to keep the previous
+life time setting, the Client needs to calculate the LifetimeCount" (Part 4
+§6.8). A durable subscription is taken over by a new session with
+`TransferSubscriptions`; one that the client recreates after a reconnect,
+because the transfer failed, is not durable.
+
+`Client.RequestServerStateChange` (§9.4) asks the server to change its state;
+it needs a user with administrative rights, and on the go-opcua server a
+signed channel:
+
+```go
+err := c.RequestServerStateChange(ctx, &uamethod.ServerTypeRequestServerStateChangeInput{
+    State:               int32(ua.ServerStateShutdown),
+    SecondsTillShutdown: 60,
+    Reason:              ua.NewLocalizedText("firmware update"),
+    EstimatedReturnTime: time.Now().Add(10 * time.Minute),
+})
+// ua.StatusBadUserAccessDenied: not an administrator;
+// ua.StatusBadInvalidState: the server did not accept the state.
+```
+
 ### Alarms and Conditions
 
 `NewConditionEventFilter` selects the ConditionId and the condition fields

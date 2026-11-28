@@ -34,6 +34,6 @@ var families = []family{
 		NodeSet: "internal/schema/Opc.Ua.NodeSet2.xml",
 		Package: "uamethod",
 		Out:     "uamethod/methods_gen.go",
-		Types:   []string{"FileType", "FileDirectoryType"},
+		Types:   []string{"FileType", "FileDirectoryType", "ServerType"},
 	},
 }

@@ -80,6 +80,7 @@ var builtinTypes = map[uint32]*kind{
 	15: {typeID: "ua.TypeIDByteString", goType: "[]byte", get: "scalar", pack: "ua.MustVariant(%s)", array: "[]byte"},
 	17: {typeID: "ua.TypeIDNodeID", goType: "*ua.NodeID", get: "pointer", pack: "ua.MustVariant(nodeID(%s))", array: "*ua.NodeID"},
 	19: {typeID: "ua.TypeIDStatusCode", goType: "ua.StatusCode", get: "scalar", pack: "ua.MustVariant(%s)", array: "ua.StatusCode"},
+	21: {typeID: "ua.TypeIDLocalizedText", goType: "*ua.LocalizedText", get: "pointer", pack: "ua.MustVariant(localizedText(%s))", array: "*ua.LocalizedText"},
 	24: {goType: "*ua.Variant", get: "variant", pack: "orNull(%s)"},
 }
 

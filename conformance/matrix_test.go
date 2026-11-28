@@ -101,6 +101,9 @@ var subscriptionCoverage = map[string]string{
 	"SetTriggering":        "TestSubscription_HighLevelItemLifecycle",
 	"SetPublishingMode":    "TestSubscription_HighLevelItemLifecycle",
 	"Stats":                "TestSubscription_Stats",
+	"GetMonitoredItems":    "TestServerMethods_Subscription",
+	"ResendData":           "TestServerMethods_Subscription",
+	"SetDurable":           "TestServerMethods_Subscription",
 }
 
 // builderCoverage does the same for *opcua.SubscriptionBuilder.

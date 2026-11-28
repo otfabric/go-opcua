@@ -7,6 +7,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -41,6 +42,15 @@ func filled() []args {
 		&uamethod.FileDirectoryTypeDeleteInput{ObjectToDelete: n},
 		&uamethod.FileDirectoryTypeMoveOrCopyInput{ObjectToMoveOrCopy: n, TargetDirectory: n, CreateCopy: true, NewName: "x"},
 		&uamethod.FileDirectoryTypeMoveOrCopyOutput{NewNodeID: n},
+		&uamethod.ServerTypeGetMonitoredItemsInput{SubscriptionID: 3},
+		&uamethod.ServerTypeGetMonitoredItemsOutput{ServerHandles: []uint32{1, 2}, ClientHandles: []uint32{7, 8}},
+		&uamethod.ServerTypeResendDataInput{SubscriptionID: 3},
+		&uamethod.ServerTypeSetSubscriptionDurableInput{SubscriptionID: 3, LifetimeInHours: 24},
+		&uamethod.ServerTypeSetSubscriptionDurableOutput{RevisedLifetimeInHours: 12},
+		&uamethod.ServerTypeRequestServerStateChangeInput{
+			State: int32(ua.ServerStateShutdown), EstimatedReturnTime: time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC),
+			SecondsTillShutdown: 60, Reason: ua.NewLocalizedText("update"), Restart: true,
+		},
 	}
 }
 
@@ -137,6 +147,13 @@ func arrayOf(v *ua.Variant) *ua.Variant {
 		return ua.MustVariant([][]byte{x})
 	case *ua.NodeID:
 		return ua.MustVariant([]*ua.NodeID{x})
+	case time.Time:
+		return ua.MustVariant([]time.Time{x})
+	case *ua.LocalizedText:
+		return ua.MustVariant([]*ua.LocalizedText{x})
+	case []uint32:
+		// A scalar is another ValueRank than an array.
+		return ua.MustVariant(uint32(1))
 	}
 	panic("unexpected type")
 }
@@ -185,6 +202,33 @@ func TestContracts(t *testing.T) {
 		})
 	}
 	require.Equal(t, "Mode", uamethod.FileTypeOpen.InputArguments()[0].Name)
+
+	// The Methods of ServerType (OPC 10000-5 §9) are Optional; the handles
+	// of GetMonitoredItems are arrays.
+	for _, c := range []struct {
+		m       *uamethod.Method
+		id      uint32
+		clause  string
+		in, out int
+	}{
+		{uamethod.ServerTypeGetMonitoredItems, id.ServerTypeGetMonitoredItems, "OPC 10000-5 §9.1", 1, 2},
+		{uamethod.ServerTypeResendData, id.ServerTypeResendData, "OPC 10000-5 §9.2", 1, 0},
+		{uamethod.ServerTypeSetSubscriptionDurable, id.ServerTypeSetSubscriptionDurable, "OPC 10000-5 §9.3", 2, 1},
+		{uamethod.ServerTypeRequestServerStateChange, id.ServerTypeRequestServerStateChange, "OPC 10000-5 §9.4", 5, 0},
+	} {
+		require.Equal(t, c.id, c.m.ID, c.m.String())
+		require.Equal(t, uint32(id.ServerType), c.m.ObjectTypeID)
+		require.Equal(t, c.clause, c.m.Clause)
+		require.False(t, c.m.Mandatory)
+		require.Len(t, c.m.InputArguments(), c.in)
+		require.Len(t, c.m.OutputArguments(), c.out)
+	}
+	out := uamethod.ServerTypeGetMonitoredItems.OutputArguments()
+	require.Equal(t, "ServerHandles", out[0].Name)
+	require.Equal(t, int32(1), out[0].ValueRank)
+	state := uamethod.ServerTypeRequestServerStateChange.InputArguments()
+	require.Equal(t, ua.NewNumericNodeID(0, id.ServerState), state[0].DataType)
+	require.Equal(t, ua.NewNumericNodeID(0, id.LocalizedText), state[3].DataType)
 	require.Equal(t, ua.NewNumericNodeID(0, id.Byte), uamethod.FileTypeOpen.InputArguments()[0].DataType)
 }
 
@@ -295,8 +339,30 @@ func TestCallAll(t *testing.T) {
 	require.NoError(t, uamethod.CallFileDirectoryTypeDelete(ctx, c, obj, nil, nil))
 	require.Equal(t, ua.NewTwoByteNodeID(0), c.req.InputArguments[0].Value(), "the null NodeId for nil")
 
+	ok([]uint32{4}, []uint32{9})
+	mi, err := uamethod.CallServerTypeGetMonitoredItems(ctx, c, obj, nil, &uamethod.ServerTypeGetMonitoredItemsInput{SubscriptionID: 2})
+	require.NoError(t, err)
+	require.Equal(t, []uint32{4}, mi.ServerHandles)
+	require.Equal(t, []uint32{9}, mi.ClientHandles)
+	require.Equal(t, ua.NewNumericNodeID(0, id.ServerTypeGetMonitoredItems), c.req.MethodID)
+	ok(uint32(5))
+	d2, err := uamethod.CallServerTypeSetSubscriptionDurable(ctx, c, obj, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, uint32(5), d2.RevisedLifetimeInHours)
+	ok()
+	require.NoError(t, uamethod.CallServerTypeResendData(ctx, c, obj, nil, nil))
+	require.NoError(t, uamethod.CallServerTypeRequestServerStateChange(ctx, c, obj, nil, nil))
+	require.Equal(t, &ua.LocalizedText{}, c.req.InputArguments[3].Value(), "the null LocalizedText for nil")
+
 	bad()
 	for _, call := range []func() error{
+		func() error { _, err := uamethod.CallServerTypeGetMonitoredItems(ctx, c, obj, nil, nil); return err },
+		func() error { return uamethod.CallServerTypeResendData(ctx, c, obj, nil, nil) },
+		func() error {
+			_, err := uamethod.CallServerTypeSetSubscriptionDurable(ctx, c, obj, nil, nil)
+			return err
+		},
+		func() error { return uamethod.CallServerTypeRequestServerStateChange(ctx, c, obj, nil, nil) },
 		func() error { _, err := uamethod.CallFileTypeOpen(ctx, c, obj, nil, nil); return err },
 		func() error { _, err := uamethod.CallFileTypeRead(ctx, c, obj, nil, nil); return err },
 		func() error { return uamethod.CallFileTypeWrite(ctx, c, obj, nil, nil) },
@@ -315,6 +381,13 @@ func TestCallAll(t *testing.T) {
 	// Outputs of the wrong count.
 	ok(int32(1), int32(2), int32(3), int32(4), int32(5))
 	for _, call := range []func() error{
+		func() error { _, err := uamethod.CallServerTypeGetMonitoredItems(ctx, c, obj, nil, nil); return err },
+		func() error { return uamethod.CallServerTypeResendData(ctx, c, obj, nil, nil) },
+		func() error {
+			_, err := uamethod.CallServerTypeSetSubscriptionDurable(ctx, c, obj, nil, nil)
+			return err
+		},
+		func() error { return uamethod.CallServerTypeRequestServerStateChange(ctx, c, obj, nil, nil) },
 		func() error { _, err := uamethod.CallFileTypeOpen(ctx, c, obj, nil, nil); return err },
 		func() error { _, err := uamethod.CallFileTypeRead(ctx, c, obj, nil, nil); return err },
 		func() error { return uamethod.CallFileTypeWrite(ctx, c, obj, nil, nil) },

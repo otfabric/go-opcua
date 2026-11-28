@@ -210,6 +210,7 @@ func (s *MonitoredItemService) DrainQueuedNotifications(subID uint32, max uint32
 				return false
 			}
 			out = append(out, item.queue[0])
+			item.lastSent = item.queue[0]
 			item.queue = item.queue[1:]
 		}
 		return true
@@ -366,6 +367,9 @@ type MonitoredItem struct {
 	discardOldest      bool
 	timestampsToReturn ua.TimestampsToReturn
 	queue              []*ua.MonitoredItemNotification
+	// lastSent is the last notification of the item a Publish response
+	// took, which ResendData repeats (server_methods.go).
+	lastSent *ua.MonitoredItemNotification
 
 	// isEvent marks an item on the EventNotifier attribute.
 	isEvent bool
@@ -505,10 +509,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 		}
 		discardOldest := itemreq.RequestedParameters.DiscardOldest
 		isEventItem := itemreq.ItemToMonitor.AttributeID == ua.AttributeIDEventNotifier
-		qsize := reviseQueueSize(itemreq.RequestedParameters.QueueSize)
-		if isEventItem {
-			qsize = reviseEventQueueSize(itemreq.RequestedParameters.QueueSize)
-		}
+		qsize := s.SubService.srv.cfg.reviseItemQueueSize(sub, itemreq.RequestedParameters.QueueSize, isEventItem)
 
 		// Data items: validate the IndexRange and the DataChangeFilter and
 		// revise the sampling interval before anything is registered.
@@ -738,11 +739,9 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 		if item.RequestedParameters != nil {
 			mi.Req.RequestedParameters = item.RequestedParameters
 			mi.discardOldest = item.RequestedParameters.DiscardOldest
+			mi.queueSize = s.SubService.srv.cfg.reviseItemQueueSize(mi.Sub, item.RequestedParameters.QueueSize, mi.isEvent)
 			if mi.isEvent {
-				mi.queueSize = reviseEventQueueSize(item.RequestedParameters.QueueSize)
 				mi.setEventQueue(mi.queueSize, mi.discardOldest)
-			} else {
-				mi.queueSize = reviseQueueSize(item.RequestedParameters.QueueSize)
 			}
 			if len(mi.queue) > int(mi.queueSize) {
 				// Keep the newest samples when shrinking the queue.

@@ -424,6 +424,20 @@ func (c *Client) TransferSubscriptions(ctx context.Context, subscriptionIDs []ui
 func (c *Client) NewSubscription() *SubscriptionBuilder
 ```
 
+The Methods of the Server Object (OPC 10000-5 §9), called with the contracts of
+package [`uamethod`](#package-uamethod) on the Server Object (i=2253). A Bad result
+is a `*uamethod.CallError` that `errors.Is` matches with its StatusCode
+(`ua.StatusBadSubscriptionIDInvalid`, `ua.StatusBadUserAccessDenied` when the
+session does not own the subscription or the user is no administrator,
+`ua.StatusBadInvalidState`):
+
+```go
+func (c *Client) GetMonitoredItems(ctx context.Context, subscriptionID uint32) (*uamethod.ServerTypeGetMonitoredItemsOutput, error) // §9.1
+func (c *Client) ResendData(ctx context.Context, subscriptionID uint32) error                                                      // §9.2
+func (c *Client) SetSubscriptionDurable(ctx context.Context, subscriptionID, lifetimeInHours uint32) (uint32, error)               // §9.3, before the first MonitoredItem
+func (c *Client) RequestServerStateChange(ctx context.Context, in *uamethod.ServerTypeRequestServerStateChangeInput) error        // §9.4, administrative rights
+```
+
 `Subscribe` is the ergonomic CreateSubscription path and returns a live `*Subscription`, not `*ua.CreateSubscriptionResponse`. Callers that need the raw protocol response should use `Client.Send` with `ua.CreateSubscriptionRequest`. Mutation APIs on `*Subscription` (`Monitor`, `Unmonitor`, `Modify*`, `Set*`) and `Client.Republish` / `TransferSubscriptions` return full `ua.*Response` values.
 
 `Republish` returns the protocol response without mutating subscription delivery state — callers must handle the returned notification themselves. Automatic reconnect recovery (when `AutoReconnect(true)`, the default) separately runs Transfer → Republish → Recreate and may dispatch recovered notifications through the normal subscription pipeline; see [Subscription recovery](#subscription-recovery). Manual `Republish` / `TransferSubscriptions` do not emit `SubscriptionRecoveryEvent`s.
@@ -576,11 +590,14 @@ func (s *Subscription) ModifyMonitoredItems(ctx context.Context, ts ua.Timestamp
 func (s *Subscription) SetMonitoringMode(ctx context.Context, monitoringMode ua.MonitoringMode, monitoredItemIDs ...uint32) (*ua.SetMonitoringModeResponse, error)
 func (s *Subscription) SetTriggering(ctx context.Context, triggeringItemID uint32, add, remove []uint32) (*ua.SetTriggeringResponse, error)
 func (s *Subscription) Stats(ctx context.Context) (*ua.SubscriptionDiagnosticsDataType, error)
+func (s *Subscription) GetMonitoredItems(ctx context.Context) (*uamethod.ServerTypeGetMonitoredItemsOutput, error)
+func (s *Subscription) ResendData(ctx context.Context) error
+func (s *Subscription) SetDurable(ctx context.Context, lifetimeInHours uint32) (uint32, error)
 ```
 
 If the server closes the connection during CreateMonitoredItems (e.g. it does not support event or alarm subscriptions), the error may wrap `io.EOF` with a message suggesting that; use `errors.Is(err, io.EOF)` to detect it.
 
-`Monitor` returns the full server response; individual item results are in its `Results` field (`ua.CreateMonitoredItemsResponse`). `ModifyMonitoredItems` adjusts parameters (e.g. sampling interval) on already-monitored items. `SetMonitoringMode` enables or disables sampling for a set of items. `SetTriggering` links items so that one item's data change triggers publishing of dependent items. `Stats` returns the server's subscription diagnostics for this subscription.
+`Monitor` returns the full server response; individual item results are in its `Results` field (`ua.CreateMonitoredItemsResponse`). `ModifyMonitoredItems` adjusts parameters (e.g. sampling interval) on already-monitored items. `SetMonitoringMode` enables or disables sampling for a set of items. `SetTriggering` links items so that one item's data change triggers publishing of dependent items. `Stats` returns the server's subscription diagnostics for this subscription. `GetMonitoredItems`, `ResendData` and `SetDurable` call the Methods of the Server Object for this subscription (OPC 10000-5 §9.1–§9.3); `GetMonitoredItems` returns the item ids `Monitor` returned, also after a recreation, and `SetDurable` is called before the first `Monitor` and leaves `RevisedLifetimeCount` as it was (the server sets the LifetimeCount from the revised hours).
 
 **Server queue semantics (v1.3.0+):** `RequestedParameters.QueueSize` is revised to `max(1, requested)` (capped at 100) and returned as `RevisedQueueSize`. When the queue overflows and `QueueSize > 1`, the DataValue Overflow InfoBit is set (`StatusCode` `0x480`). With `DiscardOldest=true`, the newest `QueueSize` samples are kept; with `false`, the oldest `QueueSize-1` samples plus the newest are kept (Part 4 — e.g. writes `1..5` / QS=3 → `[1,2,5]`). `SubscriptionBuilder.Timestamps` is applied to DataChange notifications (same enum as Read).
 
@@ -1805,7 +1822,44 @@ func (s *Server) ServersOnNetwork() []*ua.ServerOnNetwork   // multicast discove
 func (s *Server) ServerDiagnosticsSummary() *ua.ServerDiagnosticsSummaryDataType
 func (s *Server) ServerDiagnosticsEnabled() bool
 func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counters
+func (s *Server) SetServerState(c ServerStateChange)  // ServerStatus State, SecondsTillShutdown, ShutdownReason and EstimatedReturnTime
+func (s *Server) EstimatedReturnTime() time.Time      // the EstimatedReturnTime Property (i=12885); zero is the null DateTime
 ```
+
+#### Methods of the Server Object
+
+GetMonitoredItems, ResendData, SetSubscriptionDurable and
+RequestServerStateChange (OPC 10000-5 §9) are served on the Server Object; the
+first three for the session that owns the subscription only. See the
+[server guide](docs/server-guide.md#methods-of-the-server-object).
+
+```go
+type DurableSubscriptions struct {
+    Disabled           bool   // SetSubscriptionDurable answers Bad_MethodInvalid, as before v1.43.0
+    MaxLifetimeInHours uint32 // 0: 24
+    MaxQueueSize       uint32 // queue size of an item of a durable subscription; 0: 10000
+}
+func WithDurableSubscriptions(d DurableSubscriptions) Option
+
+type ServerStateChange struct {
+    State               ua.ServerState
+    EstimatedReturnTime time.Time
+    SecondsTillShutdown uint32
+    Reason              *ua.LocalizedText
+    Restart             bool
+}
+type ServerStateChangeFunc func(ctx context.Context, change ServerStateChange) ua.StatusCode
+func WithServerStateChange(f ServerStateChangeFunc) Option
+```
+
+A durable subscription lives in memory: it outlives its session for its
+lifetime and is taken over with TransferSubscriptions, not across a restart of
+the server (see [LIMITATIONS.md](LIMITATIONS.md)). RequestServerStateChange
+needs the ConfigureAdmin or SecurityAdmin role and a signed channel (the
+RolePermissions and AccessRestrictions of the Method in the NodeSet); the
+`ServerStateChangeFunc` accepts the change with `ua.StatusOK`, after which the
+server publishes it with `SetServerState`. Without one every request is
+`Bad_InvalidState`; the library never stops or restarts the server itself.
 
 ---
 
@@ -1853,6 +1907,8 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `WithModelChangeEvents(enabled bool)` | Maintain the NodeVersion of the nodes that have one and report their changes in GeneralModelChangeEvents, report SemanticChangeEvents and the SemanticsChanged bit (Part 3 §9.32, §9.33; default true); `false` restores v1.42 and earlier. See the [server guide](docs/server-guide.md#model-change-and-semantic-change-events) |
 | `WithNodeVersionOnAddNodes(enabled bool)` | Give every node AddNodes adds a NodeVersion Property, so that its changes are reported (default false) |
 | `WithModelDefaultPermissions(enabled bool)` | Apply the RolePermissions and AccessRestrictions of the Model of an imported NodeSet to its nodes without their own (Part 6 §F.2, §F.3; default true); `false` restores v1.42 and earlier |
+| `WithDurableSubscriptions(d DurableSubscriptions)` | Limits of SetSubscriptionDurable (OPC 10000-5 §9.3): the longest lifetime in hours (default 24) and the largest queue of an item of a durable subscription (default 10000); `Disabled` restores v1.42 and earlier. See [Methods of the Server Object](#methods-of-the-server-object) |
+| `WithServerStateChange(f ServerStateChangeFunc)` | The application's handler of RequestServerStateChange (OPC 10000-5 §9.4); without one every request is `Bad_InvalidState` |
 | `WithServerDiagnostics(enabled bool)` | Collect server diagnostics (`Server.ServerDiagnostics`, default true); see the [server guide](docs/server-guide.md#server-diagnostics) |
 | `WithRoleMapper(rm RoleMapper)` | Maps a session's identity token to its role NodeIDs (`RoleMapper func(token ua.IdentityToken) []*ua.NodeID`); used by the default access controller |
 | `ApplicationURI(uri string)` | ApplicationUri of the server; only needed without a certificate (`Certificate` sets it from the URI SAN) |

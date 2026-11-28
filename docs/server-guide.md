@@ -22,6 +22,7 @@
 | **Files** (Part 20) | `AddFile`, `ServeFile`, `NewFile` (FileType), `AddFileDirectory` (FileDirectoryType) | Implemented; see [Files](#files-part-20) |
 | **Monitored Items** | CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, SetTriggering, DeleteMonitoredItems | Fully implemented (exact `QueueSize` / `DiscardOldest` / Overflow, `DataChangeFilter`, sampling interval, `IndexRange`) |
 | **Subscription** | CreateSubscription, ModifySubscription, SetPublishingMode, Publish, Republish, TransferSubscriptions, DeleteSubscriptions | Fully implemented (revise clamps, `MoreNotifications`, Publish ACK, lifetime expiry) |
+| **Server Object Methods** (Part 5 §9) | GetMonitoredItems, ResendData, SetSubscriptionDurable, RequestServerStateChange | Implemented; durable subscriptions in memory only, the state change through `WithServerStateChange`; see [Methods of the Server Object](#methods-of-the-server-object) |
 | **Query** | QueryFirst, QueryNext | Opt-in with `WithQuery(true)` (`BadServiceUnsupported` otherwise); results honour the access controller and AccessRestrictions |
 
 Every service checks the number of operations of a request against the
@@ -1355,7 +1356,7 @@ _ = s.EmitBaseEvent(pumpID, &server.BaseEvent{ /* ... */ })
 
 ### Monitored-item queues and modes
 
-- `QueueSize` is revised to `max(1, requested)` (cap 100); Overflow InfoBit `0x480` when `QueueSize > 1` and the queue overflows.
+- `QueueSize` is revised to `max(1, requested)` (cap 100, or `DurableSubscriptions.MaxQueueSize` in a durable subscription); Overflow InfoBit `0x480` when `QueueSize > 1` and the queue overflows.
 - `DiscardOldest=true` keeps the newest `QueueSize` samples; `false` keeps the oldest `QueueSize-1` plus the newest (e.g. writes `1..5` / QS=3 → `[1,2,5]`).
 - `SetMonitoringMode`: Disabled = no enqueue; Sampling = enqueue only; Reporting = enqueue + Publish.
 - `SetTriggering` (Part 4 §5.12.1.6): an item in Sampling mode linked to a triggering item is published with it — the samples it queued go out when the triggering item's notifications do. A link is to an item of the same subscription and goes when either item is deleted.
@@ -1479,6 +1480,88 @@ The server manages subscriptions with these services:
 - **SetMonitoringMode** — Disabled / Sampling / Reporting per item
 - **Republish** / **TransferSubscriptions** — retransmission and ownership transfer
 - **DeleteSubscriptions** — remove subscriptions; lifetime expiry also removes idle subs
+
+### Methods of the Server Object
+
+The Server Object (`i=2253`) has the four Methods of ServerType (OPC 10000-5
+§9), built on the contracts of `uamethod` (`ServerTypeGetMonitoredItems` and
+the others). A call of the declaration of ServerType on the Server Object is
+the same call.
+
+| Method | What the server does |
+|--------|----------------------|
+| GetMonitoredItems (§9.1) | The serverHandles (MonitoredItemIds) and clientHandles of every MonitoredItem of the subscription, data and event items, in the order they were created |
+| ResendData (§9.2, Part 4 §6.7) | Every data item in Reporting mode reports in the next Publish response: its queued value, or else the last value it sent. Event items, items in Sampling or Disabled mode and items that sent nothing yet are left alone |
+| SetSubscriptionDurable (§9.3, Part 4 §6.8) | Makes the subscription durable: its LifetimeCount becomes the publishing intervals of revisedLifetimeInHours, its items take queues up to `DurableSubscriptions.MaxQueueSize`, and ModifySubscription allows a LifetimeCount up to that many hours |
+| RequestServerStateChange (§9.4) | Calls the `WithServerStateChange` function; when it returns `StatusOK` the change is published with `SetServerState` |
+
+The subscription Methods are refused with `Bad_SubscriptionIdInvalid` for an
+unknown subscription and with `Bad_UserAccessDenied` when the call is not
+made in the session that owns the subscription (Part 5 §9.1 to §9.3, Part 4
+§6.7 and §6.8). SetSubscriptionDurable on a subscription that has
+MonitoredItems is `Bad_InvalidState`: "The Method shall be called before the
+MonitoredItems are created in the durable Subscription".
+
+**Durable subscriptions.** `lifetimeInHours` 0, or more than
+`MaxLifetimeInHours` (24 by default), is revised to `MaxLifetimeInHours`. The
+LifetimeCount is the hours over the publishing interval, rounded up, at least
+three keep-alive counts and at most 2³¹−1, and revisedLifetimeInHours is the
+whole hours of that count. `MaxQueueSize` (10000 by default) is the largest
+QueueSize of a data or event item of a durable subscription; other
+subscriptions have 100 and 10000. A durable subscription lives in memory: it
+outlives a closed (without DeleteSubscriptions) or timed out session and a lost
+connection for its lifetime, keeps its queues meanwhile, and another session of
+the same user takes it over with TransferSubscriptions. It does not survive a
+restart of the server, which Part 4 §6.8 asks for ("Store MonitoredItem settings
+and queues"); see [LIMITATIONS.md](../LIMITATIONS.md). A library choice, as
+Part 4 leaves the numbers to the profiles of OPC 10000-7.
+
+```go
+srv, _ := server.New(
+    server.WithDurableSubscriptions(server.DurableSubscriptions{
+        MaxLifetimeInHours: 72,
+        MaxQueueSize:       50_000,
+    }),
+)
+// Disabled: true leaves SetSubscriptionDurable unimplemented (Bad_MethodInvalid).
+```
+
+**Server state.** "The Client shall provide credentials with administrative
+rights when invoking this Method on the Server" (§9.4): the session needs the
+role ConfigureAdmin or SecurityAdmin, the roles the RolePermissions of the
+Method in the NodeSet grant Call to; any other session is
+`Bad_UserAccessDenied`. The AccessRestrictions of the Method in the NodeSet
+(SigningRequired) refuse a channel without security
+(`Bad_SecurityModeInsufficient`). The library does not stop, suspend or
+restart a server itself: the application's function does, and decides which
+states it accepts. Without one, and for a State that is no ServerState
+(Part 5 §12.6), the call is `Bad_InvalidState` ("The requested state was not
+accepted by the server").
+
+```go
+srv, _ := server.New(
+    server.WithRoleMapper(roles), // ConfigureAdmin for the administrators
+    server.WithServerStateChange(func(ctx context.Context, c server.ServerStateChange) ua.StatusCode {
+        if c.State != ua.ServerStateShutdown {
+            return ua.StatusBadInvalidState
+        }
+        go func() {
+            time.Sleep(time.Duration(c.SecondsTillShutdown) * time.Second)
+            _ = srv.Close()
+        }()
+        return ua.StatusOK
+    }),
+)
+```
+
+`Server.SetServerState` publishes a change (the program can call it too, for
+example to announce a shutdown): the State, with Restart SHUTDOWN_4 when
+SecondsTillShutdown is not 0 ("If the restart is True the server changes it
+state to SHUTDOWN_4 before the restart if secondsTillShutdown is not 0") and
+unchanged otherwise; the EstimatedReturnTime Property, null when the requested
+state is RUNNING_0; in SHUTDOWN_4 the SecondsTillShutdown of the ServerStatus,
+which counts down, and its ShutdownReason. `Start` sets RUNNING_0 and `Close`
+SHUTDOWN_4 as before.
 
 ---
 
